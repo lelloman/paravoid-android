@@ -111,6 +111,27 @@ the same source. The custom Application exercises a field, `super.onCreate()`,
 shared preferences, and application-context access. The screen checks that user
 initialization happened exactly once and retains its counter across recreation.
 
+The screen now inflates an XML layout and displays results from ordinary Android
+and Java resource APIs. `sample-library` is a conventional Java dependency used to
+exercise dependency classes, service discovery, and dependency resources; it is
+not a required downstream app/shell split.
+
+| Exercised content | Location in Paravoid mode | Verification |
+| --- | --- | --- |
+| App/dependency classes, enums, generic/nested classes, interfaces, lambdas, runtime annotations | Embedded DEX | Execution, reflection, loader identity, absence from shell class loader |
+| Parcelable with anonymous Creator | Embedded DEX | Parcel round-trip with an explicit payload class loader |
+| XML layout, theme, vector drawable, strings/plurals/arrays, numbers, booleans, dimensions, colors, raw UTF-8 file | Installed APK resources | Real screen inflation, theme lookup, value reads, English/Italian and day/night contexts |
+| Nested JSON/text assets | Installed APK assets | UTF-8 reads, JSON parsing, directory listing, missing-file behavior |
+| App/dependency Java properties and service descriptor | Installed APK Java resources | Class resource streams and ServiceLoader with an explicit class loader |
+
+These tests demonstrate that payload code can use installed resources. They do
+not demonstrate independently updatable resources: `module.zip` still contains
+only metadata and DEX. A packaging regression test checks APK/AAB locations and
+proves an asset edit changes the APK while leaving the DEX payload unchanged.
+Custom XML View classes, automatic Parcelable saved-state restoration, fonts,
+bitmap/audio/video assets, and native/JNI dependencies are not covered by this
+expansion. No minimum-SDK or runtime loader changes were needed for this matrix.
+
 Paravoid packaging moves application/dependency classes into an embedded DEX payload;
 only Paravoid Android infrastructure remains in the shell's ordinary DEX. Normal
 packaging uses ordinary Android classes. No server or network permission is needed.
@@ -145,7 +166,7 @@ adb install -r sample-app/build/outputs/apk/normal/debug/sample-app-normal-debug
 adb install -r sample-app/build/outputs/apk/paravoidAndroid/debug/sample-app-paravoidAndroid-debug.apk
 ```
 
-Both launcher entries are labeled **Paravoid Android Example**. Paravoid mode displays
+Both launcher entries are labeled **Paravoid Resource Example**. Paravoid mode displays
 `InMemoryDexClassLoader`; normal mode displays its ordinary app class loader.
 Both show initialization count 1. The sample's `.normal` and `.paravoid` application
 ID suffixes allow coexistence, with separate data and counters.
@@ -214,11 +235,11 @@ tests remain. Device tests check Application identity and initialization, actual
 class loaders, launcher handoff, direct Activity launch, counter interaction, and Activity recreation
 in both modes. Activity recreation is not a substitute for process-death testing.
 
-Verified on 2026-09-19: eight plugin tests, five bundle-reader tests, and six device
-tests passed on an API 36.1 emulator. Debug/release APKs and release AABs built in
-both modes; plugin validation and lint passed (sample warnings remain). A separate
-force-stop/direct-launch smoke test reached the real Paravoid Activity in a cold
-process. Full saved-state restoration after process death remains future coverage.
+Resource expansion verified on 2026-09-19: nine plugin tests, five bundle-reader
+tests, and sixteen device tests passed (eight per mode on an API 36.1 emulator).
+Debug APKs and release AABs built in both modes; lint passed with sample warnings.
+The earlier bootstrap experiment also checked cold direct Activity launch. Full
+saved-state restoration after process death remains future coverage.
 
 ## Repository components
 
@@ -228,6 +249,7 @@ process. Full saved-state restoration after process death remains future coverag
 | `paravoid-runtime` | Application bases, shell launcher/factory, validation and DEX loading |
 | `paravoid-gradle-plugin` | Flavor generation, manifest rewriting, class transformation and packaging |
 | `sample-app` | One downstream app demonstrating both packaging modes |
+| `sample-library` | Conventional Java dependency with service-provider and resource fixtures |
 
 The old `sample-shell` and `sample-standalone` source projects are replaced by
 generated flavors. The old module/shell plugins and `AppEntry` loader remain as
