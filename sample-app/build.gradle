@@ -1,9 +1,9 @@
-plugins { id 'com.lelloman.void' }
+plugins { id 'com.lelloman.paravoid' }
 android {
-    namespace 'com.lelloman.voidandroid.sample'
+    namespace 'com.lelloman.paravoidandroid.sample'
     compileSdk 36
     defaultConfig {
-        applicationId 'com.lelloman.voidandroid.sample'
+        applicationId 'com.lelloman.paravoidandroid.sample'
         minSdk 28
         targetSdk 36
         versionCode 1
@@ -13,7 +13,7 @@ android {
     // Distinct identities let both packaging modes coexist for comparison.
     productFlavors {
         normal { applicationIdSuffix '.normal' }
-        voidAndroid { applicationIdSuffix '.void' }
+        paravoidAndroid { applicationIdSuffix '.paravoid' }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
@@ -21,7 +21,7 @@ android {
     }
 }
 dependencies {
-    implementation project(':void-runtime')
+    implementation project(':paravoid-runtime')
     androidTestImplementation 'androidx.test:runner:1.6.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test:core:1.6.1'

@@ -1,7 +1,7 @@
 plugins {
     id 'com.android.application' version '8.13.2' apply false
     id 'com.android.library' version '8.13.2' apply false
-    id 'com.lelloman.void.module' apply false
-    id 'com.lelloman.void.shell' apply false
-    id 'com.lelloman.void' apply false
+    id 'com.lelloman.paravoid.module' apply false
+    id 'com.lelloman.paravoid.shell' apply false
+    id 'com.lelloman.paravoid' apply false
 }

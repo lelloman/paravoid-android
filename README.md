@@ -1,6 +1,6 @@
-# VoidAndroid
+# Paravoid Android
 
-VoidAndroid explores a native Android application with two release cycles: an
+Paravoid Android explores a native Android application with two release cycles: an
 installed shell that changes infrequently, and signed application modules that
 the shell downloads and runs without reinstalling its APK.
 
@@ -13,15 +13,15 @@ including Jetpack Compose.
 The downstream developer keeps an ordinary Android application project. The
 intended integration contract is:
 
-- Apply the VoidAndroid Gradle plugin and configure the update server address,
+- Apply the Paravoid Android Gradle plugin and configure the update server address,
   authentication if needed, and packaging settings.
 - Use one user Activity with a stable class name. It can be an ordinary Activity
-  or ComponentActivity with its normal Compose `setContent` setup; no VoidAndroid
+  or ComponentActivity with its normal Compose `setContent` setup; no Paravoid Android
   Activity superclass, annotation, or special Compose entry function is required.
-- When custom Application behavior is needed, extend `VoidAndroidApplication`.
+- When custom Application behavior is needed, extend `ParavoidAndroidApplication`.
   The plugin discovers this class from the merged manifest; no Application
   annotation or separately configured initializer is required.
-- Select normal or VoidAndroid packaging through a flavor dimension generated
+- Select normal or Paravoid Android packaging through a flavor dimension generated
   by the plugin, alongside the app's build types and existing flavor dimensions.
 
 The plugin packages the entire application implementation, including its
@@ -32,10 +32,10 @@ modules, implement `AppEntry`, or write bootstrap code.
 | Packaging mode | Intended outputs and behavior |
 | --- | --- |
 | Normal packaging | Conventional APK/AAB containing the app; the user's Application subclass is the actual Android Application |
-| VoidAndroid packaging | Generated shell APK/AAB plus a separately packaged application payload; the shell owns the actual Android Application and bootstrap launcher |
+| Paravoid Android packaging | Generated shell APK/AAB plus a separately packaged application payload; the shell owns the actual Android Application and bootstrap launcher |
 
-The example now uses plugin `com.lelloman.void`, dimension `voidPackaging`, and
-flavors `normal` and `voidAndroid`. Server/authentication configuration and external
+The example now uses plugin `com.lelloman.paravoid`, dimension `paravoidPackaging`, and
+flavors `normal` and `paravoidAndroid`. Server/authentication configuration and external
 delivery remain future work; this experiment uses an embedded payload.
 
 ### Application behavior
@@ -43,7 +43,7 @@ delivery remain future work; this experiment uses an embedded payload.
 The downstream source uses this shape (the current example is Java):
 
 ```kotlin
-class MyApplication : VoidAndroidApplication() {
+class MyApplication : ParavoidAndroidApplication() {
     override fun onCreate() {
         super.onCreate()
         // Application initialization
@@ -51,21 +51,21 @@ class MyApplication : VoidAndroidApplication() {
 }
 ```
 
-In normal packaging, this class is the app's Android Application. In VoidAndroid
+In normal packaging, this class is the app's Android Application. In Paravoid Android
 packaging, the plugin transforms the user-defined behavior into a separate
 payload class that is not an Android Application. The shell's Application calls
 that behavior once the selected payload is ready, before creating the user
 Activity. There is only one actual Android Application per process.
 
 The familiar downstream API is intentional: packaging differences and the
-transformation burden belong to VoidAndroid. A separate `VoidAppInitializer`
+transformation burden belong to Paravoid Android. A separate `ParavoidAppInitializer`
 interface is not the chosen public API.
 
-The initial transformation remaps `VoidAndroidApplication` to a shell-backed
+The initial transformation remaps `ParavoidAndroidApplication` to a shell-backed
 `PayloadApplication` ContextWrapper throughout payload bytecode. It preserves fields
 and supports `onCreate`, `super.onCreate()`, and inherited Context access. The shell
 forwards configuration and memory callbacks. The custom class must directly extend
-`VoidAndroidApplication` and have a public no-argument constructor.
+`ParavoidAndroidApplication` and have a public no-argument constructor.
 
 Application-specific APIs beyond this subset, custom Application casts, object
 identity, dependency injection, and provider initialization still need compatibility
@@ -74,7 +74,7 @@ Application. Arbitrary Application behavior is not yet guaranteed to work.
 
 ### Activity startup and installed manifest
 
-The generated shell declares two Activities: VoidAndroid's `LauncherActivity`
+The generated shell declares two Activities: Paravoid Android's `LauncherActivity`
 and the user's Activity. The plugin assigns the launcher intent filter to the
 bootstrap Activity and preserves the user Activity's component identity and
 required manifest configuration. Shell Application startup prepares and validates
@@ -111,8 +111,8 @@ the same source. The custom Application exercises a field, `super.onCreate()`,
 shared preferences, and application-context access. The screen checks that user
 initialization happened exactly once and retains its counter across recreation.
 
-Void packaging moves application/dependency classes into an embedded DEX payload;
-only VoidAndroid infrastructure remains in the shell's ordinary DEX. Normal
+Paravoid packaging moves application/dependency classes into an embedded DEX payload;
+only Paravoid Android infrastructure remains in the shell's ordinary DEX. Normal
 packaging uses ordinary Android classes. No server or network permission is needed.
 
 This remains an entry-point and code-packaging experiment:
@@ -121,7 +121,7 @@ This remains an entry-point and code-packaging experiment:
   packaging into the installed APK. They are not independently updatable yet.
 - The sample uses Java and Android Views. Compose integration is future work.
 - Extra Activities, Activity aliases, services, receivers, providers, and custom
-  component factories are rejected in Void mode for now.
+  component factories are rejected in Paravoid mode for now.
 - Unsupported Application inheritance, shrinking, core library desugaring, and
   multidex payloads are rejected. Runtime/API package names are reserved for
   shell infrastructure.
@@ -140,33 +140,33 @@ sdk.dir=/path/to/Android/Sdk
 ```
 
 ```sh
-./gradlew :sample-app:assembleNormalDebug :sample-app:assembleVoidAndroidDebug
+./gradlew :sample-app:assembleNormalDebug :sample-app:assembleParavoidAndroidDebug
 adb install -r sample-app/build/outputs/apk/normal/debug/sample-app-normal-debug.apk
-adb install -r sample-app/build/outputs/apk/voidAndroid/debug/sample-app-voidAndroid-debug.apk
+adb install -r sample-app/build/outputs/apk/paravoidAndroid/debug/sample-app-paravoidAndroid-debug.apk
 ```
 
-Both launcher entries are labeled **VoidAndroid Example**. Void mode displays
+Both launcher entries are labeled **Paravoid Android Example**. Paravoid mode displays
 `InMemoryDexClassLoader`; normal mode displays its ordinary app class loader.
-Both show initialization count 1. The sample's `.normal` and `.void` application
+Both show initialization count 1. The sample's `.normal` and `.paravoid` application
 ID suffixes allow coexistence, with separate data and counters.
 
-The payload is `sample-app/build/outputs/void/voidAndroidDebug/module.zip`, also
-embedded at `assets/void/module.zip` inside the shell APK.
+The payload is `sample-app/build/outputs/paravoid/paravoidAndroidDebug/module.zip`, also
+embedded at `assets/paravoid/module.zip` inside the shell APK.
 
 ```sh
-./gradlew :sample-app:assembleNormalRelease :sample-app:assembleVoidAndroidRelease \
-  :sample-app:bundleNormalRelease :sample-app:bundleVoidAndroidRelease
+./gradlew :sample-app:assembleNormalRelease :sample-app:assembleParavoidAndroidRelease \
+  :sample-app:bundleNormalRelease :sample-app:bundleParavoidAndroidRelease
 ```
 
 Release signing remains the downstream app's responsibility.
 
 ## Plugin integration in the example
 
-The repository includes `void-gradle-plugin` through `pluginManagement.includeBuild`.
+The repository includes `paravoid-gradle-plugin` through `pluginManagement.includeBuild`.
 Runtime projects are consumed from source; Maven publication is future work.
 
 ```groovy
-plugins { id 'com.lelloman.void' }
+plugins { id 'com.lelloman.paravoid' }
 android {
     namespace 'example.product'
     compileSdk 36
@@ -178,7 +178,7 @@ android {
         versionName '1.0'
     }
 }
-dependencies { implementation project(':void-runtime') }
+dependencies { implementation project(':paravoid-runtime') }
 ```
 
 The plugin applies `com.android.application` and generates the packaging flavors.
@@ -186,7 +186,7 @@ Declare the Application and Activity in the ordinary manifest; no entry-point
 configuration is needed. With no custom Application, user initialization is skipped.
 The sample adds application ID suffixes for convenience; these are not required.
 
-For Void variants, the plugin consumes AGP's scoped classes, transforms the
+For Paravoid variants, the plugin consumes AGP's scoped classes, transforms the
 Application base with ASM, compiles payload classes through D8, and embeds the
 bundle through generated assets. Its manifest transformation installs the shell
 Application, launcher, and component factory. Normal variants retain ordinary
@@ -195,15 +195,15 @@ Android packaging.
 ## Verification
 
 ```sh
-./gradlew :void-gradle-plugin:test :void-gradle-plugin:validatePlugins \
-  :void-runtime:testDebugUnitTest :sample-app:lintNormalDebug :sample-app:lintVoidAndroidDebug
+./gradlew :paravoid-gradle-plugin:test :paravoid-gradle-plugin:validatePlugins \
+  :paravoid-runtime:testDebugUnitTest :sample-app:lintNormalDebug :sample-app:lintParavoidAndroidDebug
 ```
 
 With an unlocked emulator/device:
 
 ```sh
 ./gradlew :sample-app:connectedNormalDebugAndroidTest \
-  :sample-app:connectedVoidAndroidDebugAndroidTest
+  :sample-app:connectedParavoidAndroidDebugAndroidTest
 ```
 
 Use `ANDROID_SERIAL` to select an emulator when multiple devices are connected.
@@ -217,16 +217,16 @@ in both modes. Activity recreation is not a substitute for process-death testing
 Verified on 2026-09-19: eight plugin tests, five bundle-reader tests, and six device
 tests passed on an API 36.1 emulator. Debug/release APKs and release AABs built in
 both modes; plugin validation and lint passed (sample warnings remain). A separate
-force-stop/direct-launch smoke test reached the real Void Activity in a cold
+force-stop/direct-launch smoke test reached the real Paravoid Activity in a cold
 process. Full saved-state restoration after process death remains future coverage.
 
 ## Repository components
 
 | Component | Responsibility |
 | --- | --- |
-| `void-api` | Legacy code-only entry contract and bundle API version |
-| `void-runtime` | Application bases, shell launcher/factory, validation and DEX loading |
-| `void-gradle-plugin` | Flavor generation, manifest rewriting, class transformation and packaging |
+| `paravoid-api` | Legacy code-only entry contract and bundle API version |
+| `paravoid-runtime` | Application bases, shell launcher/factory, validation and DEX loading |
+| `paravoid-gradle-plugin` | Flavor generation, manifest rewriting, class transformation and packaging |
 | `sample-app` | One downstream app demonstrating both packaging modes |
 
 The old `sample-shell` and `sample-standalone` source projects are replaced by
@@ -234,7 +234,7 @@ generated flavors. The old module/shell plugins and `AppEntry` loader remain as
 regression-tested primitives; they are not the new example's integration API.
 
 Each product gets its own shell APK, package identity, signing key, permissions,
-and application data. VoidAndroid supplies tooling/runtime rather than a universal
+and application data. Paravoid Android supplies tooling/runtime rather than a universal
 host for unrelated applications.
 
 ## Embedded bundle and trust
