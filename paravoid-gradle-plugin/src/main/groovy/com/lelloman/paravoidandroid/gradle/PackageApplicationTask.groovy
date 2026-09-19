@@ -23,9 +23,12 @@ abstract class PackageApplicationTask extends DefaultTask {
     @Classpath abstract RegularFileProperty getD8Jar()
     @Classpath abstract RegularFileProperty getAndroidJar()
     @Input abstract Property<Integer> getMinSdk()
+    @Input abstract Property<Boolean> getExperimentalHiltAdapter()
     @OutputFile abstract RegularFileProperty getShellClasses()
     @OutputFile abstract RegularFileProperty getBundleFile()
     @Inject abstract ExecOperations getExecOperations()
+
+    PackageApplicationTask() { experimentalHiltAdapter.convention(false) }
 
     @TaskAction void pack() {
         Properties info = new Properties()
@@ -63,6 +66,7 @@ abstract class PackageApplicationTask extends DefaultTask {
         if (!classes.containsKey(info.getProperty('activity').replace('.', '/') + '.class')) {
             throw new GradleException('The manifest Activity is missing from the application classes.')
         }
+        if (experimentalHiltAdapter.get()) HiltProbeAdapter.adapt(classes)
         File shell = shellClasses.get().asFile
         shell.parentFile.mkdirs()
         File payload = new File(temporaryDir, 'payload.jar')

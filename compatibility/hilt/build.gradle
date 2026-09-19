@@ -35,3 +35,7 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test:core:1.6.1'
 }
+
+tasks.withType(com.lelloman.paravoidandroid.gradle.PackageApplicationTask).configureEach {
+    experimentalHiltAdapter.set(providers.gradleProperty('hiltProbeAdapter').map { it.toBoolean() }.orElse(false))
+}

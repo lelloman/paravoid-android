@@ -47,6 +47,13 @@ public final class ShellApplication extends Application {
 
     public String getPayloadActivity() { return metadata.getString("paravoid.activity"); }
 
+    /** Available during payload onCreate; does not imply initialization has completed. */
+    public PayloadApplication requirePayloadApplication() {
+        if (failure != null) throw new IllegalStateException("Payload initialization failed", failure);
+        if (application == null) throw new IllegalStateException("Payload Application is not attached.");
+        return application;
+    }
+
     @Override public ClassLoader getClassLoader() {
         return payloadLoader != null ? payloadLoader : super.getClassLoader();
     }
