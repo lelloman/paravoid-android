@@ -1,90 +1,104 @@
 # Hilt compatibility probe
 
-Status: **normal packaging works; Paravoid packaging is not supported yet.**
-This is an independent build, not part of the default resource sample. It pins
-Hilt 2.57.2 and AndroidX Activity 1.10.1 with the repository's AGP 8.13.2 and
-Gradle 8.13. It uses Java annotation processing and the standard Hilt Gradle
-plugin; Kotlin/KSP and other Hilt versions are not covered.
+Status: **the payload-side rewrite experiment passes on API 36.1; general Hilt
+support is not available yet.** This is an independent build, not part of the
+default resource sample. It pins Hilt 2.57.2, AndroidX Activity 1.10.1, AGP 8.13.2
+and Gradle 8.13, using Java annotation processing and the standard Hilt plugin.
 
-## What is tested
-
-The ordinary downstream API is preserved: `ProbeApplication` extends
+The downstream shape is unchanged: `ProbeApplication` extends
 `ParavoidAndroidApplication` with `@HiltAndroidApp`; `ProbeActivity` extends
 `ComponentActivity` with `@AndroidEntryPoint`.
 
-Two production-Application device tests passed on an API 36.1 emulator:
+## Measured results
 
-- Application and Activity field injection share the same `@Singleton` service,
-  whose `@ApplicationContext` is the actual Android Application.
-- A `@HiltViewModel` receives that singleton and a `SavedStateHandle`. Activity
-  recreation preserves the ViewModel and its state, creates a new `@ActivityScoped`
-  object, and does not rerun Application initialization.
+- Three normal-mode instrumentation tests pass using the production Application.
+- Two shell-mode cold-process checks pass: launcher handoff and direct Activity
+  entry. Both then recreate the Activity and verify the retained graph/state.
+- Application/Activity injection and explicit application entry points use the
+  same singleton. The Hilt ViewModel shares it and retains its SavedStateHandle
+  value across recreation; Activity scope is renewed; Application initialization
+  runs once per process.
+- Injected `Application`, `@ApplicationContext`, and ordinary Activity Application
+  access all refer to the real shell Application, not the payload initializer.
+- Hilt's interface and Activity component manager, plus the user Application and
+  Activity, come from the in-memory payload loader. The shell cannot load Hilt's
+  component-manager interface and does not implement it.
 
-These tests use the real app rather than `HiltTestApplication` or a replacement
-DI graph. Activity recreation does not prove process-death restoration.
+These are real graph tests, not `HiltTestApplication` or a replacement injector.
+They do not prove saved-state restoration after process death.
 
 ## Reproduce
 
-Run from the repository root with JDK 17+, the same Android SDK as the main
-sample, and `rg` available. This independent build needs `ANDROID_HOME` or its own
-ignored `compatibility/hilt/local.properties`; the root local.properties alone
-does not configure its SDK.
+Use JDK 17+, the repository's Android SDK, and `rg`/`adb`. The independent build
+needs `ANDROID_HOME` or its own ignored `local.properties`.
 
 ```sh
 export ANDROID_HOME=/path/to/Android/Sdk
 bash compatibility/hilt/check.sh
-```
-
-The check builds the normal app and test APKs, requires the default Paravoid
-manifest rejection, and builds the shell with the diagnostic manifest overlay.
-Successful execution does not mean Hilt works in a payload at runtime.
-
-To also run the normal-mode tests on an unlocked emulator/device:
-
-```sh
 ANDROID_SERIAL=emulator-5556 bash compatibility/hilt/check.sh --device
 ```
 
-## Observed build blockers
+The build-only check verifies normal APKs, the remaining default-manifest
+rejection, and the adapted shell APK. `--device` additionally runs normal
+instrumentation and `shell-device-check.sh`. The latter installs the shell probe,
+force-stops it between scenarios, and checks a unique per-run result written only
+after its in-process assertions and recreation pass. Use a dedicated device.
 
-1. The default Paravoid build fails in manifest processing because AndroidX brings
-   `androidx.profileinstaller.ProfileInstallReceiver`. Its merged manifest also
-   contains `androidx.startup.InitializationProvider` and `CoreComponentFactory`,
-   which the current plugin does not support.
-2. A probe-only manifest overlay removes those declarations. Packaging now
-   succeeds: the packager accepts Hilt's generated intermediate Application base.
-   Launching the unadapted shell on API 36.1 crashes in
-   `ActivityComponentManager.createComponent()`: Hilt rejects `ShellApplication`
-   because it is not a `GeneratedComponentManager`.
+To build the experimental shell directly:
 
-The earlier duplicate `META-INF/versions/9/module-info.class` blocker is fixed:
-the packager ignores root and versioned Java module descriptors in both JAR and
-directory inputs. Real duplicate classes still fail. This does not implement
-general multi-release class selection.
+```sh
+./gradlew -p compatibility/hilt assembleParavoidAndroidDebug \
+  -PhiltProbeMinimalManifest=true -PhiltProbeAdapter=true
+```
 
-Logs are in `build/compatibility/manifest.log` and `minimal-build.log` under
-this directory. `-PhiltProbeMinimalManifest=true` enables the diagnostic overlay;
-it is not a supported integration recipe. The resulting APK builds but cannot
-launch its Hilt Activity without further adaptation.
+Logs are under `build/compatibility/manifest.log` and `adapted-build.log`.
+Without `hiltProbeAdapter=true`, the diagnostic shell still builds but Activity
+injection fails. That negative baseline was reproduced on the emulator:
+`Hilt Activity must be attached to an @HiltAndroidApp Application. Found: ...ShellApplication`.
 
-## Further issues found by inspecting generated code and Hilt sources
+## What the experiment changes
 
-The Activity lookup failure is now reproduced on a device; other integration
-paths still need runtime validation:
+The adapter is off by default. For this fixture it runs after Hilt's ASM transform
+and before our DEX generation, targeting three Hilt 2.57.2 implementation classes:
 
-- Hilt's `ActivityComponentManager.createComponent()` checks that the actual
-  `activity.getApplication()` implements `GeneratedComponentManager`. The shell
-  Application does not implement that interface; the generated implementation
-  would live on the payload-side object instead.
-- Hilt's generated component supplier passes the generated Application instance
-  to `ApplicationContextModule(Context)`. After transformation that would be a
-  ContextWrapper, not the process Application. Context bindings, component lookup,
-  shared interface/class-loader identity, and initialization order need a deliberate
-  integration design and tests.
+| Target | Adaptation |
+| --- | --- |
+| `ActivityComponentManager.createComponent()` | Resolve the payload component owner instead of checking the shell Application |
+| `EntryPointAccessors.fromApplication(Context, Class)` | Resolve that same owner for retained components and explicit entry points |
+| `ApplicationContextModule` constructor | Normalize its Context binding to the real Android application context |
 
-Inspect `build/generated/hilt/component_sources/normalDebug/.../Hilt_ProbeApplication.java`
-and the matching `hilt-android-2.57.2-sources.jar` for the source-level evidence.
-The passing normal-mode test must remain the control when implementing support.
+The payload-only `HiltLookup` bridge accesses the attached payload initializer
+through a Hilt-free runtime API. Ordinary user `getApplication()` calls and Hilt's
+`Application` provider are not redirected. Unit tests check targeting, unchanged
+ordinary calls, missing bridges, and unexpected edit counts. These guards detect
+known structural changes; they are not a compatibility guarantee for other Hilt
+versions.
+
+Two general packaging fixes were needed: accepting an indirect Application base,
+and giving the payload Activity a `getClassLoader()` override when its payload
+hierarchy does not already declare one. The latter fixes Android's restoration
+of AndroidX's platform `ReportFragment`. Explicit downstream overrides are preserved.
+Java module descriptors are also filtered; real duplicate classes still fail.
+
+## Limits and next step
+
+- Default AndroidX manifests still hit the unsupported receiver/provider/factory
+  checks. The diagnostic overlay removes those entries only to isolate this test.
+  One user Activity is the intended rule; other component support is unfinished.
+- Shell-mode AndroidJUnitRunner currently crashes before Application startup:
+  AGP omits shared Kotlin dependencies from the test APK, but they are only in the
+  payload, unavailable to the instrumentation parent loader. The shell checks
+  deliberately run without instrumentation rather than copying Hilt/Kotlin into
+  the shell and hiding the production classloader boundary.
+- Other Hilt versions, Kotlin/KSP, Fragment/View injection, services, receivers,
+  providers, WorkManager, shrinking, custom Application casts, and process-death
+  restoration are not validated. The SDK D8 also emits Kotlin metadata-version
+  warnings for this dependency graph; these successful debug tests do not settle
+  broader Kotlin compatibility.
+- The prototype currently lives behind an experimental packaging-task property
+  and references this fixture's bridge. It is not a public integration API.
+  Next: extract the transformer and payload bridge into an optional `paravoid-hilt`
+  integration, with explicit version support and no Hilt dependency in the shell.
 
 References: [Hilt Gradle transformation](https://dagger.dev/hilt/gradle-setup.html),
 [Hilt applications](https://dagger.dev/hilt/application.html),

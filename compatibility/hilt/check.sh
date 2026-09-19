@@ -32,10 +32,14 @@ expect_blocker() {
 }
 
 expect_blocker manifest 'ParavoidAndroid example does not yet support manifest receiver components.'
-"$repo_dir/gradlew" -p "$probe_dir" assembleParavoidAndroidDebug --console=plain \
-    -PhiltProbeMinimalManifest=true >"$probe_dir/build/compatibility/minimal-build.log" 2>&1
+if ! "$repo_dir/gradlew" -p "$probe_dir" assembleParavoidAndroidDebug --console=plain \
+    -PhiltProbeMinimalManifest=true -PhiltProbeAdapter=true >"$probe_dir/build/compatibility/adapted-build.log" 2>&1; then
+    tail -60 "$probe_dir/build/compatibility/adapted-build.log" >&2
+    exit 1
+fi
 
 if [[ ${1:-} == '--device' ]]; then
     "$repo_dir/gradlew" -p "$probe_dir" connectedNormalDebugAndroidTest --console=plain
+    bash "$probe_dir/shell-device-check.sh"
 fi
-echo 'Normal and diagnostic shell builds pass. Default manifest remains unsupported; shell runtime Hilt is not validated by this build check.'
+echo 'Hilt probe checks passed. Shell mode uses an experimental adapter and diagnostic manifest; this is not general Hilt support.'
