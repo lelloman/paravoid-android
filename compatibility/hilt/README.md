@@ -35,10 +35,9 @@ export ANDROID_HOME=/path/to/Android/Sdk
 bash compatibility/hilt/check.sh
 ```
 
-The check builds the normal app and test APKs, then requires the two known Paravoid
-build failures below. An unrelated failure or an unexpectedly successful Paravoid
-build makes the check fail. Successful execution means the compatibility status
-was reproduced, not that Hilt works in a payload.
+The check builds the normal app and test APKs, requires the default Paravoid
+manifest rejection, and builds the shell with the diagnostic manifest overlay.
+Successful execution does not mean Hilt works in a payload at runtime.
 
 To also run the normal-mode tests on an unlocked emulator/device:
 
@@ -52,25 +51,26 @@ ANDROID_SERIAL=emulator-5556 bash compatibility/hilt/check.sh --device
    `androidx.profileinstaller.ProfileInstallReceiver`. Its merged manifest also
    contains `androidx.startup.InitializationProvider` and `CoreComponentFactory`,
    which the current plugin does not support.
-2. A probe-only manifest overlay removes those declarations to inspect the next
-   stage. Packaging then fails because Hilt transforms the hierarchy to
-   `ProbeApplication -> Hilt_ProbeApplication -> ParavoidAndroidApplication`.
-   Our packager requires the manifest class to extend
-   `ParavoidAndroidApplication` directly.
+2. A probe-only manifest overlay removes those declarations. Packaging now
+   succeeds: the packager accepts Hilt's generated intermediate Application base.
+   Launching the unadapted shell on API 36.1 crashes in
+   `ActivityComponentManager.createComponent()`: Hilt rejects `ShellApplication`
+   because it is not a `GeneratedComponentManager`.
 
 The earlier duplicate `META-INF/versions/9/module-info.class` blocker is fixed:
 the packager ignores root and versioned Java module descriptors in both JAR and
 directory inputs. Real duplicate classes still fail. This does not implement
 general multi-release class selection.
 
-Logs are in `build/compatibility/manifest.log` and `application-hierarchy.log` under
+Logs are in `build/compatibility/manifest.log` and `minimal-build.log` under
 this directory. `-PhiltProbeMinimalManifest=true` enables the diagnostic overlay;
-it is not a supported integration recipe and produces no working Paravoid APK.
-No production plugin/runtime restrictions were relaxed for this probe.
+it is not a supported integration recipe. The resulting APK builds but cannot
+launch its Hilt Activity without further adaptation.
 
 ## Further issues found by inspecting generated code and Hilt sources
 
-These have not yet been reached in a running Paravoid Hilt application:
+The Activity lookup failure is now reproduced on a device; other integration
+paths still need runtime validation:
 
 - Hilt's `ActivityComponentManager.createComponent()` checks that the actual
   `activity.getApplication()` implements `GeneratedComponentManager`. The shell

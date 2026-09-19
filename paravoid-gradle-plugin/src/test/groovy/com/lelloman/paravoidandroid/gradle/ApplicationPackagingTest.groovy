@@ -104,7 +104,22 @@ class ApplicationPackagingTest {
     @Test void rejectsOrdinaryCustomApplication() {
         File root = fixture()
         write(root, 'app/src/main/java/example/MyApplication.java', 'package example; public class MyApplication extends android.app.Application {}')
-        assertTrue(run(root, ':app:assembleParavoidAndroidDebug').buildAndFail().output.contains('must directly extend ParavoidAndroidApplication'))
+        assertTrue(run(root, ':app:assembleParavoidAndroidDebug').buildAndFail().output.contains('must extend ParavoidAndroidApplication'))
+    }
+
+    @Test void transformsIndirectApplicationSuperclass() {
+        File root = fixture()
+        write(root, 'app/src/main/java/example/GeneratedApplication.java',
+            'package example; public class GeneratedApplication extends com.lelloman.paravoidandroid.runtime.ParavoidAndroidApplication {}')
+        File app = new File(root, 'app/src/main/java/example/MyApplication.java')
+        app.text = app.text.replace('com.lelloman.paravoidandroid.runtime.ParavoidAndroidApplication', 'GeneratedApplication')
+        run(root, ':app:assembleParavoidAndroidDebug').build()
+        new ZipFile(new File(root, 'app/build/outputs/paravoid/paravoidAndroidDebug/module.zip')).withCloseable { zip ->
+            String payload = dexText(zip)
+            assertTrue(payload.contains('Lexample/GeneratedApplication;'))
+            assertTrue(payload.contains('Lcom/lelloman/paravoidandroid/runtime/PayloadApplication;'))
+            assertFalse(payload.contains('Lcom/lelloman/paravoidandroid/runtime/ParavoidAndroidApplication;'))
+        }
     }
 
     @Test void ignoresModuleDescriptorsButStillRejectsDuplicateClasses() {

@@ -49,9 +49,15 @@ abstract class PackageApplicationTask extends DefaultTask {
         }
         String app = info.getProperty('application')
         if (app) {
-            byte[] bytes = classes.get(app.replace('.', '/') + '.class')
-            if (bytes == null || new ClassReader(bytes).superName != BASE) {
-                throw new GradleException('The manifest Application must directly extend ParavoidAndroidApplication for this experiment.')
+            String parent = app.replace('.', '/')
+            Set<String> visited = new HashSet<>()
+            while (parent != BASE && visited.add(parent)) {
+                byte[] bytes = classes.get(parent + '.class')
+                if (bytes == null) break
+                parent = new ClassReader(bytes).superName
+            }
+            if (parent != BASE) {
+                throw new GradleException('The manifest Application must extend ParavoidAndroidApplication (directly or indirectly).')
             }
         }
         if (!classes.containsKey(info.getProperty('activity').replace('.', '/') + '.class')) {

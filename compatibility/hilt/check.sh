@@ -32,10 +32,10 @@ expect_blocker() {
 }
 
 expect_blocker manifest 'ParavoidAndroid example does not yet support manifest receiver components.'
-expect_blocker application-hierarchy 'The manifest Application must directly extend ParavoidAndroidApplication for this experiment.' \
-    -PhiltProbeMinimalManifest=true
+"$repo_dir/gradlew" -p "$probe_dir" assembleParavoidAndroidDebug --console=plain \
+    -PhiltProbeMinimalManifest=true >"$probe_dir/build/compatibility/minimal-build.log" 2>&1
 
 if [[ ${1:-} == '--device' ]]; then
     "$repo_dir/gradlew" -p "$probe_dir" connectedNormalDebugAndroidTest --console=plain
 fi
-echo 'Normal Hilt builds pass. Paravoid Hilt remains unsupported; expected build blockers confirmed.'
+echo 'Normal and diagnostic shell builds pass. Default manifest remains unsupported; shell runtime Hilt is not validated by this build check.'
