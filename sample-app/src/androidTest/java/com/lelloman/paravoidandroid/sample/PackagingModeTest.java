@@ -74,17 +74,22 @@ public class PackagingModeTest {
                 assertEquals(ACTIVITY, activity.getClass().getName());
                 assertEquals(context.getPackageName().endsWith(".paravoid"), activity.getClass().getClassLoader() instanceof InMemoryDexClassLoader);
                 TextView counter = activity.getWindow().getDecorView().findViewWithTag("counter");
-                assertEquals("Count: 0", counter.getText().toString());
+                assertEquals(counterText(activity, 0), counter.getText().toString());
                 activity.getWindow().getDecorView().findViewWithTag("increment").performClick();
-                assertEquals("Count: 1", counter.getText().toString());
+                assertEquals(counterText(activity, 1), counter.getText().toString());
             });
             scenario.recreate();
             scenario.onActivity(activity -> {
                 TextView counter = activity.getWindow().getDecorView().findViewWithTag("counter");
-                assertEquals("Count: 1", counter.getText().toString());
+                assertEquals(counterText(activity, 1), counter.getText().toString());
                 assertResourceScreen(activity);
             });
         }
+    }
+
+    private static String counterText(Activity activity, int count) {
+        int id = activity.getResources().getIdentifier("counter_value", "string", activity.getPackageName());
+        return activity.getString(id, count);
     }
 
     private static void assertResourceScreen(Activity activity) {

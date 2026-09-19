@@ -1,5 +1,11 @@
 <resources>
+    <string name="app_name">Paravoid Resource Example</string>
     <string name="greeting">Ciao dalle risorse</string>
+    <string name="counter_value">Conteggio: %1$d</string>
+    <string name="increment">Incrementa</string>
+    <string name="resource_heading">Risorse e caricamento delle classi</string>
+    <string name="icon_description">Icona della dimostrazione delle risorse</string>
+    <string-array name="sample_planets"><item>Terra</item><item>Marte</item></string-array>
     <plurals name="items">
         <item quantity="one">%d elemento</item>
         <item quantity="other">%d elementi</item>
