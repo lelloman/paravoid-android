@@ -1,0 +1,39 @@
+plugins {
+    id 'com.lelloman.paravoid'
+    id 'org.jetbrains.kotlin.android' version '2.2.21'
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.2.21'
+    id 'org.jetbrains.kotlin.kapt' version '2.2.21'
+    id 'com.google.dagger.hilt.android' version '2.57.2'
+    id 'com.lelloman.paravoid.hilt'
+}
+android {
+    namespace 'com.lelloman.paravoidcompat.compose'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.lelloman.paravoidcompat.compose'
+        minSdk 28
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+    }
+    productFlavors {
+        normal { applicationIdSuffix '.normal' }
+        paravoidAndroid { applicationIdSuffix '.paravoid' }
+    }
+    buildFeatures { compose true }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    kotlinOptions { jvmTarget = '11' }
+}
+kapt { correctErrorTypes = true }
+dependencies {
+    implementation project(':paravoid-runtime')
+    implementation 'androidx.activity:activity-compose:1.10.1'
+    implementation 'androidx.compose.material3:material3:1.3.2'
+    implementation 'androidx.navigation:navigation-compose:2.8.9'
+    implementation 'androidx.hilt:hilt-navigation-compose:1.2.0'
+    implementation 'com.google.dagger:hilt-android:2.57.2'
+    kapt 'com.google.dagger:hilt-compiler:2.57.2'
+}

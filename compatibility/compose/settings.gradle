@@ -1,0 +1,13 @@
+pluginManagement {
+    includeBuild('../../paravoid-gradle-plugin')
+    includeBuild('../../paravoid-hilt')
+    repositories { google(); mavenCentral(); gradlePluginPortal() }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories { google(); mavenCentral() }
+}
+rootProject.name = 'compose-compatibility'
+include ':paravoid-api', ':paravoid-runtime'
+project(':paravoid-api').projectDir = file('../../paravoid-api')
+project(':paravoid-runtime').projectDir = file('../../paravoid-runtime')
