@@ -68,8 +68,9 @@ forwards configuration and memory callbacks. The custom class must directly or i
 `ParavoidAndroidApplication` and have a public no-argument constructor.
 
 Application-specific APIs beyond this subset, custom Application casts, object
-identity, dependency injection, and provider initialization still need compatibility
-work. Code must not pass the transformed object to APIs requiring an actual Android
+identity, and broader dependency injection still need compatibility work. Provider
+startup ordering and the optional Hilt integration are tested below. Code must not
+pass the transformed object to APIs requiring an actual Android
 Application. Arbitrary Application behavior is not yet guaranteed to work.
 
 ### Activity startup and installed manifest
@@ -77,8 +78,10 @@ Application. Arbitrary Application behavior is not yet guaranteed to work.
 The generated shell declares two Activities: Paravoid Android's `LauncherActivity`
 and the user's Activity. The plugin assigns the launcher intent filter to the
 bootstrap Activity and preserves the user Activity's component identity and
-required manifest configuration. Shell Application startup prepares and validates
-the embedded payload and completes user initialization. The launcher then starts
+required manifest configuration. During `attachBaseContext`, the shell prepares
+the embedded payload and constructs the transformed Application. Android then
+initializes providers; only in the shell's `onCreate` does it invoke the user's
+`onCreate`. The launcher then starts
 the user Activity through Android and finishes itself. Android manages the real
 user Activity's lifecycle; Activity
 method extraction and lifecycle forwarding are not part of this design.
@@ -98,9 +101,12 @@ state and downloaded payloads, still need explicit coverage.
 
 The shell retains the installed manifest, permissions, bootstrap code, and
 resources required by that manifest and bootstrap UI. Payload updates cannot
-dynamically add installed component declarations or permissions. Resource loading,
-dependency packaging, services, receivers, providers, and other startup paths
-still need implementation and compatibility rules. The integration contract above
+dynamically add installed component declarations or permissions. Declared services,
+receivers and providers are preserved and instantiated through the payload loader.
+The factory delegates to AndroidX `CoreComponentFactory` when present, including
+its component wrapping. Arbitrary custom factories remain unsupported because
+their Application/classloader hooks need a separate contract. Multiprocess,
+isolated-process and direct-boot components are not validated. The integration contract above
 does not imply support for every existing Android app or library.
 
 ## Current example and limits
@@ -123,6 +129,7 @@ not a required downstream app/shell split.
 | XML layout, theme, vector drawable, strings/plurals/arrays, numbers, booleans, dimensions, colors, raw UTF-8 file | Installed APK resources | Real screen inflation, theme lookup, value reads, English/Italian and day/night contexts |
 | Nested JSON/text assets | Installed APK assets | UTF-8 reads, JSON parsing, directory listing, missing-file behavior |
 | App/dependency Java properties and service descriptor | Installed APK Java resources | Class resource streams and ServiceLoader with an explicit class loader |
+| Manifest receiver, service and provider | Embedded DEX; declarations in installed manifest | Receiver/service initialization and loader identity; provider runs before user Application `onCreate` |
 
 These tests demonstrate that payload code can use installed resources. They do
 not demonstrate independently updatable resources: `module.zip` still contains
@@ -141,8 +148,8 @@ This remains an entry-point and code-packaging experiment:
 - Resources, assets, Java resources, and native libraries follow ordinary AGP
   packaging into the installed APK. They are not independently updatable yet.
 - The sample uses Java and Android Views. Compose integration is future work.
-- Extra Activities, Activity aliases, services, receivers, providers, and custom
-  component factories are rejected in Paravoid mode for now.
+- Extra Activities, Activity aliases, and component factories other than the
+  platform default or AndroidX `CoreComponentFactory` are rejected in Paravoid mode.
 - Unsupported Application inheritance, shrinking, core library desugaring, and
   multidex payloads are rejected. Runtime/API package names are reserved for
   shell infrastructure.
@@ -218,9 +225,11 @@ Android packaging.
 For a more involved DI scenario, see the separate [Hilt compatibility probe](compatibility/hilt/README.md).
 The optional [paravoid-hilt plugin](paravoid-hilt/README.md) enables Hilt 2.57.2
 payload-side lookup rewriting. It passes normal-mode instrumentation tests and
-shell-mode cold-launch/recreation checks. Hilt types stay
-out of the shell. The fixture still requires a diagnostic manifest; additional
-Android components and broader Hilt compatibility remain separate work.
+shell-mode cold-launch/recreation checks with the original dependency manifest.
+AndroidX Startup obtains the Hilt graph before user Application `onCreate`, and
+cold broadcasts exercise AndroidX component wrapping in both modes. Hilt types
+stay out of the shell. Automatic Hilt service/receiver injection and broader Hilt
+compatibility remain separate work.
 
 ```sh
 ./gradlew :paravoid-gradle-plugin:test :paravoid-gradle-plugin:validatePlugins \
@@ -243,10 +252,14 @@ tests remain. Device tests check Application identity and initialization, actual
 class loaders, launcher handoff, direct Activity launch, counter interaction, and Activity recreation
 in both modes. Activity recreation is not a substitute for process-death testing.
 
-Resource expansion verified on 2026-09-19: nine plugin tests, five bundle-reader
-tests, and sixteen device tests passed (eight per mode on an API 36.1 emulator).
-Debug APKs and release AABs built in both modes; lint passed with sample warnings.
-The earlier bootstrap experiment also checked cold direct Activity launch. Full
+Component expansion verified on 2026-09-19: twenty sample device tests passed
+(ten per mode on an API 36.1 emulator), using direct AndroidJUnitRunner invocation.
+All eighteen core plugin tests, nine optional Hilt plugin tests, five bundle-reader
+tests, both plugin validation tasks, and lint for both sample modes passed.
+The Hilt probe additionally passed three normal instrumentation tests, two shell
+cold-launch/recreation scenarios, and a cold wrapped-receiver check in each mode.
+The earlier resource expansion built debug APKs and release AABs in both modes;
+lint passed with sample warnings. The bootstrap experiment also checked cold direct Activity launch. Full
 saved-state restoration after process death remains future coverage.
 
 ## Repository components

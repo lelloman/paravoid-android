@@ -37,11 +37,11 @@ The optional plugin also applies the core Paravoid plugin if necessary. Keep usi
 extra Android library, or experimental flag is needed. This repository currently
 uses composite builds; these instructions do not assume a published plugin release.
 
-**Current limit:** this does not yet implement additional Android manifest
-components or component-factory composition. AndroidX dependencies can introduce
-those entries. The [compatibility fixture](../compatibility/hilt/README.md) uses a
-diagnostic overlay to isolate Hilt testing; it is not a general solution for
-removing providers or receivers from a real app.
+The [compatibility fixture](../compatibility/hilt/README.md) uses the original
+dependency manifest, including AndroidX Startup, ProfileInstaller, and
+`CoreComponentFactory`. The core runtime loads declared providers, receivers and
+services from the payload and preserves provider-before-Application-`onCreate`
+ordering. This does not imply support for every Hilt component injection path.
 
 ## Boundary and supported versions
 
@@ -61,7 +61,10 @@ removing providers or receivers from a real app.
   shell API. Ordinary `getApplication()` calls still return the shell Application.
 - The integration does not rewrite every Hilt/Android lookup. Activity injection,
   explicit application entry points, Application/context bindings, and Hilt
-  ViewModel recreation are tested. Other entry points, WorkManager, custom
+  ViewModel recreation are tested. An AndroidX Startup initializer and a cold
+  broadcast receiver also resolve the same graph through explicit entry points.
+  Automatic `@AndroidEntryPoint` service/receiver injection is not adapted or
+  validated. Other entry points, WorkManager, custom
   Application casts, process-death restoration and shrinking remain unvalidated.
 
 ## Verify
