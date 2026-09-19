@@ -1,0 +1,28 @@
+plugins { id 'com.lelloman.void' }
+android {
+    namespace 'com.lelloman.voidandroid.sample'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.lelloman.voidandroid.sample'
+        minSdk 28
+        targetSdk 36
+        versionCode 1
+        versionName '0.2'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    // Distinct identities let both packaging modes coexist for comparison.
+    productFlavors {
+        normal { applicationIdSuffix '.normal' }
+        voidAndroid { applicationIdSuffix '.void' }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+dependencies {
+    implementation project(':void-runtime')
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:core:1.6.1'
+}

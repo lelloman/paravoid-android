@@ -1,0 +1,37 @@
+plugins {
+    id 'groovy'
+    id 'java-gradle-plugin'
+}
+group = 'com.lelloman.void'
+version = '0.1.0-dev'
+repositories { google(); mavenCentral() }
+dependencies {
+    implementation 'com.android.tools.build:gradle:8.13.2'
+    implementation 'org.ow2.asm:asm-commons:9.7'
+    testImplementation gradleTestKit()
+    testImplementation 'junit:junit:4.13.2'
+}
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+tasks.named('test') {
+    systemProperty 'void.repo', rootProject.projectDir.parentFile.absolutePath
+    systemProperty 'void.gradleUserHome', gradle.gradleUserHomeDir.absolutePath
+}
+gradlePlugin {
+    plugins {
+        voidApplication {
+            id = 'com.lelloman.void'
+            implementationClass = 'com.lelloman.voidandroid.gradle.VoidApplicationPlugin'
+        }
+        voidModule {
+            id = 'com.lelloman.void.module'
+            implementationClass = 'com.lelloman.voidandroid.gradle.VoidModulePlugin'
+        }
+        voidShell {
+            id = 'com.lelloman.void.shell'
+            implementationClass = 'com.lelloman.voidandroid.gradle.VoidShellPlugin'
+        }
+    }
+}

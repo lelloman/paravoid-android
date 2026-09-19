@@ -1,0 +1,23 @@
+# Gradle / Android
+.gradle/
+.kotlin/
+**/build/
+local.properties
+.cxx/
+.externalNativeBuild/
+
+# Local IDE state
+.idea/
+*.iml
+.DS_Store
+
+# Signing secrets and local configuration
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.key
+signing.properties
+.env
+.env.*
+!.env.example
