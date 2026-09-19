@@ -67,6 +67,7 @@ abstract class PackageApplicationTask extends DefaultTask {
             throw new GradleException('The manifest Activity is missing from the application classes.')
         }
         if (experimentalHiltAdapter.get()) HiltProbeAdapter.adapt(classes)
+        PayloadActivityLoader.adapt(classes, info.getProperty('activity').replace('.', '/'))
         File shell = shellClasses.get().asFile
         shell.parentFile.mkdirs()
         File payload = new File(temporaryDir, 'payload.jar')
