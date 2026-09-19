@@ -42,4 +42,4 @@ if [[ ${1:-} == '--device' ]]; then
     "$repo_dir/gradlew" -p "$probe_dir" connectedNormalDebugAndroidTest --console=plain
     bash "$probe_dir/shell-device-check.sh"
 fi
-echo 'Hilt probe checks passed. Shell mode uses an experimental adapter and diagnostic manifest; this is not general Hilt support.'
+echo 'Hilt checks passed with optional paravoid-hilt. The diagnostic manifest and documented compatibility limits still apply.'

@@ -216,13 +216,15 @@ Android packaging.
 ## Verification
 
 For a more involved DI scenario, see the separate [Hilt compatibility probe](compatibility/hilt/README.md).
-Hilt 2.57.2 passes normal-mode instrumentation tests and experimental shell-mode
-cold-launch/recreation checks with payload-side lookup rewriting. Hilt types stay
-out of the shell. The experiment requires a diagnostic manifest and is not general
-Hilt support; extraction into an optional `paravoid-hilt` integration is a next step.
+The optional [paravoid-hilt plugin](paravoid-hilt/README.md) enables Hilt 2.57.2
+payload-side lookup rewriting. It passes normal-mode instrumentation tests and
+shell-mode cold-launch/recreation checks. Hilt types stay
+out of the shell. The fixture still requires a diagnostic manifest; additional
+Android components and broader Hilt compatibility remain separate work.
 
 ```sh
 ./gradlew :paravoid-gradle-plugin:test :paravoid-gradle-plugin:validatePlugins \
+  :paravoid-hilt:test :paravoid-hilt:validatePlugins \
   :paravoid-runtime:testDebugUnitTest :sample-app:lintNormalDebug :sample-app:lintParavoidAndroidDebug
 ```
 
@@ -254,6 +256,7 @@ saved-state restoration after process death remains future coverage.
 | `paravoid-api` | Legacy code-only entry contract and bundle API version |
 | `paravoid-runtime` | Application bases, shell launcher/factory, validation and DEX loading |
 | `paravoid-gradle-plugin` | Flavor generation, manifest rewriting, class transformation and packaging |
+| `paravoid-hilt` | Optional, version-checked Hilt payload transformation and generated lookup bridge |
 | `sample-app` | One downstream app demonstrating both packaging modes |
 | `sample-library` | Conventional Java dependency with service-provider and resource fixtures |
 

@@ -1,7 +1,7 @@
 # Hilt compatibility probe
 
-Status: **the payload-side rewrite experiment passes on API 36.1; general Hilt
-support is not available yet.** This is an independent build, not part of the
+Status: **the optional [paravoid-hilt module](../../paravoid-hilt/README.md) passes
+the scoped checks below on API 36.1.** This is an independent build, not part of the
 default resource sample. It pins Hilt 2.57.2, AndroidX Activity 1.10.1, AGP 8.13.2
 and Gradle 8.13, using Java annotation processing and the standard Hilt plugin.
 
@@ -44,21 +44,23 @@ instrumentation and `shell-device-check.sh`. The latter installs the shell probe
 force-stops it between scenarios, and checks a unique per-run result written only
 after its in-process assertions and recreation pass. Use a dedicated device.
 
-To build the experimental shell directly:
+The fixture applies `com.lelloman.paravoid.hilt`. To build its shell directly:
 
 ```sh
 ./gradlew -p compatibility/hilt assembleParavoidAndroidDebug \
-  -PhiltProbeMinimalManifest=true -PhiltProbeAdapter=true
+  -PhiltProbeMinimalManifest=true
 ```
 
 Logs are under `build/compatibility/manifest.log` and `adapted-build.log`.
-Without `hiltProbeAdapter=true`, the diagnostic shell still builds but Activity
+With the fixture-only `-PhiltProbeDisableIntegration=true`, the optional plugin is
+not applied. The diagnostic shell still builds but Activity
 injection fails. That negative baseline was reproduced on the emulator:
 `Hilt Activity must be attached to an @HiltAndroidApp Application. Found: ...ShellApplication`.
 
-## What the experiment changes
+## What the optional integration changes
 
-The adapter is off by default. For this fixture it runs after Hilt's ASM transform
+The core contains no Hilt adapter. Applying the optional plugin registers one for
+shell variants only. It runs after Hilt's ASM transform
 and before our DEX generation, targeting three Hilt 2.57.2 implementation classes:
 
 | Target | Adaptation |
@@ -67,12 +69,12 @@ and before our DEX generation, targeting three Hilt 2.57.2 implementation classe
 | `EntryPointAccessors.fromApplication(Context, Class)` | Resolve that same owner for retained components and explicit entry points |
 | `ApplicationContextModule` constructor | Normalize its Context binding to the real Android application context |
 
-The payload-only `HiltLookup` bridge accesses the attached payload initializer
-through a Hilt-free runtime API. Ordinary user `getApplication()` calls and Hilt's
+The module generates a payload-only `HiltLookup` bridge, which accesses the
+attached payload initializer through a Hilt-free runtime API. Ordinary user `getApplication()` calls and Hilt's
 `Application` provider are not redirected. Unit tests check targeting, unchanged
-ordinary calls, missing bridges, and unexpected edit counts. These guards detect
-known structural changes; they are not a compatibility guarantee for other Hilt
-versions.
+ordinary calls, bridge-name collisions, and unexpected edit counts. The plugin
+also rejects missing or unsupported resolved Hilt runtime versions. Functional
+tests check normal/shell boundaries and removal of the optional plugin.
 
 Two general packaging fixes were needed: accepting an indirect Application base,
 and giving the payload Activity a `getClassLoader()` override when its payload
@@ -80,7 +82,7 @@ hierarchy does not already declare one. The latter fixes Android's restoration
 of AndroidX's platform `ReportFragment`. Explicit downstream overrides are preserved.
 Java module descriptors are also filtered; real duplicate classes still fail.
 
-## Limits and next step
+## Limits
 
 - Default AndroidX manifests still hit the unsupported receiver/provider/factory
   checks. The diagnostic overlay removes those entries only to isolate this test.
@@ -95,10 +97,9 @@ Java module descriptors are also filtered; real duplicate classes still fail.
   restoration are not validated. The SDK D8 also emits Kotlin metadata-version
   warnings for this dependency graph; these successful debug tests do not settle
   broader Kotlin compatibility.
-- The prototype currently lives behind an experimental packaging-task property
-  and references this fixture's bridge. It is not a public integration API.
-  Next: extract the transformer and payload bridge into an optional `paravoid-hilt`
-  integration, with explicit version support and no Hilt dependency in the shell.
+- The previous prototype task flag and fixture-owned bridge have been removed.
+  Integration is now owned by `paravoid-hilt`; the remaining limits above have
+  not been relaxed by extracting the module.
 
 References: [Hilt Gradle transformation](https://dagger.dev/hilt/gradle-setup.html),
 [Hilt applications](https://dagger.dev/hilt/application.html),
