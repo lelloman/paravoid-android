@@ -32,5 +32,6 @@ if [[ ${1:-} == '--device' ]]; then
     fi
     echo 'Normal instrumentation tests passed.'
     bash "$probe_dir/shell-device-check.sh"
+    bash "$probe_dir/injected-device-check.sh"
 fi
 echo 'Hilt checks passed with optional paravoid-hilt and the unmodified dependency manifest.'

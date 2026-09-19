@@ -15,12 +15,15 @@ abstract class HiltPayloadTransformer implements PayloadTransformer {
     }
     static final String BRIDGE = HiltLookupGenerator.NAME
     static final String MANAGER = 'dagger/hilt/android/internal/managers/ActivityComponentManager'
+    static final String SERVICE_MANAGER = 'dagger/hilt/android/internal/managers/ServiceComponentManager'
+    static final String RECEIVER_MANAGER = 'dagger/hilt/android/internal/managers/BroadcastReceiverComponentManager'
     static final String ACCESSORS = 'dagger/hilt/android/EntryPointAccessors'
     static final String CONTEXT_MODULE = 'dagger/hilt/android/internal/modules/ApplicationContextModule'
 
     static void adapt(Map<String, byte[]> classes) {
         if (classes.containsKey(BRIDGE + '.class')) throw new GradleException("paravoid-hilt bridge class collision: ${BRIDGE}")
-        [(MANAGER): 3, (ACCESSORS): 1, (CONTEXT_MODULE): 1].each { String owner, int expected ->
+        [(MANAGER): 3, (SERVICE_MANAGER): 1, (RECEIVER_MANAGER): 1,
+         (ACCESSORS): 1, (CONTEXT_MODULE): 1].each { String owner, int expected ->
             byte[] bytes = classes.get(owner + '.class')
             if (bytes == null) throw new GradleException("paravoid-hilt missing required class: ${owner}")
             ClassWriter writer = new ClassWriter(0)
@@ -30,14 +33,18 @@ abstract class HiltPayloadTransformer implements PayloadTransformer {
                     MethodVisitor downstream = super.visitMethod(access, name, desc, signature, exceptions)
                     return new MethodVisitor(Opcodes.ASM9, downstream) {
                         @Override void visitMethodInsn(int opcode, String target, String method, String descriptor, boolean isInterface) {
-                            if (owner == MANAGER && name == 'createComponent' && desc == '()Ljava/lang/Object;' &&
-                                opcode == Opcodes.INVOKEVIRTUAL && target == 'android/app/Activity' &&
+                            if (((owner == MANAGER && target == 'android/app/Activity') ||
+                                 (owner == SERVICE_MANAGER && target == 'android/app/Service')) &&
+                                name == 'createComponent' && desc == '()Ljava/lang/Object;' &&
+                                opcode == Opcodes.INVOKEVIRTUAL &&
                                 method == 'getApplication' && descriptor == '()Landroid/app/Application;') {
                                 // Only component ownership checks/diagnostics, never ordinary app calls.
                                 super.visitMethodInsn(Opcodes.INVOKESTATIC, BRIDGE, 'manager', '(Landroid/content/Context;)Ljava/lang/Object;', false)
                                 edits[0]++
-                            } else if (owner == ACCESSORS && name == 'fromApplication' &&
-                                desc == '(Landroid/content/Context;Ljava/lang/Class;)Ljava/lang/Object;' &&
+                            } else if (((owner == ACCESSORS && name == 'fromApplication' &&
+                                desc == '(Landroid/content/Context;Ljava/lang/Class;)Ljava/lang/Object;') ||
+                                (owner == RECEIVER_MANAGER && name == 'generatedComponent' &&
+                                desc == '(Landroid/content/Context;)Ljava/lang/Object;')) &&
                                 opcode == Opcodes.INVOKESTATIC && target == 'dagger/hilt/android/internal/Contexts' &&
                                 method == 'getApplication' && descriptor == '(Landroid/content/Context;)Landroid/app/Application;') {
                                 super.visitMethodInsn(Opcodes.INVOKESTATIC, BRIDGE, 'manager', '(Landroid/content/Context;)Ljava/lang/Object;', false)

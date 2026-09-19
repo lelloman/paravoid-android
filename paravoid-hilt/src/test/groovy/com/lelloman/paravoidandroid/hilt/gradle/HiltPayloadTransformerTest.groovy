@@ -15,6 +15,10 @@ class HiltPayloadTransformerTest {
         assertEquals(3, calls(classes[HiltPayloadTransformer.MANAGER + '.class']).count { it.contains('HiltLookup.manager') })
         assertEquals(1, calls(classes[HiltPayloadTransformer.MANAGER + '.class']).count { it.contains('Activity.getApplication') })
         assertEquals(1, calls(classes[HiltPayloadTransformer.ACCESSORS + '.class']).count { it.contains('HiltLookup.manager') })
+        assertEquals(1, calls(classes[HiltPayloadTransformer.SERVICE_MANAGER + '.class']).count { it.contains('HiltLookup.manager') })
+        assertEquals(1, calls(classes[HiltPayloadTransformer.SERVICE_MANAGER + '.class']).count { it.contains('Service.getApplication') })
+        assertEquals(1, calls(classes[HiltPayloadTransformer.RECEIVER_MANAGER + '.class']).count { it.contains('HiltLookup.manager') })
+        assertEquals(1, calls(classes[HiltPayloadTransformer.RECEIVER_MANAGER + '.class']).count { it.contains('Contexts.getApplication') })
         def bindings = calls(classes[HiltPayloadTransformer.CONTEXT_MODULE + '.class'])
         assertTrue(bindings.any { it.contains('Context.getApplicationContext') })
         assertTrue(bindings.any { it.contains('Contexts.getApplication') })
@@ -34,6 +38,19 @@ class HiltPayloadTransformerTest {
         assertThrows(GradleException, { HiltPayloadTransformer.adapt(classes) })
     }
 
+    @Test void rejectsMissingOrChangedComponentManagers() {
+        [HiltPayloadTransformer.SERVICE_MANAGER, HiltPayloadTransformer.RECEIVER_MANAGER].each { owner ->
+            def missing = fixture(3)
+            missing.remove(owner + '.class')
+            assertTrue(assertThrows(GradleException, { HiltPayloadTransformer.adapt(missing) }).message.contains("missing required class: ${owner}"))
+            def changed = fixture(3)
+            changed[owner + '.class'] = writer(owner).toByteArray()
+            def error = assertThrows(GradleException, { HiltPayloadTransformer.adapt(changed) })
+            assertTrue(error.message.contains(owner))
+            assertTrue(error.message.contains('expected 1 edits, found 0'))
+        }
+    }
+
     private static Map<String, byte[]> fixture(int calls) {
         Map<String, byte[]> classes = [:]
         ClassWriter manager = writer(HiltPayloadTransformer.MANAGER)
@@ -46,6 +63,27 @@ class HiltPayloadTransformerTest {
         method(manager, 'ordinary', '()V') { mv -> applicationCall(mv); mv.visitInsn(RETURN) }
         classes[HiltPayloadTransformer.MANAGER + '.class'] = manager.toByteArray()
         classes['example/Ordinary.class'] = manager.toByteArray()
+        ClassWriter service = writer(HiltPayloadTransformer.SERVICE_MANAGER)
+        method(service, 'createComponent', '()Ljava/lang/Object;') { mv ->
+            mv.visitInsn(ACONST_NULL)
+            mv.visitMethodInsn(INVOKEVIRTUAL, 'android/app/Service', 'getApplication', '()Landroid/app/Application;', false)
+            mv.visitInsn(ARETURN)
+        }
+        method(service, 'ordinary', '()Landroid/app/Application;') { mv ->
+            mv.visitInsn(ACONST_NULL)
+            mv.visitMethodInsn(INVOKEVIRTUAL, 'android/app/Service', 'getApplication', '()Landroid/app/Application;', false)
+            mv.visitInsn(ARETURN)
+        }
+        classes[HiltPayloadTransformer.SERVICE_MANAGER + '.class'] = service.toByteArray()
+        ClassWriter receiver = writer(HiltPayloadTransformer.RECEIVER_MANAGER)
+        ['generatedComponent', 'ordinary'].each { name ->
+            method(receiver, name, '(Landroid/content/Context;)Ljava/lang/Object;') { mv ->
+                mv.visitInsn(ACONST_NULL)
+                mv.visitMethodInsn(INVOKESTATIC, 'dagger/hilt/android/internal/Contexts', 'getApplication', '(Landroid/content/Context;)Landroid/app/Application;', false)
+                mv.visitInsn(ARETURN)
+            }
+        }
+        classes[HiltPayloadTransformer.RECEIVER_MANAGER + '.class'] = receiver.toByteArray()
         ClassWriter accessors = writer(HiltPayloadTransformer.ACCESSORS)
         method(accessors, 'fromApplication', '(Landroid/content/Context;Ljava/lang/Class;)Ljava/lang/Object;') { mv ->
             mv.visitInsn(ACONST_NULL)
