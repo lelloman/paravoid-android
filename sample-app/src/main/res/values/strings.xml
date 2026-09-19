@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">Paravoid Resource Example</string>
+    <string name="greeting">Hello from resources</string>
+    <string name="counter_value">Count: %1$d</string>
+    <string name="increment">Increment</string>
+    <string name="resource_heading">Resources and class loading</string>
+    <string name="icon_description">Resource demonstration icon</string>
+    <plurals name="items">
+        <item quantity="one">%d item</item>
+        <item quantity="other">%d items</item>
+    </plurals>
+    <string-array name="sample_planets"><item>Earth</item><item>Mars</item></string-array>
+    <integer name="sample_limit">7</integer>
+    <bool name="sample_enabled">true</bool>
+    <dimen name="screen_padding">24dp</dimen>
+    <color name="sample_background">#FFF5F5FA</color>
+    <color name="sample_foreground">#FF202030</color>
+    <color name="sample_accent">#FF336699</color>
+    <style name="SampleTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorAccent">@color/sample_accent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

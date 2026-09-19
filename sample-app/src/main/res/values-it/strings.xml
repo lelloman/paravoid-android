@@ -1,0 +1,7 @@
+<resources>
+    <string name="greeting">Ciao dalle risorse</string>
+    <plurals name="items">
+        <item quantity="one">%d elemento</item>
+        <item quantity="other">%d elementi</item>
+    </plurals>
+</resources>
