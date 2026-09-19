@@ -60,6 +60,43 @@ class ApplicationPackagingTest {
         assertTrue(run(root, ':app:assembleParavoidAndroidDebug').buildAndFail().output.contains('exactly one user Activity'))
     }
 
+    @Test void preservesInstalledResourcesAndRepackagesChangedAssets() {
+        File root = fixture()
+        write(root, 'app/src/main/res/values/strings.xml', '<resources><string name="fixture_name">Resource fixture</string></resources>')
+        write(root, 'app/src/main/res/raw/note.txt', 'raw fixture')
+        write(root, 'app/src/main/assets/nested/catalog.json', '{"version":1}')
+        write(root, 'app/src/main/resources/fixture/app.properties', 'origin=app')
+        write(root, 'logic/src/main/resources/fixture/library.properties', 'origin=library')
+        run(root, ':app:assembleNormalDebug', ':app:assembleParavoidAndroidDebug', ':app:bundleParavoidAndroidRelease').build()
+        ['normal', 'paravoidAndroid'].each { flavor ->
+            new ZipFile(new File(root, "app/build/outputs/apk/${flavor}/debug/app-${flavor}-debug.apk")).withCloseable { apk ->
+                assertNotNull(apk.getEntry('resources.arsc'))
+                ['res/raw/note.txt': 'raw fixture', 'assets/nested/catalog.json': '{"version":1}',
+                 'fixture/app.properties': 'origin=app', 'fixture/library.properties': 'origin=library'].each { name, expected ->
+                    assertNotNull(name, apk.getEntry(name))
+                    assertEquals(expected, apk.getInputStream(apk.getEntry(name)).withCloseable { it.getText('UTF-8') })
+                }
+            }
+        }
+        new ZipFile(new File(root, 'app/build/outputs/bundle/paravoidAndroidRelease/app-paravoidAndroid-release.aab')).withCloseable { aab ->
+            ['base/resources.pb', 'base/res/raw/note.txt', 'base/assets/nested/catalog.json',
+             'base/root/fixture/app.properties', 'base/root/fixture/library.properties',
+             'base/assets/paravoid/module.zip'].each { assertNotNull(it, aab.getEntry(it)) }
+        }
+        File payload = new File(root, 'app/build/outputs/paravoid/paravoidAndroidDebug/module.zip')
+        byte[] previous = payload.bytes
+        new ZipFile(payload).withCloseable { zip ->
+            assertEquals(['module.properties', 'classes.dex'] as Set, zip.entries().collect { it.name } as Set)
+        }
+        write(root, 'app/src/main/assets/nested/catalog.json', '{"version":2}')
+        def rebuilt = run(root, ':app:assembleParavoidAndroidDebug').build()
+        assertEquals(TaskOutcome.UP_TO_DATE, rebuilt.task(':app:packageParavoidAndroidDebugParavoidApplication').outcome)
+        assertArrayEquals('Asset changes currently affect the installed APK, not the DEX payload', previous, payload.bytes)
+        new ZipFile(new File(root, 'app/build/outputs/apk/paravoidAndroid/debug/app-paravoidAndroid-debug.apk')).withCloseable { apk ->
+            assertEquals('{"version":2}', apk.getInputStream(apk.getEntry('assets/nested/catalog.json')).withCloseable { it.getText('UTF-8') })
+        }
+    }
+
     @Test void rejectsOrdinaryCustomApplication() {
         File root = fixture()
         write(root, 'app/src/main/java/example/MyApplication.java', 'package example; public class MyApplication extends android.app.Application {}')
