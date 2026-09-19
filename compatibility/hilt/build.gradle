@@ -21,6 +21,10 @@ android {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
+    // Diagnostic only: expose the next blocker after AndroidX manifest components.
+    if (providers.gradleProperty('hiltProbeMinimalManifest').isPresent()) {
+        sourceSets.paravoidAndroid.manifest.srcFile('src/diagnostic/AndroidManifest.xml')
+    }
 }
 dependencies {
     implementation project(':paravoid-runtime')
