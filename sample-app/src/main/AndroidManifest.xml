@@ -4,6 +4,7 @@
         android:allowBackup="false" android:supportsRtl="true">
         <receiver android:name=".ProbeReceiver" android:exported="false" />
         <service android:name=".ProbeService" android:exported="false" />
+        <provider android:name=".ProbeProvider" android:authorities="${applicationId}.probe" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

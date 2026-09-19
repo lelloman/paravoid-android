@@ -28,6 +28,24 @@ class ApplicationManifestTest {
         assertTrue(assertThrows(GradleException, { task.rewrite() }).message.contains('exactly one user Activity'))
     }
 
+    @Test void preservesProviderAndAndroidXFactoryForDelegation() {
+        def task = fixture('<provider android:name="example.Provider" android:authorities="example.data" android:exported="false" android:initOrder="50" />',
+            'android:appComponentFactory="androidx.core.app.CoreComponentFactory"')
+        task.rewrite()
+        String manifest = task.outputManifest.get().asFile.text
+        assertTrue(manifest.contains('example.Provider'))
+        assertTrue(manifest.contains('android:authorities="example.data"'))
+        assertTrue(manifest.contains('android:initOrder="50"'))
+        assertTrue(manifest.contains('android:name="paravoid.componentFactory"'))
+        assertTrue(manifest.contains('android:value="androidx.core.app.CoreComponentFactory"'))
+        assertTrue(manifest.contains('android:appComponentFactory="com.lelloman.paravoidandroid.runtime.ParavoidComponentFactory"'))
+    }
+
+    @Test void rejectsCustomFactoryHooksRatherThanSilentlyIgnoringThem() {
+        def task = fixture('', 'android:appComponentFactory="example.CustomFactory"')
+        assertTrue(assertThrows(GradleException, { task.rewrite() }).message.contains('custom Application/classloader factory hooks'))
+    }
+
     private ApplicationManifestTask fixture(String components, String applicationAttributes = '') {
         File root = temporary.newFolder()
         def project = ProjectBuilder.builder().withProjectDir(root).build()

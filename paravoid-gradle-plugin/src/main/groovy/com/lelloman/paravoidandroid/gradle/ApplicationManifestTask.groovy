@@ -27,13 +27,9 @@ abstract class ApplicationManifestTask extends DefaultTask {
         if (activities.length != 1 || app.getElementsByTagName('activity-alias').length != 0) {
             throw new GradleException('ParavoidAndroid requires exactly one user Activity and no Activity aliases in the merged manifest (including dependencies).')
         }
-        ['provider'].each { tag ->
-            if (app.getElementsByTagName(tag).length != 0) {
-                throw new GradleException("ParavoidAndroid example does not yet support manifest ${tag} components.")
-            }
-        }
-        if (app.hasAttributeNS(ANDROID, 'appComponentFactory')) {
-            throw new GradleException('ParavoidAndroid example does not yet compose custom appComponentFactory implementations.')
+        String componentFactory = app.getAttributeNS(ANDROID, 'appComponentFactory')
+        if (componentFactory && !(componentFactory in ['android.app.AppComponentFactory', 'androidx.core.app.CoreComponentFactory'])) {
+            throw new GradleException('ParavoidAndroid supports the default or AndroidX CoreComponentFactory only; custom Application/classloader factory hooks are not supported.')
         }
         def activity = (Element) activities.item(0)
         String pkg = document.documentElement.getAttribute('package')
@@ -60,7 +56,8 @@ abstract class ApplicationManifestTask extends DefaultTask {
         app.appendChild(launcher)
         app.setAttributeNS(ANDROID, 'android:name', 'com.lelloman.paravoidandroid.runtime.ShellApplication')
         app.setAttributeNS(ANDROID, 'android:appComponentFactory', 'com.lelloman.paravoidandroid.runtime.ParavoidComponentFactory')
-        ['paravoid.activity': activityName, 'paravoid.application': applicationName].each { name, value ->
+        ['paravoid.activity': activityName, 'paravoid.application': applicationName,
+         'paravoid.componentFactory': componentFactory].each { name, value ->
             if (value) {
                 def metadata = document.createElement('meta-data')
                 metadata.setAttributeNS(ANDROID, 'android:name', name)

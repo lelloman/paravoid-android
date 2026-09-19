@@ -14,6 +14,17 @@ import org.junit.runner.RunWith;
 
 @RunWith(AndroidJUnit4.class)
 public final class ComponentPackagingTest {
+    @Test public void providerStartsBeforeApplicationOnCreateAndRemainsAccessible() {
+        Context context = ApplicationProvider.getApplicationContext();
+        android.os.Bundle report = context.getContentResolver().call(
+            android.net.Uri.parse("content://" + context.getPackageName() + ".probe"), "report", null, null);
+        assertNotNull(report);
+        assertEquals(0, report.getInt("applicationCountAtStartup", -1));
+        assertEquals(1, report.getInt("applicationCountNow", -1));
+        assertTrue(report.getBoolean("hadApplicationContext"));
+        assertEquals(context.getPackageName().endsWith(".paravoid"), report.getBoolean("payload"));
+    }
+
     @Test public void receiverAndServiceUsePayloadClassesAfterApplicationInitialization() throws Exception {
         Context context = ApplicationProvider.getApplicationContext();
         Intent launch = new Intent().setClassName(context, "com.lelloman.paravoidandroid.sample.MainActivity")

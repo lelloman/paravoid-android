@@ -1,26 +1,29 @@
 package com.lelloman.paravoidandroid.runtime;
 
 import android.app.Application;
+import android.app.AppComponentFactory;
+import android.content.Context;
 import android.content.res.Configuration;
 import android.os.Build;
 import java.nio.ByteBuffer;
 import dalvik.system.InMemoryDexClassLoader;
 
-/** Initializes the embedded payload before any Activity, including restored Activities. */
+/** Prepares payload classes before providers; delivers onCreate at Android's normal time. */
 public final class ShellApplication extends Application {
     private static ShellApplication instance;
     private ClassLoader payloadLoader;
     private PayloadApplication application;
     private Throwable failure;
     private android.os.Bundle metadata;
+    private AppComponentFactory componentFactory = new AppComponentFactory();
 
     static ShellApplication requireInstance() {
         if (instance == null) throw new IllegalStateException("Shell Application is not attached.");
         return instance;
     }
 
-    @Override public void onCreate() {
-        super.onCreate();
+    @Override protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
         instance = this;
         try {
             ModuleBundle bundle = ModuleBundle.read(getAssets().open("paravoid/module.zip"), Build.VERSION.SDK_INT);
@@ -31,12 +34,33 @@ public final class ShellApplication extends Application {
                 Class<?> type = payloadLoader.loadClass(name);
                 if (type.getClassLoader() != payloadLoader) throw new IllegalStateException("Application leaked into shell.");
                 application = type.asSubclass(PayloadApplication.class).getConstructor().newInstance();
-                application.onCreate();
+            }
+            String factory = metadata.getString("paravoid.componentFactory");
+            if (factory != null) {
+                componentFactory = payloadLoader.loadClass(factory).asSubclass(AppComponentFactory.class)
+                    .getConstructor().newInstance();
             }
         } catch (Exception | LinkageError error) {
             failure = error;
             android.util.Log.e("ParavoidAndroid", "Payload initialization failed", error);
         }
+    }
+
+    @Override public void onCreate() {
+        super.onCreate();
+        if (failure == null && application != null) {
+            try {
+                application.onCreate();
+            } catch (Exception | LinkageError error) {
+                failure = error;
+                android.util.Log.e("ParavoidAndroid", "Payload onCreate failed", error);
+            }
+        }
+    }
+
+    AppComponentFactory requireComponentFactory() {
+        requirePayloadLoader();
+        return componentFactory;
     }
 
     public ClassLoader requirePayloadLoader() {
@@ -47,7 +71,7 @@ public final class ShellApplication extends Application {
 
     public String getPayloadActivity() { return metadata.getString("paravoid.activity"); }
 
-    /** Available during payload onCreate; does not imply initialization has completed. */
+    /** Available to providers after attachment; does not imply onCreate has run. */
     public PayloadApplication requirePayloadApplication() {
         if (failure != null) throw new IllegalStateException("Payload initialization failed", failure);
         if (application == null) throw new IllegalStateException("Payload Application is not attached.");
