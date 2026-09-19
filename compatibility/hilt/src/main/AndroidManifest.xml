@@ -6,6 +6,8 @@
             <meta-data android:name="com.lelloman.paravoidcompat.hilt.ProbeStartupInitializer" android:value="androidx.startup" />
         </provider>
         <receiver android:name=".WrappedProbeReceiver" android:exported="true" android:permission="android.permission.DUMP" />
+        <receiver android:name=".InjectedReceiver" android:exported="true" android:permission="android.permission.DUMP" />
+        <service android:name=".InjectedService" android:exported="true" android:permission="android.permission.DUMP" />
         <activity android:name=".ProbeActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
