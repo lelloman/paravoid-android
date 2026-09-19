@@ -37,5 +37,7 @@ dependencies {
 }
 
 tasks.withType(com.lelloman.paravoidandroid.gradle.PackageApplicationTask).configureEach {
-    experimentalHiltAdapter.set(providers.gradleProperty('hiltProbeAdapter').map { it.toBoolean() }.orElse(false))
+    payloadTransformers.set(providers.gradleProperty('hiltProbeAdapter').map {
+        it.toBoolean() ? [new com.lelloman.paravoidandroid.gradle.HiltProbeAdapter()] : []
+    }.orElse([]))
 }

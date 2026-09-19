@@ -64,6 +64,29 @@ class ApplicationPackagingTest {
         assertTrue(run(root, ':app:assembleParavoidAndroidDebug').buildAndFail().output.contains('exactly one user Activity'))
     }
 
+    @Test void optionalTransformerRunsBeforeRemappingAndTracksItsInputs() {
+        File root = fixture()
+        new File(root, 'app/build.gradle') << '''
+            class TestTransformer implements com.lelloman.paravoidandroid.gradle.PayloadTransformer {
+                @org.gradle.api.tasks.Input int marker
+                void transform(Map<String, byte[]> classes) {
+                    assert classes.containsKey('example/dependency/Logic.class')
+                    assert new org.objectweb.asm.ClassReader(classes['example/MyApplication.class']).superName ==
+                        'com/lelloman/paravoidandroid/runtime/ParavoidAndroidApplication'
+                    println "payload-transform-marker=${marker}"
+                }
+            }
+            tasks.withType(com.lelloman.paravoidandroid.gradle.PackageApplicationTask).configureEach {
+                payloadTransformers.add(new TestTransformer(marker: providers.gradleProperty('marker').get().toInteger()))
+            }
+        '''
+        assertFalse(run(root, ':app:assembleNormalDebug', '-Pmarker=1').build().output.contains('payload-transform-marker='))
+        assertTrue(run(root, ':app:assembleParavoidAndroidDebug', '-Pmarker=1').build().output.contains('payload-transform-marker=1'))
+        assertEquals(TaskOutcome.UP_TO_DATE, run(root, ':app:assembleParavoidAndroidDebug', '-Pmarker=1').build()
+            .task(':app:packageParavoidAndroidDebugParavoidApplication').outcome)
+        assertTrue(run(root, ':app:assembleParavoidAndroidDebug', '-Pmarker=2').build().output.contains('payload-transform-marker=2'))
+    }
+
     @Test void preservesInstalledResourcesAndRepackagesChangedAssets() {
         File root = fixture()
         write(root, 'app/src/main/res/values/strings.xml', '<resources><string name="fixture_name">Resource fixture</string></resources>')

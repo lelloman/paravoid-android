@@ -6,7 +6,9 @@ import org.objectweb.asm.*
 /** Opt-in experiment for compatibility/hilt, pinned there to Hilt 2.57.2.
  * Not a general Hilt integration API. Extract into an optional adapter after validation.
  */
-class HiltProbeAdapter {
+class HiltProbeAdapter implements PayloadTransformer {
+    @org.gradle.api.tasks.Input String getCompatibilityVersion() { '2.57.2' }
+    @Override void transform(Map<String, byte[]> classes) { adapt(classes) }
     static final String BRIDGE = 'com/lelloman/paravoidcompat/hilt/HiltLookup'
     static final String MANAGER = 'dagger/hilt/android/internal/managers/ActivityComponentManager'
     static final String ACCESSORS = 'dagger/hilt/android/EntryPointAccessors'
