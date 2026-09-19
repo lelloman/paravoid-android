@@ -1,6 +1,11 @@
 plugins {
     id 'com.lelloman.paravoid'
     id 'com.google.dagger.hilt.android' version '2.57.2'
+    id 'com.lelloman.paravoid.hilt' apply false
+}
+// The opt-out exists only for this fixture's negative compatibility checks.
+if (!providers.gradleProperty('hiltProbeDisableIntegration').isPresent()) {
+    apply plugin: 'com.lelloman.paravoid.hilt'
 }
 android {
     namespace 'com.lelloman.paravoidcompat.hilt'
@@ -34,10 +39,4 @@ dependencies {
     androidTestImplementation 'androidx.test:runner:1.6.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test:core:1.6.1'
-}
-
-tasks.withType(com.lelloman.paravoidandroid.gradle.PackageApplicationTask).configureEach {
-    payloadTransformers.set(providers.gradleProperty('hiltProbeAdapter').map {
-        it.toBoolean() ? [new com.lelloman.paravoidandroid.gradle.HiltProbeAdapter()] : []
-    }.orElse([]))
 }

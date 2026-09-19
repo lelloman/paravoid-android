@@ -1,0 +1,5 @@
+pluginManagement {
+    repositories { google(); mavenCentral(); gradlePluginPortal() }
+}
+includeBuild('../paravoid-gradle-plugin')
+rootProject.name = 'paravoid-hilt'

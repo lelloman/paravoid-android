@@ -1,24 +1,28 @@
-package com.lelloman.paravoidandroid.gradle
+package com.lelloman.paravoidandroid.hilt.gradle
 
+import com.lelloman.paravoidandroid.gradle.PayloadTransformer
 import org.gradle.api.GradleException
+import org.gradle.api.provider.MapProperty
+import org.gradle.api.tasks.Input
 import org.objectweb.asm.*
 
-/** Opt-in experiment for compatibility/hilt, pinned there to Hilt 2.57.2.
- * Not a general Hilt integration API. Extract into an optional adapter after validation.
- */
-class HiltProbeAdapter implements PayloadTransformer {
-    @org.gradle.api.tasks.Input String getCompatibilityVersion() { '2.57.2' }
-    @Override void transform(Map<String, byte[]> classes) { adapt(classes) }
-    static final String BRIDGE = 'com/lelloman/paravoidcompat/hilt/HiltLookup'
+/** Version-checked payload adaptation, never applied to normal packaging. */
+abstract class HiltPayloadTransformer implements PayloadTransformer {
+    @Input abstract MapProperty<String, String> getRuntimeVersions()
+    @Override void transform(Map<String, byte[]> classes) {
+        HiltVersions.validate(runtimeVersions.get())
+        adapt(classes)
+    }
+    static final String BRIDGE = HiltLookupGenerator.NAME
     static final String MANAGER = 'dagger/hilt/android/internal/managers/ActivityComponentManager'
     static final String ACCESSORS = 'dagger/hilt/android/EntryPointAccessors'
     static final String CONTEXT_MODULE = 'dagger/hilt/android/internal/modules/ApplicationContextModule'
 
     static void adapt(Map<String, byte[]> classes) {
-        if (!classes.containsKey(BRIDGE + '.class')) throw new GradleException('Hilt probe requires its payload lookup bridge.')
+        if (classes.containsKey(BRIDGE + '.class')) throw new GradleException("paravoid-hilt bridge class collision: ${BRIDGE}")
         [(MANAGER): 3, (ACCESSORS): 1, (CONTEXT_MODULE): 1].each { String owner, int expected ->
             byte[] bytes = classes.get(owner + '.class')
-            if (bytes == null) throw new GradleException("Hilt probe missing ${owner}")
+            if (bytes == null) throw new GradleException("paravoid-hilt missing required class: ${owner}")
             ClassWriter writer = new ClassWriter(0)
             int[] edits = [0] as int[]
             new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9, writer) {
@@ -56,8 +60,9 @@ class HiltProbeAdapter implements PayloadTransformer {
                     }
                 }
             }, 0)
-            if (edits[0] != expected) throw new GradleException("Unsupported Hilt bytecode in ${owner}: expected ${expected} probe edits, found ${edits[0]}")
+            if (edits[0] != expected) throw new GradleException("Unsupported Hilt bytecode in ${owner}: expected ${expected} edits, found ${edits[0]}")
             classes.put(owner + '.class', writer.toByteArray())
         }
+        classes.put(BRIDGE + '.class', HiltLookupGenerator.generate())
     }
 }

@@ -1,5 +1,6 @@
 pluginManagement {
     includeBuild('../../paravoid-gradle-plugin')
+    includeBuild('../../paravoid-hilt')
     repositories { google(); mavenCentral(); gradlePluginPortal() }
 }
 dependencyResolutionManagement {

@@ -1,4 +1,4 @@
-package com.lelloman.paravoidandroid.gradle
+package com.lelloman.paravoidandroid.hilt.gradle
 
 import org.gradle.api.GradleException
 import org.junit.Test
@@ -6,35 +6,37 @@ import org.objectweb.asm.*
 import static org.junit.Assert.*
 import static org.objectweb.asm.Opcodes.*
 
-class HiltProbeAdapterTest {
+class HiltPayloadTransformerTest {
     @Test void rewritesOnlyComponentLookupsAndContextBinding() {
         Map<String, byte[]> classes = fixture(3)
         byte[] ordinary = classes['example/Ordinary.class'].clone()
-        HiltProbeAdapter.adapt(classes)
+        HiltPayloadTransformer.adapt(classes)
         assertArrayEquals(ordinary, classes['example/Ordinary.class'])
-        assertEquals(3, calls(classes[HiltProbeAdapter.MANAGER + '.class']).count { it.contains('HiltLookup.manager') })
-        assertEquals(1, calls(classes[HiltProbeAdapter.MANAGER + '.class']).count { it.contains('Activity.getApplication') })
-        assertEquals(1, calls(classes[HiltProbeAdapter.ACCESSORS + '.class']).count { it.contains('HiltLookup.manager') })
-        def bindings = calls(classes[HiltProbeAdapter.CONTEXT_MODULE + '.class'])
+        assertEquals(3, calls(classes[HiltPayloadTransformer.MANAGER + '.class']).count { it.contains('HiltLookup.manager') })
+        assertEquals(1, calls(classes[HiltPayloadTransformer.MANAGER + '.class']).count { it.contains('Activity.getApplication') })
+        assertEquals(1, calls(classes[HiltPayloadTransformer.ACCESSORS + '.class']).count { it.contains('HiltLookup.manager') })
+        def bindings = calls(classes[HiltPayloadTransformer.CONTEXT_MODULE + '.class'])
         assertTrue(bindings.any { it.contains('Context.getApplicationContext') })
         assertTrue(bindings.any { it.contains('Contexts.getApplication') })
+        byte[] bridge = classes[HiltPayloadTransformer.BRIDGE + '.class']
+        assertEquals(HiltLookupGenerator.NAME, new ClassReader(bridge).className)
+        assertTrue(calls(bridge).any { it.contains('ShellApplication.requirePayloadApplication') })
     }
 
     @Test void failsClosedWhenTheExpectedHiltBytecodeChanges() {
-        GradleException error = assertThrows(GradleException, { HiltProbeAdapter.adapt(fixture(2)) })
-        assertTrue(error.message.contains('expected 3 probe edits, found 2'))
+        GradleException error = assertThrows(GradleException, { HiltPayloadTransformer.adapt(fixture(2)) })
+        assertTrue(error.message.contains('expected 3 edits, found 2'))
     }
 
-    @Test void requiresThePayloadBridge() {
+    @Test void rejectsBridgeNameCollisions() {
         Map<String, byte[]> classes = fixture(3)
-        classes.remove(HiltProbeAdapter.BRIDGE + '.class')
-        assertThrows(GradleException, { HiltProbeAdapter.adapt(classes) })
+        classes[HiltPayloadTransformer.BRIDGE + '.class'] = new byte[0]
+        assertThrows(GradleException, { HiltPayloadTransformer.adapt(classes) })
     }
 
     private static Map<String, byte[]> fixture(int calls) {
         Map<String, byte[]> classes = [:]
-        classes[HiltProbeAdapter.BRIDGE + '.class'] = new byte[0] // Presence only; bridge is compiled in the device fixture.
-        ClassWriter manager = writer(HiltProbeAdapter.MANAGER)
+        ClassWriter manager = writer(HiltPayloadTransformer.MANAGER)
         method(manager, 'createComponent', '()Ljava/lang/Object;') { mv ->
             calls.times { applicationCall(mv) }
             mv.visitInsn(ACONST_NULL)
@@ -42,22 +44,22 @@ class HiltProbeAdapterTest {
         }
         // Same invocation outside createComponent must not be rewritten.
         method(manager, 'ordinary', '()V') { mv -> applicationCall(mv); mv.visitInsn(RETURN) }
-        classes[HiltProbeAdapter.MANAGER + '.class'] = manager.toByteArray()
+        classes[HiltPayloadTransformer.MANAGER + '.class'] = manager.toByteArray()
         classes['example/Ordinary.class'] = manager.toByteArray()
-        ClassWriter accessors = writer(HiltProbeAdapter.ACCESSORS)
+        ClassWriter accessors = writer(HiltPayloadTransformer.ACCESSORS)
         method(accessors, 'fromApplication', '(Landroid/content/Context;Ljava/lang/Class;)Ljava/lang/Object;') { mv ->
             mv.visitInsn(ACONST_NULL)
             mv.visitMethodInsn(INVOKESTATIC, 'dagger/hilt/android/internal/Contexts', 'getApplication', '(Landroid/content/Context;)Landroid/app/Application;', false)
             mv.visitInsn(ARETURN)
         }
-        classes[HiltProbeAdapter.ACCESSORS + '.class'] = accessors.toByteArray()
-        ClassWriter module = writer(HiltProbeAdapter.CONTEXT_MODULE)
+        classes[HiltPayloadTransformer.ACCESSORS + '.class'] = accessors.toByteArray()
+        ClassWriter module = writer(HiltPayloadTransformer.CONTEXT_MODULE)
         method(module, '<init>', '(Landroid/content/Context;)V') { mv ->
             mv.visitVarInsn(ALOAD, 0)
             mv.visitMethodInsn(INVOKESPECIAL, 'java/lang/Object', '<init>', '()V', false)
             mv.visitVarInsn(ALOAD, 0)
             mv.visitVarInsn(ALOAD, 1)
-            mv.visitFieldInsn(PUTFIELD, HiltProbeAdapter.CONTEXT_MODULE, 'applicationContext', 'Landroid/content/Context;')
+            mv.visitFieldInsn(PUTFIELD, HiltPayloadTransformer.CONTEXT_MODULE, 'applicationContext', 'Landroid/content/Context;')
             mv.visitInsn(RETURN)
         }
         method(module, 'provideApplication', '()Landroid/app/Application;') { mv ->
@@ -65,7 +67,7 @@ class HiltProbeAdapterTest {
             mv.visitMethodInsn(INVOKESTATIC, 'dagger/hilt/android/internal/Contexts', 'getApplication', '(Landroid/content/Context;)Landroid/app/Application;', false)
             mv.visitInsn(ARETURN)
         }
-        classes[HiltProbeAdapter.CONTEXT_MODULE + '.class'] = module.toByteArray()
+        classes[HiltPayloadTransformer.CONTEXT_MODULE + '.class'] = module.toByteArray()
         return classes
     }
 

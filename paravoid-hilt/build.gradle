@@ -1,0 +1,29 @@
+plugins {
+    id 'groovy'
+    id 'java-gradle-plugin'
+}
+group = 'com.lelloman.paravoid'
+version = '0.1.0-dev'
+repositories { google(); mavenCentral() }
+dependencies {
+    implementation 'com.lelloman.paravoid:paravoid-gradle-plugin:0.1.0-dev'
+    implementation 'org.ow2.asm:asm:9.7'
+    testImplementation gradleTestKit()
+    testImplementation 'junit:junit:4.13.2'
+}
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+tasks.named('test') {
+    systemProperty 'paravoid.repo', rootProject.projectDir.parentFile.absolutePath
+    systemProperty 'paravoid.gradleUserHome', gradle.gradleUserHomeDir.absolutePath
+}
+gradlePlugin {
+    plugins {
+        paravoidHilt {
+            id = 'com.lelloman.paravoid.hilt'
+            implementationClass = 'com.lelloman.paravoidandroid.hilt.gradle.ParavoidHiltPlugin'
+        }
+    }
+}

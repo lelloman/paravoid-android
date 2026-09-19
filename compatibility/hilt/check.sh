@@ -33,7 +33,7 @@ expect_blocker() {
 
 expect_blocker manifest 'ParavoidAndroid example does not yet support manifest receiver components.'
 if ! "$repo_dir/gradlew" -p "$probe_dir" assembleParavoidAndroidDebug --console=plain \
-    -PhiltProbeMinimalManifest=true -PhiltProbeAdapter=true >"$probe_dir/build/compatibility/adapted-build.log" 2>&1; then
+    -PhiltProbeMinimalManifest=true >"$probe_dir/build/compatibility/adapted-build.log" 2>&1; then
     tail -60 "$probe_dir/build/compatibility/adapted-build.log" >&2
     exit 1
 fi
