@@ -215,6 +215,12 @@ Android packaging.
 
 ## Verification
 
+For a more involved DI scenario, see the separate [Hilt compatibility probe](compatibility/hilt/README.md).
+Hilt 2.57.2 passes Application/Activity injection and scoped ViewModel recreation
+tests in normal packaging. Paravoid packaging remains unsupported: the probe
+records manifest and dependency-JAR build blockers plus further Application
+integration issues. This is a compatibility test, not a claim of Hilt support.
+
 ```sh
 ./gradlew :paravoid-gradle-plugin:test :paravoid-gradle-plugin:validatePlugins \
   :paravoid-runtime:testDebugUnitTest :sample-app:lintNormalDebug :sample-app:lintParavoidAndroidDebug
