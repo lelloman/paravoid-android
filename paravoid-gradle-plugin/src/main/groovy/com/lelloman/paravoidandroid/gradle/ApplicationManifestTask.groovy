@@ -27,7 +27,7 @@ abstract class ApplicationManifestTask extends DefaultTask {
         if (activities.length != 1 || app.getElementsByTagName('activity-alias').length != 0) {
             throw new GradleException('ParavoidAndroid requires exactly one user Activity and no Activity aliases in the merged manifest (including dependencies).')
         }
-        ['service', 'receiver', 'provider'].each { tag ->
+        ['provider'].each { tag ->
             if (app.getElementsByTagName(tag).length != 0) {
                 throw new GradleException("ParavoidAndroid example does not yet support manifest ${tag} components.")
             }

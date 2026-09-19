@@ -31,7 +31,7 @@ expect_blocker() {
     echo "Confirmed unsupported case: $label"
 }
 
-expect_blocker manifest 'ParavoidAndroid example does not yet support manifest receiver components.'
+expect_blocker manifest 'ParavoidAndroid example does not yet support manifest provider components.'
 if ! "$repo_dir/gradlew" -p "$probe_dir" assembleParavoidAndroidDebug --console=plain \
     -PhiltProbeMinimalManifest=true >"$probe_dir/build/compatibility/adapted-build.log" 2>&1; then
     tail -60 "$probe_dir/build/compatibility/adapted-build.log" >&2
