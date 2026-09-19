@@ -50,7 +50,8 @@ ordering. This does not imply support for every Hilt component injection path.
 - The plugin checks the **selected** runtime versions of `hilt-android` and
   `hilt-core`, including transitive dependency resolution. Both must be `2.57.2`.
   Use the matching Hilt Gradle plugin/compiler as tested above; other combinations
-  and Kotlin/KSP are not validated.
+  are not validated. The separate [Compose probe](../compatibility/compose/README.md)
+  verifies Kotlin 2.2.21 with kapt; KSP remains unvalidated.
 - Rewriting runs after Hilt instrumentation and before payload base remapping/D8,
   via the core's generic `PayloadTransformer` hook. Transformer configuration is
   tracked as nested Gradle task input, including the resolved runtime versions.
@@ -67,7 +68,9 @@ ordering. This does not imply support for every Hilt component injection path.
   their Hilt component managers. Cold-start tests check field injection, singleton
   identity and service-scope renewal after stopping/recreating the service.
   Other entry points, WorkManager, custom
-  Application casts, process-death restoration and shrinking remain unvalidated.
+  Application casts and shrinking remain unvalidated. The Compose probe verifies
+  navigation-scoped Hilt ViewModels and saved-state restoration after process death;
+  that is not a general guarantee for arbitrary state or payload updates.
 
 ## Verify
 

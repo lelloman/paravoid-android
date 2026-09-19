@@ -96,8 +96,10 @@ Loading a DEX class is not sufficient to make Android instantiate an Activity.
 The runtime must integrate payload class loading with Android component creation;
 the example uses `AppComponentFactory` on API 28+. The shell initializes the embedded
 payload during Application startup, so direct Activity creation does not depend on
-visiting the launcher. Broader process-restoration cases, including custom parcelable
-state and downloaded payloads, still need explicit coverage.
+visiting the launcher. The plugin prepares saved-state Bundles with the payload
+loader before Activity `onCreate`; the Compose probe tests navigation and state
+restoration after process death. Arbitrary custom Parcelable state, state across
+payload updates and downloaded payloads still need explicit coverage.
 
 The shell retains the installed manifest, permissions, bootstrap code, and
 resources required by that manifest and bootstrap UI. Payload updates cannot
@@ -135,7 +137,7 @@ These tests demonstrate that payload code can use installed resources. They do
 not demonstrate independently updatable resources: `module.zip` still contains
 only metadata and DEX. A packaging regression test checks APK/AAB locations and
 proves an asset edit changes the APK while leaving the DEX payload unchanged.
-Custom XML View classes, automatic Parcelable saved-state restoration, fonts,
+Custom XML View classes, arbitrary custom Parcelable saved-state restoration, fonts,
 bitmap/audio/video assets, and native/JNI dependencies are not covered by this
 expansion. No minimum-SDK or runtime loader changes were needed for this matrix.
 
@@ -147,11 +149,13 @@ This remains an entry-point and code-packaging experiment:
 
 - Resources, assets, Java resources, and native libraries follow ordinary AGP
   packaging into the installed APK. They are not independently updatable yet.
-- The sample uses Java and Android Views. Compose integration is future work.
+- The main sample uses Java and Android Views; a separate Compose/Hilt/Navigation
+  fixture verifies Kotlin UI and process-death state restoration.
 - Extra Activities, Activity aliases, and component factories other than the
   platform default or AndroidX `CoreComponentFactory` are rejected in Paravoid mode.
-- Unsupported Application inheritance, shrinking, core library desugaring, and
-  multidex payloads are rejected. Runtime/API package names are reserved for
+- Unsupported Application inheritance, shrinking and core library desugaring are
+  rejected. Multi-DEX payloads are supported within the bundle limits below.
+  Runtime/API package names are reserved for
   shell infrastructure.
 - Downloading, independent payload signatures, activation, and rollback are not
   implemented. Changing the embedded payload still requires reinstalling the shell.
@@ -232,6 +236,15 @@ stay out of the shell. Annotated services and receivers also pass automatic fiel
 injection checks, including service-scope renewal; broader Hilt compatibility
 remains separate work.
 
+Two further independent probes exercise larger downstream stacks:
+
+- [Compose + Navigation + Hilt](compatibility/compose/README.md): Kotlin/kapt,
+  navigation-scoped ViewModels, back handling, rotation, and real process-death
+  restoration of `rememberSaveable` and `SavedStateHandle` in both modes.
+- [Room + WorkManager](compatibility/storage/README.md): generated DAOs, persistent
+  data, and cold background JobService/Worker execution in both modes. This uses
+  the default Worker factory, not Hilt Worker injection.
+
 ```sh
 ./gradlew :paravoid-gradle-plugin:test :paravoid-gradle-plugin:validatePlugins \
   :paravoid-hilt:test :paravoid-hilt:validatePlugins \
@@ -248,22 +261,23 @@ With an unlocked emulator/device:
 Use `ANDROID_SERIAL` to select an emulator when multiple devices are connected.
 Plugin tests build isolated fixtures, inspect APK class separation and Application
 remapping, build AABs, check incremental reuse, and reject unsupported manifest and
-Application configurations. Legacy code-only plugin tests and five bundle-reader
+Application configurations. Legacy code-only plugin tests and eight bundle-reader
 tests remain. Device tests check Application identity and initialization, actual
 class loaders, launcher handoff, direct Activity launch, counter interaction, and Activity recreation
 in both modes. Activity recreation is not a substitute for process-death testing.
 
 Component expansion verified on 2026-09-19: twenty sample device tests passed
 (ten per mode on an API 36.1 emulator), using direct AndroidJUnitRunner invocation.
-All eighteen core plugin tests, ten optional Hilt plugin tests, five bundle-reader
+All twenty-two core plugin tests, ten optional Hilt plugin tests, eight bundle-reader
 tests, both plugin validation tasks, and lint for both sample modes passed.
 The Hilt probe additionally passed three normal instrumentation tests, two shell
 cold-launch/recreation scenarios, and a cold wrapped-receiver check in each mode.
 Automatic Hilt injection also passed cold receiver entry and cold service startup
 plus service recreation in each mode.
 The earlier resource expansion built debug APKs and release AABs in both modes;
-lint passed with sample warnings. The bootstrap experiment also checked cold direct Activity launch. Full
-saved-state restoration after process death remains future coverage.
+lint passed with sample warnings. The bootstrap experiment also checked cold direct Activity launch.
+The Compose probe now passes actual process-death restoration; broader restoration
+and payload-update compatibility remain future coverage.
 
 ## Repository components
 
@@ -275,6 +289,8 @@ saved-state restoration after process death remains future coverage.
 | `paravoid-hilt` | Optional, version-checked Hilt payload transformation and generated lookup bridge |
 | `sample-app` | One downstream app demonstrating both packaging modes |
 | `sample-library` | Conventional Java dependency with service-provider and resource fixtures |
+| `compatibility/compose` | Kotlin Compose, Navigation, Hilt and process-death restoration probe |
+| `compatibility/storage` | Room persistence and cold WorkManager execution probe |
 
 The old `sample-shell` and `sample-standalone` source projects are replaced by
 generated flavors. The old module/shell plugins and `AppEntry` loader remain as
@@ -286,12 +302,20 @@ host for unrelated applications.
 
 ## Embedded bundle and trust
 
-The current `module.zip` contains exactly:
+A single-DEX `module.zip` retains format 1:
 
 ```text
 module.properties  # format=1, api=1, minSdk, entryPoint (the user Activity)
 classes.dex        # application and dependency classes, excluding host runtime
 ```
+
+Multi-DEX bundles use `format=2` and `dexCount=N`, with contiguous entries
+`classes.dex`, `classes2.dex`, …, `classesN.dex`. Limits are 16 DEX files, 16 MiB
+per file and 64 MiB total uncompressed DEX, plus 4 KiB metadata. The reader rejects
+missing, duplicate, unexpected or noncontiguous entries and invalid counts/headers.
+All DEX buffers load together through one `InMemoryDexClassLoader`. Format 2 needs
+API 27+; application packaging still requires API 28+. Old shells reject format 2,
+so multi-DEX support requires a shell update, not just a replacement payload.
 
 The reader validates metadata and size limits. The shell uses
 `InMemoryDexClassLoader` with the host loader as parent, without extracting
@@ -308,8 +332,8 @@ the host application's privileges; this is not an isolation boundary.
 
 1. Expand transformation compatibility and test cold process restoration, callback
    behavior, and supported Android versions beyond the current sample.
-2. Add Compose and independently packaged resources/assets/dependencies. Establish
-   compatibility rules for libraries, dependency injection, and other components.
+2. Add independently packaged resources/assets and test broader library cases:
+   Hilt Workers, Room migrations, custom views and native dependencies.
 3. Define independently signed payloads and negative signature tests before accepting
    code from outside the APK. Sign with the product shell's signing key and verify
    against the installed shell certificate's public key; matching certificates

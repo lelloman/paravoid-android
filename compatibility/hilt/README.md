@@ -35,7 +35,8 @@ The downstream shape is unchanged: `ProbeApplication` extends
   component-manager interface and does not implement it.
 
 These are real graph tests, not `HiltTestApplication` or a replacement injector.
-They do not prove saved-state restoration after process death.
+They do not prove saved-state restoration after process death. That scenario is
+covered separately by the [Compose/Navigation probe](../compose/README.md).
 
 ## Reproduce
 
@@ -120,9 +121,11 @@ features, not Hilt-specific hooks.
   payload, unavailable to the instrumentation parent loader. The shell checks
   deliberately run without instrumentation rather than copying Hilt/Kotlin into
   the shell and hiding the production classloader boundary.
-- Other Hilt versions, Kotlin/KSP, Fragment/View injection, WorkManager, shrinking,
-  custom Application casts, bound/foreground service scenarios, and process-death
-  restoration are not validated. The SDK D8 also emits Kotlin metadata-version
+- Other Hilt versions, KSP, Fragment/View injection, Hilt Worker injection, shrinking,
+  custom Application casts and bound/foreground service scenarios are not validated.
+  The Compose probe separately covers Kotlin/kapt and navigation state after
+  process death. The [storage probe](../storage/README.md) tests Room and ordinary
+  WorkManager workers, not Hilt Workers. The SDK D8 also emits Kotlin metadata-version
   warnings for this dependency graph; these successful debug tests do not settle
   broader Kotlin compatibility.
 - The previous prototype task flag, fixture-owned bridge, and diagnostic manifest
