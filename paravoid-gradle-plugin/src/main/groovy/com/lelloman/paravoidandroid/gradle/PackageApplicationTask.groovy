@@ -95,10 +95,16 @@ abstract class PackageApplicationTask extends DefaultTask {
         File bundle = bundleFile.get().asFile
         bundle.parentFile.mkdirs()
         new ZipFile(dexZip).withCloseable { dex ->
-            if (dex.getEntry('classes2.dex')) throw new GradleException('This experiment supports one payload DEX only.')
+            def entries = dex.entries().findAll { it.name ==~ /classes(?:[2-9]|[1-9][0-9]+)?\.dex/ }
+                .sort { it.name == 'classes.dex' ? 1 : Integer.parseInt(it.name.substring(7, it.name.length() - 4)) }
+            if (entries.isEmpty() || entries.size() > 16 || entries.any { it.size > 16 * 1024 * 1024 } ||
+                entries.sum { it.size } > 64 * 1024 * 1024) throw new GradleException('Payload exceeds bundle DEX limits (16 files, 16 MiB each, 64 MiB total).')
+            int format = entries.size() == 1 ? 1 : 2
             new ZipOutputStream(new FileOutputStream(bundle)).withCloseable { zip ->
-                PackageApplicationTask.write(zip, 'module.properties', "format=1\napi=1\nminSdk=${minSdk.get()}\nentryPoint=${info.getProperty('activity')}\n".getBytes('UTF-8'))
-                PackageApplicationTask.write(zip, 'classes.dex', dex.getInputStream(dex.getEntry('classes.dex')).withCloseable { it.readAllBytes() })
+                String metadata = "format=${format}\napi=1\nminSdk=${minSdk.get()}\nentryPoint=${info.getProperty('activity')}\n"
+                if (format == 2) metadata += "dexCount=${entries.size()}\n"
+                PackageApplicationTask.write(zip, 'module.properties', metadata.getBytes('UTF-8'))
+                entries.each { entry -> PackageApplicationTask.write(zip, entry.name, dex.getInputStream(entry).withCloseable { it.readAllBytes() }) }
             }
         }
     }

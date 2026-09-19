@@ -5,8 +5,6 @@ import android.app.AppComponentFactory;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.os.Build;
-import java.nio.ByteBuffer;
-import dalvik.system.InMemoryDexClassLoader;
 
 /** Prepares payload classes before providers; delivers onCreate at Android's normal time. */
 public final class ShellApplication extends Application {
@@ -27,7 +25,7 @@ public final class ShellApplication extends Application {
         instance = this;
         try {
             ModuleBundle bundle = ModuleBundle.read(getAssets().open("paravoid/module.zip"), Build.VERSION.SDK_INT);
-            payloadLoader = new InMemoryDexClassLoader(ByteBuffer.wrap(bundle.dex), super.getClassLoader());
+            payloadLoader = bundle.createClassLoader(super.getClassLoader());
             metadata = getPackageManager().getApplicationInfo(getPackageName(), android.content.pm.PackageManager.GET_META_DATA).metaData;
             String name = metadata.getString("paravoid.application");
             if (name != null) {
