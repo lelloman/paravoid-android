@@ -73,11 +73,13 @@ public class ModuleBundleTest {
 
     @Test public void rejectsOversizedDexAndExcessTotalSize() throws Exception {
         String metadata = "format=2\napi=1\nminSdk=28\nentryPoint=example.Entry\ndexCount=5\n";
-        assertThrows(IOException.class, () -> ModuleBundle.read(multiple(metadata,
+        IOException oversized = assertThrows(IOException.class, () -> ModuleBundle.read(multiple(metadata,
             new String[] {"classes.dex"}, new byte[16 * 1024 * 1024 + 1]), 36));
-        assertThrows(IOException.class, () -> ModuleBundle.read(multiple(metadata,
+        assertTrue(oversized.getMessage().contains("exceeds size limit"));
+        IOException aggregate = assertThrows(IOException.class, () -> ModuleBundle.read(multiple(metadata,
             new String[] {"classes.dex", "classes2.dex", "classes3.dex", "classes4.dex", "classes5.dex"},
             new byte[16 * 1024 * 1024]), 36));
+        assertTrue(aggregate.getMessage().contains("exceeds size limit"));
         assertThrows(IOException.class, () -> ModuleBundle.read(multiple(metadata,
             new String[] {"classes17.dex"}, DEX), 36));
     }

@@ -13,8 +13,11 @@ SERIAL = os.environ["ANDROID_SERIAL"]
 
 
 def adb(*args, check=True):
-    return subprocess.run(["adb", "-s", SERIAL, *args], text=True, stdout=subprocess.PIPE,
-                          stderr=subprocess.STDOUT, check=check, timeout=40).stdout.strip()
+    result = subprocess.run(["adb", "-s", SERIAL, *args], text=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, timeout=40)
+    if check and result.returncode:
+        raise RuntimeError(f"adb {args}: {result.stdout}")
+    return result.stdout.strip()
 
 
 def wait_for(description, fn, timeout=40):

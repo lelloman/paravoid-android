@@ -15,8 +15,11 @@ SERIAL = os.environ["ANDROID_SERIAL"]
 
 
 def adb(*args, check=True):
-    return subprocess.run(["adb", "-s", SERIAL, *args], text=True, stdout=subprocess.PIPE,
-                          stderr=subprocess.STDOUT, check=check, timeout=40).stdout.strip()
+    result = subprocess.run(["adb", "-s", SERIAL, *args], text=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, timeout=40)
+    if check and result.returncode:
+        raise RuntimeError(f"adb {args}: {result.stdout}")
+    return result.stdout.strip()
 
 
 def wait_for(description, fn, timeout=25):
@@ -83,7 +86,7 @@ def check_mode(mode):
     adb("install", "-r", str(apk))
     adb("shell", "am", "force-stop", app)
     launch(app, launcher)
-    first = state(app, route="list", count=0, local=0)
+    first = state(app, route="list", count=0, local=0, pid=int(adb("shell", "pidof", app)))
     assert first["resource"] == "Compose resource lookup"
     tap("Increment")
     listing = state(app, route="list", count=1, local=1)
