@@ -23,10 +23,18 @@ public final class ProbeDeviceChecks {
         require(GeneratedComponentManager.class.getClassLoader() == payload, "Hilt interface comes from payload DEX");
         require(dagger.hilt.android.internal.managers.ActivityComponentManager.class.getClassLoader() == payload,
             "Hilt implementation comes from payload DEX");
+        String bridge = "com.lelloman.paravoidandroid.hilt.internal.HiltLookup";
         try {
-            activity.getApplication().getClass().getClassLoader().loadClass(GeneratedComponentManager.class.getName());
-            throw new IllegalStateException("Hilt leaked into the shell classloader");
-        } catch (ClassNotFoundException expected) { }
+            require(payload.loadClass(bridge).getClassLoader() == payload, "generated bridge comes from payload DEX");
+        } catch (ClassNotFoundException error) {
+            throw new IllegalStateException("Optional Hilt bridge was not generated", error);
+        }
+        for (String name : new String[] {GeneratedComponentManager.class.getName(), bridge}) {
+            try {
+                activity.getApplication().getClass().getClassLoader().loadClass(name);
+                throw new IllegalStateException("Hilt leaked into the shell classloader: " + name);
+            } catch (ClassNotFoundException expected) { }
+        }
 
         if (firstModel == null) {
             firstModel = activity.model;

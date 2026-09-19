@@ -5,11 +5,13 @@ plugins {
 group = 'com.lelloman.paravoid'
 version = '0.1.0-dev'
 repositories { google(); mavenCentral() }
+configurations { hiltTestPlugin { extendsFrom implementation, runtimeOnly } }
 dependencies {
     implementation 'com.lelloman.paravoid:paravoid-gradle-plugin:0.1.0-dev'
     implementation 'org.ow2.asm:asm:9.7'
     testImplementation gradleTestKit()
     testImplementation 'junit:junit:4.13.2'
+    hiltTestPlugin 'com.google.dagger:hilt-android-gradle-plugin:2.57.2'
 }
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -18,6 +20,12 @@ java {
 tasks.named('test') {
     systemProperty 'paravoid.repo', rootProject.projectDir.parentFile.absolutePath
     systemProperty 'paravoid.gradleUserHome', gradle.gradleUserHomeDir.absolutePath
+}
+// TestKit must load Hilt and AGP alongside the injected plugin, just as a consumer
+// plugins block does. This configuration is not part of the published runtime.
+tasks.named('pluginUnderTestMetadata') {
+    // Resolve one graph so shared tooling (e.g. JavaPoet) has one selected version.
+    pluginClasspath.setFrom(sourceSets.main.output, configurations.hiltTestPlugin)
 }
 gradlePlugin {
     plugins {

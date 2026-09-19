@@ -69,6 +69,9 @@ public class HiltProbeTest {
         if (shell) {
             assertEquals("com.lelloman.paravoidandroid.runtime.ShellApplication", context.getClass().getName());
             assertFalse(context.getClassLoader().loadClass("dagger.hilt.internal.GeneratedComponentManager").isInstance(context));
+        } else {
+            assertThrows(ClassNotFoundException.class, () -> context.getClassLoader()
+                .loadClass("com.lelloman.paravoidandroid.hilt.internal.HiltLookup"));
         }
     }
 
