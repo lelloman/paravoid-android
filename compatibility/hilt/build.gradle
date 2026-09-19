@@ -1,0 +1,33 @@
+plugins {
+    id 'com.lelloman.paravoid'
+    id 'com.google.dagger.hilt.android' version '2.57.2'
+}
+android {
+    namespace 'com.lelloman.paravoidcompat.hilt'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.lelloman.paravoidcompat.hilt'
+        minSdk 28
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    productFlavors {
+        normal { applicationIdSuffix '.normal' }
+        paravoidAndroid { applicationIdSuffix '.paravoid' }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+dependencies {
+    implementation project(':paravoid-runtime')
+    implementation 'androidx.activity:activity:1.10.1'
+    implementation 'com.google.dagger:hilt-android:2.57.2'
+    annotationProcessor 'com.google.dagger:hilt-compiler:2.57.2'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:core:1.6.1'
+}
