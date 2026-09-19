@@ -7,6 +7,10 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
+import java.util.zip.ZipEntry
+import org.objectweb.asm.ClassWriter
+import org.objectweb.asm.Opcodes
 import static org.junit.Assert.*
 
 class ApplicationPackagingTest {
@@ -101,6 +105,38 @@ class ApplicationPackagingTest {
         File root = fixture()
         write(root, 'app/src/main/java/example/MyApplication.java', 'package example; public class MyApplication extends android.app.Application {}')
         assertTrue(run(root, ':app:assembleParavoidAndroidDebug').buildAndFail().output.contains('must directly extend ParavoidAndroidApplication'))
+    }
+
+    @Test void ignoresModuleDescriptorsButStillRejectsDuplicateClasses() {
+        File root = fixture()
+        new File(root, 'app/build.gradle') << "\ndependencies { implementation fileTree(dir: 'libs', include: ['*.jar']) }\n"
+        ['one', 'two'].each { name ->
+            File jar = new File(root, "app/libs/${name}.jar")
+            jar.parentFile.mkdirs()
+            ClassWriter descriptor = new ClassWriter(0)
+            descriptor.visit(Opcodes.V9, Opcodes.ACC_MODULE, 'module-info', null, null, null)
+            descriptor.visitModule("example.${name}", 0, null).visitEnd()
+            descriptor.visitEnd()
+            new ZipOutputStream(new FileOutputStream(jar)).withCloseable { zip ->
+                ['module-info.class', 'META-INF/versions/9/module-info.class',
+                 'META-INF/versions/11/module-info.class'].each { path ->
+                    zip.putNextEntry(new ZipEntry(path))
+                    zip.write(descriptor.toByteArray())
+                    zip.closeEntry()
+                }
+            }
+        }
+        run(root, ':app:assembleParavoidAndroidDebug').build()
+        new ZipFile(new File(root, 'app/build/outputs/paravoid/paravoidAndroidDebug/module.zip')).withCloseable { zip ->
+            assertFalse(dexText(zip).contains('module-info'))
+        }
+
+        // Real duplicate classes must remain an error, even when byte-for-byte identical.
+        File logicJar = new File(root, 'logic/build/libs/logic.jar')
+        assertTrue(logicJar.isFile())
+        new File(root, 'app/libs/duplicate.jar').bytes = logicJar.bytes
+        assertTrue(run(root, ':app:assembleParavoidAndroidDebug').buildAndFail().output
+            .contains('Duplicate application class: example/dependency/Logic.class'))
     }
 
     @Test void supportsDefaultApplicationWithoutCustomInitializer() {

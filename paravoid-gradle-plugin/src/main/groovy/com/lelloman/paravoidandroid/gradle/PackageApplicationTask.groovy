@@ -93,6 +93,9 @@ abstract class PackageApplicationTask extends DefaultTask {
     }
 
     private static void add(Map<String, byte[]> classes, String name, byte[] bytes) {
+        // JPMS descriptors describe their containing JAR, not an Android runtime class.
+        // Apply to both JAR and directory inputs, including multi-release descriptors.
+        if (name == 'module-info.class' || name ==~ /META-INF\/versions\/[0-9]+\/module-info\.class/) return
         if (classes.putIfAbsent(name, bytes) != null) throw new GradleException("Duplicate application class: ${name}")
     }
     private static void write(ZipOutputStream output, String name, byte[] bytes) {

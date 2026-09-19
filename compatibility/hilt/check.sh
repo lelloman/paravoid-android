@@ -32,7 +32,7 @@ expect_blocker() {
 }
 
 expect_blocker manifest 'ParavoidAndroid example does not yet support manifest receiver components.'
-expect_blocker dependency-metadata 'Duplicate application class: META-INF/versions/9/module-info.class' \
+expect_blocker application-hierarchy 'The manifest Application must directly extend ParavoidAndroidApplication for this experiment.' \
     -PhiltProbeMinimalManifest=true
 
 if [[ ${1:-} == '--device' ]]; then

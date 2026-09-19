@@ -53,12 +53,17 @@ ANDROID_SERIAL=emulator-5556 bash compatibility/hilt/check.sh --device
    contains `androidx.startup.InitializationProvider` and `CoreComponentFactory`,
    which the current plugin does not support.
 2. A probe-only manifest overlay removes those declarations to inspect the next
-   stage. Packaging then fails on duplicate
-   `META-INF/versions/9/module-info.class` entries from dependency JARs. Java module
-   metadata currently enters the app class map; multi-release JAR handling needs
-   an explicit policy.
+   stage. Packaging then fails because Hilt transforms the hierarchy to
+   `ProbeApplication -> Hilt_ProbeApplication -> ParavoidAndroidApplication`.
+   Our packager requires the manifest class to extend
+   `ParavoidAndroidApplication` directly.
 
-Logs are in `build/compatibility/manifest.log` and `dependency-metadata.log` under
+The earlier duplicate `META-INF/versions/9/module-info.class` blocker is fixed:
+the packager ignores root and versioned Java module descriptors in both JAR and
+directory inputs. Real duplicate classes still fail. This does not implement
+general multi-release class selection.
+
+Logs are in `build/compatibility/manifest.log` and `application-hierarchy.log` under
 this directory. `-PhiltProbeMinimalManifest=true` enables the diagnostic overlay;
 it is not a supported integration recipe and produces no working Paravoid APK.
 No production plugin/runtime restrictions were relaxed for this probe.
@@ -67,9 +72,6 @@ No production plugin/runtime restrictions were relaxed for this probe.
 
 These have not yet been reached in a running Paravoid Hilt application:
 
-- Hilt transforms the hierarchy to `ProbeApplication -> Hilt_ProbeApplication ->
-  ParavoidAndroidApplication`. Our packager currently requires the manifest class
-  to extend `ParavoidAndroidApplication` directly.
 - Hilt's `ActivityComponentManager.createComponent()` checks that the actual
   `activity.getApplication()` implements `GeneratedComponentManager`. The shell
   Application does not implement that interface; the generated implementation
