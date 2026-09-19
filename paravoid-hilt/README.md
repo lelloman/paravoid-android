@@ -63,8 +63,10 @@ ordering. This does not imply support for every Hilt component injection path.
   explicit application entry points, Application/context bindings, and Hilt
   ViewModel recreation are tested. An AndroidX Startup initializer and a cold
   broadcast receiver also resolve the same graph through explicit entry points.
-  Automatic `@AndroidEntryPoint` service/receiver injection is not adapted or
-  validated. Other entry points, WorkManager, custom
+  Automatic `@AndroidEntryPoint` service/receiver injection is adapted through
+  their Hilt component managers. Cold-start tests check field injection, singleton
+  identity and service-scope renewal after stopping/recreating the service.
+  Other entry points, WorkManager, custom
   Application casts, process-death restoration and shrinking remain unvalidated.
 
 ## Verify

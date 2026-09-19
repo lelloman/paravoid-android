@@ -228,8 +228,9 @@ payload-side lookup rewriting. It passes normal-mode instrumentation tests and
 shell-mode cold-launch/recreation checks with the original dependency manifest.
 AndroidX Startup obtains the Hilt graph before user Application `onCreate`, and
 cold broadcasts exercise AndroidX component wrapping in both modes. Hilt types
-stay out of the shell. Automatic Hilt service/receiver injection and broader Hilt
-compatibility remain separate work.
+stay out of the shell. Annotated services and receivers also pass automatic field
+injection checks, including service-scope renewal; broader Hilt compatibility
+remains separate work.
 
 ```sh
 ./gradlew :paravoid-gradle-plugin:test :paravoid-gradle-plugin:validatePlugins \
@@ -254,10 +255,12 @@ in both modes. Activity recreation is not a substitute for process-death testing
 
 Component expansion verified on 2026-09-19: twenty sample device tests passed
 (ten per mode on an API 36.1 emulator), using direct AndroidJUnitRunner invocation.
-All eighteen core plugin tests, nine optional Hilt plugin tests, five bundle-reader
+All eighteen core plugin tests, ten optional Hilt plugin tests, five bundle-reader
 tests, both plugin validation tasks, and lint for both sample modes passed.
 The Hilt probe additionally passed three normal instrumentation tests, two shell
 cold-launch/recreation scenarios, and a cold wrapped-receiver check in each mode.
+Automatic Hilt injection also passed cold receiver entry and cold service startup
+plus service recreation in each mode.
 The earlier resource expansion built debug APKs and release AABs in both modes;
 lint passed with sample warnings. The bootstrap experiment also checked cold direct Activity launch. Full
 saved-state restoration after process death remains future coverage.

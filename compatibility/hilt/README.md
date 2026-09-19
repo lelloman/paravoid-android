@@ -16,6 +16,11 @@ The downstream shape is unchanged: `ProbeApplication` extends
   entry. Both then recreate the Activity and verify the retained graph/state.
 - Cold receiver entry passes in both modes. A `CompatWrapped` receiver requires
   AndroidX `CoreComponentFactory` delegation, then resolves the same Hilt singleton.
+- Separate `@AndroidEntryPoint` receiver and service probes cold-start in both
+  modes and verify automatic field injection and shared singleton identity. The
+  service stops and starts again in the same process: its `@ServiceScoped` token
+  is shared within each instance but replaced between instances. Injected Android
+  Application/Context references keep their real identity.
 - An AndroidX Startup initializer resolves the graph before user Application
   `onCreate`; Application injection subsequently reuses that singleton. Startup,
   ProfileInstaller and the AndroidX factory remain in the merged manifest.
@@ -45,9 +50,12 @@ ANDROID_SERIAL=emulator-5556 bash compatibility/hilt/check.sh --device
 
 The build-only check verifies normal APKs and the adapted shell APK with the
 unmodified dependency manifest. `--device` additionally runs normal instrumentation
-directly through `adb shell am instrument` and `shell-device-check.sh`. The latter
-installs the probes, force-stops them between scenarios, and checks unique per-run
-results written only after the in-process assertions pass. Use a dedicated device.
+directly through `adb shell am instrument`, `shell-device-check.sh`, and
+`injected-device-check.sh`. The scripts install the probes, force-stop them between
+scenarios, and check unique per-run results written only after the in-process
+assertions pass. The service test temporarily allowlists the app for background
+starts; it does not test foreground-service or background-execution policy. Use a
+dedicated device.
 
 The fixture applies `com.lelloman.paravoid.hilt`. To build its shell directly:
 
@@ -67,11 +75,13 @@ during provider startup, so opt-out is not a runnable Hilt configuration.
 
 The core contains no Hilt adapter. Applying the optional plugin registers one for
 shell variants only. It runs after Hilt's ASM transform
-and before our DEX generation, targeting three Hilt 2.57.2 implementation classes:
+and before our DEX generation, targeting five Hilt 2.57.2 implementation classes:
 
 | Target | Adaptation |
 | --- | --- |
 | `ActivityComponentManager.createComponent()` | Resolve the payload component owner instead of checking the shell Application |
+| `ServiceComponentManager.createComponent()` | Resolve that owner to build the service-scoped component, preserving the actual Service binding |
+| `BroadcastReceiverComponentManager.generatedComponent(Context)` | Resolve that owner for automatic receiver injection |
 | `EntryPointAccessors.fromApplication(Context, Class)` | Resolve that same owner for retained components and explicit entry points |
 | `ApplicationContextModule` constructor | Normalize its Context binding to the real Android application context |
 
@@ -81,6 +91,11 @@ attached payload initializer through a Hilt-free runtime API. Ordinary user `get
 ordinary calls, bridge-name collisions, and unexpected edit counts. The plugin
 also rejects missing or unsupported resolved Hilt runtime versions. Functional
 tests check normal/shell boundaries and removal of the optional plugin.
+
+Before extending the adapter, the new annotated receiver and service passed in
+normal mode but both crashed in shell mode at Hilt's Application ownership check.
+The targeted rewrites fix those paths without changing downstream annotations or
+ordinary Android Application access.
 
 Two general packaging fixes were needed: accepting an indirect Application base,
 and giving the payload Activity a `getClassLoader()` override when its payload
@@ -105,8 +120,8 @@ features, not Hilt-specific hooks.
   payload, unavailable to the instrumentation parent loader. The shell checks
   deliberately run without instrumentation rather than copying Hilt/Kotlin into
   the shell and hiding the production classloader boundary.
-- Other Hilt versions, Kotlin/KSP, Fragment/View injection, automatic Hilt
-  service/receiver injection, WorkManager, shrinking, custom Application casts, and process-death
+- Other Hilt versions, Kotlin/KSP, Fragment/View injection, WorkManager, shrinking,
+  custom Application casts, bound/foreground service scenarios, and process-death
   restoration are not validated. The SDK D8 also emits Kotlin metadata-version
   warnings for this dependency graph; these successful debug tests do not settle
   broader Kotlin compatibility.
