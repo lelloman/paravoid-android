@@ -35,6 +35,7 @@ public class PackagingModeTest {
             instrumentation.runOnMainSync(() -> {
                 assertEquals(ACTIVITY, launched.getClass().getName());
                 assertNotNull(launched.getWindow().getDecorView().findViewWithTag("counter"));
+                assertResourceScreen(launched);
             });
         } finally {
             instrumentation.removeMonitor(monitor);
@@ -81,7 +82,18 @@ public class PackagingModeTest {
             scenario.onActivity(activity -> {
                 TextView counter = activity.getWindow().getDecorView().findViewWithTag("counter");
                 assertEquals("Count: 1", counter.getText().toString());
+                assertResourceScreen(activity);
             });
         }
+    }
+
+    private static void assertResourceScreen(Activity activity) {
+        TextView report = activity.getWindow().getDecorView().findViewWithTag("resource-report");
+        assertNotNull(report);
+        assertTrue(report.getText().toString().contains("dependency: Hello from the dependency"));
+        assertTrue(report.getText().toString().contains("parcelable: 42"));
+        android.util.TypedValue accent = new android.util.TypedValue();
+        assertTrue(activity.getTheme().resolveAttribute(android.R.attr.colorAccent, accent, true));
+        assertEquals(0xff336699, accent.data);
     }
 }
