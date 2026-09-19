@@ -91,7 +91,7 @@ class ParavoidHiltPluginTest {
     }
     private static GradleRunner run(File root, String... tasks) {
         GradleRunner.create().withProjectDir(root).withPluginClasspath().withArguments(tasks.toList() +
-            ['-PhiltProbeMinimalManifest=true', '--stacktrace', '--max-workers=2', '--gradle-user-home', System.getProperty('paravoid.gradleUserHome')])
+            ['--stacktrace', '--max-workers=2', '--gradle-user-home', System.getProperty('paravoid.gradleUserHome')])
     }
     private static void copy(File source, File target) {
         source.eachFileRecurse { file ->

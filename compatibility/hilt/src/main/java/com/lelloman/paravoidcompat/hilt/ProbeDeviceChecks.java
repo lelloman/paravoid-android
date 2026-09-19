@@ -13,6 +13,8 @@ public final class ProbeDeviceChecks {
     static void check(ProbeActivity activity) {
         require(ProbeApplication.initializationCount == 1, "Application initialized exactly once");
         require(activity.service == ProbeApplication.initializedService, "Application/Activity singleton");
+        require(activity.service == ProbeStartupInitializer.service, "provider/Application/Activity singleton");
+        require(ProbeStartupInitializer.initializationCount == 1, "Startup initialized exactly once");
         require(activity.model.service == activity.service, "ViewModel singleton");
         require(activity.service.context == activity.getApplicationContext(), "real application context");
         require(activity.service.application == activity.getApplication(), "real Application binding");
@@ -20,6 +22,9 @@ public final class ProbeDeviceChecks {
         ClassLoader payload = activity.getClass().getClassLoader();
         require(payload instanceof InMemoryDexClassLoader, "Activity comes from payload DEX");
         require(ProbeApplication.class.getClassLoader() == payload, "Application comes from payload DEX");
+        require(ProbeStartupInitializer.class.getClassLoader() == payload, "Startup initializer comes from payload DEX");
+        require(androidx.startup.InitializationProvider.class.getClassLoader() == payload, "provider comes from payload DEX");
+        require(androidx.core.app.CoreComponentFactory.class.getClassLoader() == payload, "AndroidX factory comes from payload DEX");
         require(GeneratedComponentManager.class.getClassLoader() == payload, "Hilt interface comes from payload DEX");
         require(dagger.hilt.android.internal.managers.ActivityComponentManager.class.getClassLoader() == payload,
             "Hilt implementation comes from payload DEX");

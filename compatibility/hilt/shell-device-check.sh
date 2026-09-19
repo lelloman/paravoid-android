@@ -26,3 +26,31 @@ for activity in com.lelloman.paravoidandroid.runtime.LauncherActivity com.lellom
     fi
     echo "Passed cold launch, DI, classloader isolation and recreation: $activity"
 done
+
+# A broadcast must also cold-start the app without relying on the launcher.
+# The fixture receiver returns a different instance via CoreComponentFactory.CompatWrapped.
+for mode in normal paravoidAndroid; do
+    suffix=normal
+    if [[ "$mode" == paravoidAndroid ]]; then suffix=paravoid; fi
+    app_id="com.lelloman.paravoidcompat.hilt.$suffix"
+    adb -s "$ANDROID_SERIAL" install -r "$probe_dir/build/outputs/apk/$mode/debug/hilt-compatibility-$mode-debug.apk"
+    probe_run="$(date +%s%N)"
+    adb -s "$ANDROID_SERIAL" shell am force-stop "$app_id"
+    adb -s "$ANDROID_SERIAL" shell am broadcast --include-stopped-packages \
+        -n "$app_id/com.lelloman.paravoidcompat.hilt.WrappedProbeReceiver" --es probeRun "$probe_run"
+    passed=false
+    for attempt in {1..30}; do
+        report="$(adb -s "$ANDROID_SERIAL" shell run-as "$app_id" cat shared_prefs/hilt-probe.xml 2>/dev/null || true)"
+        if [[ "$report" == *"<string name=\"receiverRun\">$probe_run</string>"* ]]; then
+            passed=true
+            break
+        fi
+        sleep 0.5
+    done
+    if [[ "$passed" != true ]]; then
+        adb -s "$ANDROID_SERIAL" logcat -d -s AndroidRuntime:E ParavoidAndroid:E | tail -90 >&2
+        echo "Cold receiver/factory assertions did not pass: $mode" >&2
+        exit 1
+    fi
+    echo "Passed cold broadcast, AndroidX wrapping and provider/Application graph: $mode"
+done

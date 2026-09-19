@@ -13,6 +13,9 @@ public final class ProbeApplication extends ParavoidAndroidApplication {
     @Override public void onCreate() {
         super.onCreate();
         if (service == null) throw new IllegalStateException("Application was not injected");
+        if (ProbeStartupInitializer.initializationCount != 1 || ProbeStartupInitializer.service != service) {
+            throw new IllegalStateException("Startup provider and Application must share one Hilt graph");
+        }
         initializedService = service;
         initializationCount++;
     }
