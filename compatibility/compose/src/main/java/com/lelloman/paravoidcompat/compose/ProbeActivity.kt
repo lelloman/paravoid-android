@@ -56,6 +56,11 @@ class ScreenModel @Inject constructor(val graph: SharedGraph, val state: SavedSt
 @AndroidEntryPoint
 class ProbeActivity : ComponentActivity() {
     val instance = UUID.randomUUID().toString()
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        check(getSharedPreferences("compose-probe", MODE_PRIVATE).edit()
+            .putString("savedActivity", instance).commit())
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
