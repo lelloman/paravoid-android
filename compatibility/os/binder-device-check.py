@@ -2,7 +2,7 @@
 """Real remote AIDL, cold service entry, lifecycle and Binder death checks."""
 import json
 import uuid
-from integration_driver import adb, report, PEER, wait_for, tap, install, prepare, cleanup
+from integration_driver import adb, report, PEER, ROOT, wait_for, tap, install, prepare, cleanup
 
 
 def phase(number, token):
@@ -13,6 +13,8 @@ def phase(number, token):
 
 
 def verify(app, result):
+    assert report(app).get('binderBinding') == result['run'], report(app)
+    assert report(app).get('binderBindingInstance') == result['instance'], report(app)
     for key in ('remote', 'uid', 'loader', 'text', 'callback', 'list', 'null', 'exception'):
         assert result[key] is True, (key, result)
     assert str(result['pid']) == adb('shell', 'pidof', app) == report(app)['startupPid'], result
@@ -22,6 +24,8 @@ def verify(app, result):
 
 def check_mode(mode):
     app = install(mode)
+    # Resolve requested signature permissions after their defining APK is installed.
+    adb('install', '-r', str(ROOT / 'peer/build/outputs/apk/debug/peer-debug.apk'))
     token = uuid.uuid4().hex
     try:
         assert not adb('shell', 'pidof', app, check=False), 'Target must start cold'

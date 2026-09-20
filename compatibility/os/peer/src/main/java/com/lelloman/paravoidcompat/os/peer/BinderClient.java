@@ -35,7 +35,8 @@ final class BinderClient implements ServiceConnection {
     }
     private void bind() {
         bound = activity.bindService(new Intent().setClassName(activity.getIntent().getStringExtra("target"),
-            "com.lelloman.paravoidcompat.os.BinderProbeService"), this, Context.BIND_AUTO_CREATE);
+            "com.lelloman.paravoidcompat.os.BinderProbeService")
+            .putExtra("bindingParcel", new WireMessage(run, 0, 0, "binding", false)), this, Context.BIND_AUTO_CREATE);
         if (!bound) error(new IllegalStateException("bindService returned false"));
     }
     private void unbind() {

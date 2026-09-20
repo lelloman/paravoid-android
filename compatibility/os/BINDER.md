@@ -58,6 +58,12 @@ and [bound Service lifecycle](https://developer.android.com/develop/background-w
 
 ## Limits
 
+Binding-Intent regression: adding `WireMessage` to the bind Intent passes in normal
+packaging but currently fails in shell `onBind` with `BadParcelableException`.
+The driver now reinstalls the peer after installing each permission-defining
+target APK, so signature-permission install ordering is not mistaken for a
+payload failure.
+
 This is typed AIDL Parcel serialization, not arbitrary `Bundle` object discovery.
 Custom Parcelables in binding Intents/Bundle values, target `android:process`,
 isolated services, foreground services, client death, large transactions,

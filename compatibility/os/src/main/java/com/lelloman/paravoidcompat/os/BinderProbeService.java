@@ -32,7 +32,16 @@ public final class BinderProbeService extends Service {
         @Override public List<WireMessage> echoList(List<WireMessage> messages) { return messages; }
         @Override public void reject() { throw new IllegalArgumentException("probe-rejected"); }
     };
-    @Override public IBinder onBind(Intent intent) { return endpoint; }
+    @Override public IBinder onBind(Intent intent) {
+        String observed;
+        try {
+            WireMessage value = intent.getParcelableExtra("bindingParcel");
+            observed = value == null ? "MISSING" : value.text;
+        } catch (Exception error) { observed = error.toString(); }
+        getSharedPreferences("os-probe", MODE_PRIVATE).edit().putString("binderBinding", observed)
+            .putString("binderBindingInstance", instance).commit();
+        return endpoint;
+    }
     @Override public void onDestroy() {
         getSharedPreferences("os-probe", MODE_PRIVATE).edit().putString("binderDestroyed", instance).commit();
         super.onDestroy();
