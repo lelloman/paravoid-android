@@ -9,8 +9,14 @@ import java.nio.charset.StandardCharsets;
 
 /** Separate UID, no storage permissions, no Paravoid dependency. */
 public final class PeerActivity extends Activity {
+    private BinderClient binderClient;
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        if ("binder".equals(getIntent().getStringExtra("scenario"))) {
+            binderClient = new BinderClient(this);
+            binderClient.start();
+            return;
+        }
         if ("result".equals(getIntent().getStringExtra("scenario"))) {
             android.widget.Button button = new android.widget.Button(this);
             button.setText("Return activity result");
@@ -74,5 +80,9 @@ public final class PeerActivity extends Activity {
                 .putInt("uid", android.os.Process.myUid()).commit();
         }
         finish();
+    }
+    @Override protected void onDestroy() {
+        if (binderClient != null) binderClient.close();
+        super.onDestroy();
     }
 }

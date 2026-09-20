@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="com.lelloman.paravoidcompat.os.normal.BIND_PROBE" />
+    <uses-permission android:name="com.lelloman.paravoidcompat.os.paravoid.BIND_PROBE" />
     <queries>
         <package android:name="com.lelloman.paravoidcompat.os.normal" />
         <package android:name="com.lelloman.paravoidcompat.os.paravoid" />

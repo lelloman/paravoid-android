@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""Real remote AIDL, cold service entry, lifecycle and Binder death checks."""
+import json
+import uuid
+from integration_driver import adb, report, PEER, wait_for, tap, install, prepare, cleanup
+
+
+def phase(number, token):
+    prefs = report(PEER)
+    assert not prefs.get('binderError'), prefs
+    result = json.loads(prefs.get('binder' + str(number), '{}'))
+    return result if result.get('run') == token else None
+
+
+def verify(app, result):
+    for key in ('remote', 'uid', 'loader', 'text', 'callback', 'list', 'null', 'exception'):
+        assert result[key] is True, (key, result)
+    assert str(result['pid']) == adb('shell', 'pidof', app) == report(app)['startupPid'], result
+    assert str(result['peerPid']) == adb('shell', 'pidof', PEER), result
+    assert 'activityPid' not in report(app), 'Target Activity unexpectedly entered'
+
+
+def check_mode(mode):
+    app = install(mode)
+    token = uuid.uuid4().hex
+    try:
+        assert not adb('shell', 'pidof', app, check=False), 'Target must start cold'
+        adb('shell', 'am', 'start', '-W', '-n', PEER + '/.PeerActivity',
+            '--es', 'scenario', 'binder', '--es', 'target', app, '--es', 'run', token)
+        first = wait_for('first remote connection', lambda: phase(1, token))
+        verify(app, first)
+        tap('Unbind service')
+        wait_for('service destroyed after final unbind', lambda: report(app).get('binderDestroyed') == first['instance'])
+        assert report(PEER).get('binderDisconnected') is None, 'Normal unbind is not disconnection'
+        tap('Bind service')
+        second = wait_for('explicit rebind', lambda: phase(2, token))
+        verify(app, second)
+        assert second['instance'] != first['instance'], 'Service instance was reused after destruction'
+        assert second['peerPid'] == first['peerPid'], 'Peer process changed'
+        print(f'PASS {mode}: cold remote AIDL, typed Parcelables/callback/list/null/exception/UID/loaders, final unbind and new service instance', flush=True)
+    finally:
+        cleanup(app)
+
+
+if __name__ == '__main__':
+    prepare()
+    for packaging in ('normal', 'paravoidAndroid'):
+        check_mode(packaging)

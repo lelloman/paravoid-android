@@ -108,6 +108,9 @@ See [Android's activity-result requirements](https://developer.android.com/train
 
 ## Remaining coverage
 
+The [Binder/AIDL probe](BINDER.md) adds cross-UID cold service binding, typed
+Parcelables, callbacks and explicit unbind/rebind lifecycle coverage.
+
 This does not yet prove revocation while a peer still holds an open descriptor,
 persistable grants or chooser flows. The last no-grant call proves access
 is denied after revocation, not that task completion alone would retain a grant.

@@ -1,5 +1,10 @@
 plugins { id 'com.lelloman.paravoid' }
 android {
+    buildFeatures { aidl true }
+    sourceSets.main {
+        aidl.srcDir 'contract/aidl'
+        java.srcDir 'contract/java'
+    }
     namespace 'com.lelloman.paravoidcompat.os'
     compileSdk 36
     defaultConfig {

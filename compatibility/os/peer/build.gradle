@@ -1,5 +1,10 @@
 plugins { id 'com.android.application' }
 android {
+    buildFeatures { aidl true }
+    sourceSets.main {
+        aidl.srcDir '../contract/aidl'
+        java.srcDir '../contract/java'
+    }
     namespace 'com.lelloman.paravoidcompat.os.peer'
     compileSdk 36
     defaultConfig {
