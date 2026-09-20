@@ -2,6 +2,11 @@ plugins {
     id 'com.lelloman.paravoid'
     id 'com.google.dagger.hilt.android' version '2.57.2'
     id 'com.lelloman.paravoid.hilt'
+    id 'com.lelloman.paravoid.work' apply false
+}
+// Opt-out keeps the original missing-Configuration.Provider failure reproducible.
+if (!providers.gradleProperty('workProbeDisableIntegration').isPresent()) {
+    apply plugin: 'com.lelloman.paravoid.work'
 }
 def explicit = providers.gradleProperty('explicitWorkInitialization').isPresent()
 android {
