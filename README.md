@@ -236,7 +236,7 @@ stay out of the shell. Annotated services and receivers also pass automatic fiel
 injection checks, including service-scope renewal; broader Hilt compatibility
 remains separate work.
 
-Two further independent probes exercise larger downstream stacks:
+Further independent probes exercise larger downstream stacks:
 
 - [Compose + Navigation + Hilt](compatibility/compose/README.md): Kotlin/kapt,
   navigation-scoped ViewModels, back handling, rotation, and real process-death
@@ -244,6 +244,11 @@ Two further independent probes exercise larger downstream stacks:
 - [Room + WorkManager](compatibility/storage/README.md): generated DAOs, persistent
   data, and cold background JobService/Worker execution in both modes. This uses
   the default Worker factory, not Hilt Worker injection.
+- [Independent resources](compatibility/resources/README.md): an API 30+ experiment
+  using separate, hash-pinned resource-only APKs and stable IDs. It tests Views,
+  Compose, themes, locale lookup and assets while keeping the installed app APK
+  unchanged. This is fixture scaffolding, not automatic AGP resource splitting;
+  the core plugin still packages resources in the installed APK.
 
 ```sh
 ./gradlew :paravoid-gradle-plugin:test :paravoid-gradle-plugin:validatePlugins \
@@ -291,6 +296,7 @@ and payload-update compatibility remain future coverage.
 | `sample-library` | Conventional Java dependency with service-provider and resource fixtures |
 | `compatibility/compose` | Kotlin Compose, Navigation, Hilt and process-death restoration probe |
 | `compatibility/storage` | Room persistence and cold WorkManager execution probe |
+| `compatibility/resources` | Local resource-pack switching with public API 30+ loaders |
 
 The old `sample-shell` and `sample-standalone` source projects are replaced by
 generated flavors. The old module/shell plugins and `AppEntry` loader remain as
@@ -332,8 +338,9 @@ the host application's privileges; this is not an isolation boundary.
 
 1. Expand transformation compatibility and test cold process restoration, callback
    behavior, and supported Android versions beyond the current sample.
-2. Add independently packaged resources/assets and test broader library cases:
-   Hilt Workers, Room migrations, custom views and native dependencies.
+2. Turn the independent-resource experiment into automatic app/library resource
+   packaging with stable-ID and installed-manifest contracts. Test broader library
+   cases: Hilt Workers, Room migrations, custom views and native dependencies.
 3. Define independently signed payloads and negative signature tests before accepting
    code from outside the APK. Sign with the product shell's signing key and verify
    against the installed shell certificate's public key; matching certificates
