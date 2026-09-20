@@ -81,7 +81,10 @@ bootstrap Activity and preserves the user Activity's component identity and
 required manifest configuration. During `attachBaseContext`, the shell prepares
 the embedded payload and constructs the transformed Application. Android then
 initializes providers; only in the shell's `onCreate` does it invoke the user's
-`onCreate`. The launcher then starts
+`onCreate`. Before user construction and provider initialization, the shell sets
+the initialization thread's context classloader to the payload loader, enabling
+default library discovery there and on newly created threads that inherit it.
+This does not replace context loaders on unrelated existing threads. The launcher then starts
 the user Activity through Android and finishes itself. Android manages the real
 user Activity's lifecycle; Activity
 method extraction and lifecycle forwarding are not part of this design.
@@ -98,7 +101,8 @@ the example uses `AppComponentFactory` on API 28+. The shell initializes the emb
 payload during Application startup, so direct Activity creation does not depend on
 visiting the launcher. The plugin prepares saved-state Bundles with the payload
 loader before Activity `onCreate`; the Compose probe tests navigation and state
-restoration after process death. Arbitrary custom Parcelable state, state across
+restoration after process death. The language probe additionally covers generated
+Parcelable and Serializable saved-state objects. Other object graphs, state across
 payload updates and downloaded payloads still need explicit coverage.
 
 The shell retains the installed manifest, permissions, bootstrap code, and
@@ -112,6 +116,11 @@ isolated-process and direct-boot components are not validated. The integration c
 does not imply support for every existing Android app or library.
 
 ## Current example and limits
+
+The [compatibility matrix](compatibility/README.md) tracks verified scenarios and
+untested areas. The [language probe](compatibility/language/README.md) adds Kotlin
+Serialization/Parcelize plugins, reflection, dynamic proxies and default library
+discovery, tested in both packaging modes before and after process death.
 
 `sample-app` is one Android app with a custom `SampleApplication`, an ordinary
 `MainActivity`, and a native counter screen. Both generated packaging modes use

@@ -7,14 +7,14 @@ without moving application libraries into the parent loader.
 
 | Area | Evidence / status | Important remaining cases |
 | --- | --- | --- |
-| Java dependencies, annotations, generics, lambdas, explicit ServiceLoader | `sample-app` / `sample-library` device tests | Default discovery and context loaders |
+| Java dependencies, annotations, generics, lambdas, ServiceLoader | Sample + `language` explicit/default discovery pass | Existing threads, shared pools, custom loaders |
 | Application, provider, receiver, service startup | Sample + `hilt` probes pass | Direct boot, multiprocess, isolated services, bound/foreground services |
 | Hilt plugin + Java annotation processing | `hilt`, pinned 2.57.2 | Fragments/Views, Hilt Workers, other versions |
 | Kotlin, kapt, Compose compiler, navigation | `compose` passes | KSP, other Kotlin versions, deep links |
-| Saved state and real process death | `compose` passes navigation counters | Arbitrary Parcelables/Serializable, payload-version changes |
+| Saved state and real process death | `compose` navigation counters + `language` generated Parcelable/Serializable pass | Other object graphs, payload-version changes |
 | Room + default WorkManager factory | `storage` passes cold worker / durable writes | Migrations, retries, reboot, custom/Hilt factory configuration |
 | Independent resources and assets | `resources` passes local A/B switching | Automatic app/library resource split, API 30 device coverage |
-| Serialization/Parcelize compiler plugins, Kotlin reflection, dynamic proxies | Next batch: `language` | Generated code, metadata, context-loader discovery, background execution |
+| Serialization/Parcelize compiler plugins, Kotlin reflection, dynamic proxies | [Language probe](language/README.md): 64 assertions pass, including background discovery | Other versions, reflection patterns, existing-thread loaders, R8 |
 | ViewBinding/DataBinding, XML custom views, fragments | Not tested | Inflation, generated bindings, fragment restoration |
 | Networking stacks and reflective adapters | Not tested | Retrofit/OkHttp, Gson/Moshi, coroutine execution, TLS |
 | Native libraries / JNI | Not tested | ABI packaging, System.loadLibrary, native callbacks |
