@@ -106,6 +106,12 @@ restoration after process death. The language probe additionally covers generate
 Parcelable and Serializable saved-state objects. Other object graphs, state across
 payload updates and downloaded payloads still need explicit coverage.
 
+Saved callback state is nested in a platform Bundle until the pre-`onCreate`
+hook restores it with the payload loader. This protects API 28's eager framework
+reads, which happen before user `onCreate`; state added by the framework after the
+save callback remains accessible at the outer level. See the [API 28 baseline](compatibility/API28.md)
+for evidence, the reserved envelope key and migration limits.
+
 Manifest-declared payload Services also receive a defining-loader `getClassLoader`
 override unless their hierarchy already provides one. This lets Android decode
 payload Parcelables in service Intents; the Binder probe covers cold bind,

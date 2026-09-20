@@ -41,8 +41,23 @@ cases, but exposed a shell process-death failure: Android 9's
 `Activity.performCreate` calls `restoreHasCurrentPermissionRequest` before user
 `onCreate`. Reading its Boolean eagerly unmarshals the entire saved-state root,
 including payload-only `ProbeParcel`, using the installed shell loader. The
-existing pre-`onCreate` repair is therefore too late. This is a real API 28
-regression reproducer; results are not yet a passing baseline.
+existing pre-`onCreate` repair is therefore too late.
+
+The fix nests callback state in a platform Bundle at each normal return from the
+nearest `onSaveInstanceState` override (including inherited/final and persistable
+forms). Framework state appended afterward remains at the root. Before app
+`onCreate`, the existing hook sets the nested payload loader and restores the
+original root contents in place, with later framework entries taking precedence.
+This uses public Bundle APIs, not hidden ActivityThread/Instrumentation hooks or
+a whitelist of internal Android state keys. The reserved envelope key is
+`com.lelloman.paravoidandroid.runtime.PAYLOAD_STATE_V1`.
+
+The result fixture additionally serializes an envelope, reads a late-added Boolean
+with a loader unable to see app classes, then verifies payload decoding, nested
+save callbacks, repeated preparation and preservation of later entries. Existing
+state from before this fix is not a migration guarantee; on API 28, old raw
+payload values can still fail before the repair callback. Payload-version changes
+and pending runtime permission dialogs remain separate coverage.
 
 ## Explicit omissions
 

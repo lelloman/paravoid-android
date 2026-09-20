@@ -18,6 +18,7 @@ final class ResultProbe {
     private ProbeParcel checkpoint;
     private boolean restored;
     private boolean cancel;
+    private boolean envelope;
 
     ResultProbe(ComponentActivity activity) {
         this.activity = activity;
@@ -25,6 +26,7 @@ final class ResultProbe {
     }
 
     void start(Bundle state, String token, boolean canceled) {
+        envelope = SavedStateEnvelopeProbe.check(activity);
         restored = state != null;
         cancel = canceled;
         run = restored ? state.getString("resultRun") : token;
@@ -55,6 +57,7 @@ final class ResultProbe {
                 .put("pid", android.os.Process.myPid()).put("callbacks", callbacks)
                 .put("launches", prefs.getInt("resultLaunches", 0))
                 .put("savedParcel", checkpoint != null && ("saved-λ-" + run).equals(checkpoint.value))
+                .put("envelope", envelope)
                 .put("payloadLoader", result.getClass().getClassLoader() == activity.getClass().getClassLoader())
                 .put("code", result.getResultCode() == (cancel ? Activity.RESULT_CANCELED : Activity.RESULT_OK))
                 .put("data", cancel ? data == null : data != null && run.equals(data.getStringExtra("run"))

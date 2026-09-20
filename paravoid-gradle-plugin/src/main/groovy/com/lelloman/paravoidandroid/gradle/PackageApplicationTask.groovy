@@ -75,6 +75,7 @@ abstract class PackageApplicationTask extends DefaultTask {
         }
         PayloadConfigurationContext.adapt(classes, info.getProperty('activity').replace('.', '/'))
         PayloadSavedState.adapt(classes, info.getProperty('activity').replace('.', '/'))
+        PayloadStateEnvelope.adapt(classes, info.getProperty('activity').replace('.', '/'))
         File shell = shellClasses.get().asFile
         shell.parentFile.mkdirs()
         File payload = new File(temporaryDir, 'payload.jar')

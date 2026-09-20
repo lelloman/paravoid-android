@@ -33,7 +33,7 @@ def check_case(mode, cold, cancel):
         assert (str(result['pid']) != old_pid) is cold, result
         assert str(result['pid']) == report(app)['startupPid'] == report(app)['activityPid'], result
         assert result['callbacks'] == 1 and result['launches'] == 1, result
-        assert all(result[key] is True for key in ('savedParcel', 'payloadLoader', 'code', 'data')), result
+        assert all(result[key] is True for key in ('savedParcel', 'envelope', 'payloadLoader', 'code', 'data')), result
         time.sleep(1)
         assert report(app)['resultCallbacks'] == '1' and report(app)['resultLaunches'] == '1'
         print(f'PASS {mode} {"process-death" if cold else "alive"} {"cancel" if cancel else "success"}: registry callback once, no relaunch, correct result, payload saved state/loader', flush=True)
