@@ -12,7 +12,8 @@ public final class BundledModuleLoader {
     public static AppEntry load(Context context) throws IOException, ReflectiveOperationException {
         ModuleBundle bundle = ModuleBundle.read(context.getAssets().open("paravoid/module.zip"), Build.VERSION.SDK_INT);
         ClassLoader parent = AppEntry.class.getClassLoader();
-        ClassLoader loader = bundle.createClassLoader(parent);
+        ClassLoader loader = bundle.createClassLoader(parent,
+            NativeLibraryPaths.forApplication(context.getApplicationInfo()));
         Class<?> entry = loader.loadClass(bundle.entryPoint);
         if (entry.getClassLoader() != loader) {
             throw new IOException("Module entry point was bundled into the shell classpath.");

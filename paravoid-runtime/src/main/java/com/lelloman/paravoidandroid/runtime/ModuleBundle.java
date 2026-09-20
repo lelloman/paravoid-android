@@ -26,11 +26,15 @@ final class ModuleBundle {
         this.dexFiles = dexFiles;
     }
 
-    ClassLoader createClassLoader(ClassLoader parent) throws IOException {
-        if (dexFiles.length == 1) return new InMemoryDexClassLoader(ByteBuffer.wrap(dexFiles[0]), parent);
+    ClassLoader createClassLoader(ClassLoader parent, String nativeLibraryPath) throws IOException {
+        NativeLibraryPaths.requireSupportedApi(nativeLibraryPath, Build.VERSION.SDK_INT);
+        if (dexFiles.length == 1 && nativeLibraryPath == null) {
+            return new InMemoryDexClassLoader(ByteBuffer.wrap(dexFiles[0]), parent);
+        }
         if (Build.VERSION.SDK_INT < 27) throw new IOException("Multiple DEX files require Android API 27+.");
         ByteBuffer[] buffers = new ByteBuffer[dexFiles.length];
         for (int i = 0; i < buffers.length; i++) buffers[i] = ByteBuffer.wrap(dexFiles[i]);
+        if (Build.VERSION.SDK_INT >= 29) return new InMemoryDexClassLoader(buffers, nativeLibraryPath, parent);
         return new InMemoryDexClassLoader(buffers, parent);
     }
 

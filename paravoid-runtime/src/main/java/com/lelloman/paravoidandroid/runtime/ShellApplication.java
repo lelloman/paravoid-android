@@ -25,7 +25,8 @@ public final class ShellApplication extends Application {
         instance = this;
         try {
             ModuleBundle bundle = ModuleBundle.read(getAssets().open("paravoid/module.zip"), Build.VERSION.SDK_INT);
-            payloadLoader = bundle.createClassLoader(super.getClassLoader());
+            payloadLoader = bundle.createClassLoader(super.getClassLoader(),
+                NativeLibraryPaths.forApplication(getApplicationInfo()));
             // Library discovery defaults to this loader; newly created threads inherit it.
             // Set it before user constructors and provider initialization, not just onCreate.
             Thread.currentThread().setContextClassLoader(payloadLoader);
