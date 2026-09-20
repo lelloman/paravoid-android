@@ -29,6 +29,8 @@ public final class ProbeActivity extends Activity {
         new Thread(() -> {
             try {
                 JSONObject results = new JSONObject();
+                check(results, "native.providerStartup", () -> require("PASS".equals(ProbeProvider.result)));
+                check(results, "native.applicationStartup", () -> require("PASS".equals(ProbeApplication.result)));
                 check(results, "native.load", () -> { NativeBridge.loadAgain(); NativeBridge.loadAgain(); });
                 check(results, "native.registerNativesAndDependency", () -> require(NativeBridge.registered(33) == 42));
                 check(results, "native.onLoadOnce", () -> require(NativeBridge.onLoadCount() == 1));

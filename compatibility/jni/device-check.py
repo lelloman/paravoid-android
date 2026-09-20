@@ -83,7 +83,7 @@ def check_mode(mode, storage, apk):
     assert restored["restored"] is True, restored
     failures = []
     for stage, snapshot in (("cold", cold), ("restored", restored)):
-        assert len(snapshot["results"]) == 11, snapshot
+        assert len(snapshot["results"]) == 13, snapshot
         for test, result in snapshot["results"].items():
             print(f"{storage}/{mode} {stage} {test}: {result}", flush=True)
             if result != "PASS": failures.append((storage, mode, stage, test, result))
@@ -105,7 +105,7 @@ if __name__ == "__main__":
             apk = check_artifact(mode, args.storage)
             if not args.artifacts_only: failures.extend(check_mode(mode, args.storage, apk))
         if failures: raise AssertionError(f"{len(failures)} failed JNI assertions: {failures}")
-        if not args.artifacts_only: print(f"PASS {args.storage}: 44 device assertions.")
+        if not args.artifacts_only: print(f"PASS {args.storage}: 52 device assertions.")
     except Exception:
         if not args.artifacts_only:
             print(adb("logcat", "-d", "-s", "AndroidRuntime:E", "ParavoidAndroid:E", "JniProbe:E"))
