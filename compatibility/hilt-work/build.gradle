@@ -1,0 +1,38 @@
+plugins {
+    id 'com.lelloman.paravoid'
+    id 'com.google.dagger.hilt.android' version '2.57.2'
+    id 'com.lelloman.paravoid.hilt'
+}
+def explicit = providers.gradleProperty('explicitWorkInitialization').isPresent()
+android {
+    namespace 'com.lelloman.paravoidcompat.hiltwork'
+    compileSdk 36
+    defaultConfig {
+        applicationId "com.lelloman.paravoidcompat.hiltwork.${explicit ? 'explicit' : 'lazy'}"
+        minSdk 28
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+        buildConfigField 'boolean', 'EXPLICIT_INITIALIZATION', explicit.toString()
+    }
+    productFlavors {
+        normal { applicationIdSuffix '.normal' }
+        paravoidAndroid { applicationIdSuffix '.paravoid' }
+    }
+    buildFeatures { buildConfig true }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+dependencies {
+    implementation project(':paravoid-runtime')
+    implementation 'androidx.activity:activity:1.10.1'
+    implementation 'androidx.room:room-runtime:2.6.1'
+    annotationProcessor 'androidx.room:room-compiler:2.6.1'
+    implementation 'androidx.work:work-runtime:2.10.1'
+    implementation 'androidx.hilt:hilt-work:1.2.0'
+    annotationProcessor 'androidx.hilt:hilt-compiler:1.2.0'
+    implementation 'com.google.dagger:hilt-android:2.57.2'
+    annotationProcessor 'com.google.dagger:hilt-compiler:2.57.2'
+}
