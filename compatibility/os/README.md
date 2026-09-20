@@ -16,6 +16,9 @@ ANDROID_SERIAL=emulator-5584 bash compatibility/os/check.sh --device
 Use a dedicated unlocked emulator. Python 3 and adb are required. The driver
 installs and clears only these fixture packages, uses unique run tokens, and
 force-stops them afterward. It leaves the APKs installed.
+The notification driver requires API 33+ and an English, unlocked System UI.
+It grants `POST_NOTIFICATIONS` to the fixture via adb; it does not test the
+permission prompt. Only the named fixture packages are changed.
 
 ## Evidence and requirements
 
@@ -45,10 +48,43 @@ Intent grant; that explicit grant is not tied to the original Activity lifetime.
 
 ## Limits
 
+### Notification scenario
+
+Initial API 36.1 result: normal passes; shell broadcast action passes but the cold
+notification Activity fails with `BadParcelableException` for `ProbeParcel`.
+This is a regression reproducer, not yet a passing compatibility claim.
+
+`notifications-device-check.py` posts a real channel notification, checks the
+published content/action tokens, and hands the published broadcast action token
+to the separate peer. The target's verified PID is killed before the peer sends
+the token with attempted extra injection. The receiver is non-exported; its
+PendingIntent is explicit and immutable. A payload-only Parcelable must survive
+the cold receiver entry, with the original token and no injected extras.
+The driver kills that new process too, opens the notification shade and taps the
+notification title to exercise cold Activity delivery and Parcelable decoding.
+Application/Activity/receiver PIDs distinguish each entry path.
+
+The peer declares narrow `<queries>` for both fixture target packages so it can
+inspect the PendingIntent creator identity. Without these, the API 36.1 control
+returned a null package and UID -1. Notification posting is asynchronous; the
+fixture waits for its published notification instead of assuming immediate
+visibility in `getActiveNotifications()`.
+
+Stable installed Activity/receiver component names, the notification permission,
+and an enabled channel are required. Content delivery targets the real user
+Activity directly, without a receiver/service notification trampoline. See
+[Android's PendingIntent reference](https://developer.android.com/reference/android/app/PendingIntent)
+and [notification navigation guidance](https://developer.android.com/develop/ui/views/notifications/navigation).
+The content scenario deliberately creates a fresh task; existing-task
+`onNewIntent`, back-stack policies, mutable/RemoteInput tokens, services,
+notification action-button UI, reboot and payload updates are not covered.
+
+### Remaining coverage
+
 This does not yet prove revocation while a peer still holds an open descriptor,
 persistable grants, chooser flows, AndroidX Activity Result
 contracts or results across process death. The last no-grant call proves access
 is denied after revocation, not that task completion alone would retain a grant.
-Notifications/PendingIntent, runtime permissions, App Links, other Android
+Runtime permissions, App Links, other Android
 versions and release builds remain separate coverage. This fixture intentionally
 uses the framework activity-result callback, not AndroidX's registry.

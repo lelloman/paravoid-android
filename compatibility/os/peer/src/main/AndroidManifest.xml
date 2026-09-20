@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <package android:name="com.lelloman.paravoidcompat.os.normal" />
+        <package android:name="com.lelloman.paravoidcompat.os.paravoid" />
+    </queries>
     <application android:label="OS compatibility peer" android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name=".PeerActivity" android:exported="true" />
     </application>

@@ -10,4 +10,7 @@ if [[ ${1:-} == '--device' ]]; then
     : "${ANDROID_SERIAL:?Set ANDROID_SERIAL to a dedicated unlocked emulator}"
 fi
 "$repo_dir/gradlew" -p "$probe_dir" assembleNormalDebug assembleParavoidAndroidDebug :peer:assembleDebug --console=plain
-if [[ ${1:-} == '--device' ]]; then python3 "$probe_dir/device-check.py"; fi
+if [[ ${1:-} == '--device' ]]; then
+    python3 "$probe_dir/device-check.py"
+    python3 "$probe_dir/notifications-device-check.py"
+fi

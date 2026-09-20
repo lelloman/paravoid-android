@@ -11,6 +11,27 @@ import java.nio.charset.StandardCharsets;
 public final class PeerActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        if ("pending".equals(getIntent().getStringExtra("scenario"))) {
+            android.app.PendingIntent pending = getIntent().getParcelableExtra("pending");
+            android.widget.Button button = new android.widget.Button(this);
+            button.setText("Send pending action");
+            setContentView(button);
+            getSharedPreferences("os-probe", MODE_PRIVATE).edit()
+                .putString("ready", getIntent().getStringExtra("run"))
+                .putString("creator", pending.getCreatorPackage())
+                .putInt("creatorUid", pending.getCreatorUid())
+                .putInt("uid", android.os.Process.myUid()).commit();
+            button.setOnClickListener(view -> {
+                try {
+                    pending.send(this, 0, new Intent().putExtra("probeRun", "tampered")
+                        .putExtra("injected", true));
+                    button.setText("Pending action sent");
+                } catch (android.app.PendingIntent.CanceledException error) {
+                    button.setText(error.toString());
+                }
+            });
+            return;
+        }
         Intent result = new Intent().putExtra("uid", android.os.Process.myUid())
             .putExtra("run", getIntent().getStringExtra("run"));
         try (InputStream input = getContentResolver().openInputStream(getIntent().getData())) {

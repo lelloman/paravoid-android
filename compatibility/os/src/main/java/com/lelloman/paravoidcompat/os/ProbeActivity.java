@@ -23,6 +23,15 @@ public final class ProbeActivity extends Activity {
         getSharedPreferences("os-probe", MODE_PRIVATE).edit()
             .putInt("activityPid", android.os.Process.myPid()).commit();
         run = getIntent().getStringExtra("probeRun");
+        String scenario = getIntent().getStringExtra("scenario");
+        if ("notification".equals(scenario)) {
+            NotificationProbe.post(this, run);
+            return;
+        }
+        if ("notificationDelivery".equals(scenario)) {
+            NotificationProbe.delivered(this, getIntent(), "content");
+            return;
+        }
         try {
             File directory = new File(getFilesDir(), "shared");
             directory.mkdirs();
