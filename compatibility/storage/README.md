@@ -11,10 +11,10 @@ ANDROID_HOME=/path/to/Android/Sdk ANDROID_SERIAL=emulator-5592 \
   bash compatibility/storage/check.sh --device
 ```
 
-Device checks require Python 3, adb and a dedicated API 36.1 emulator. The script
+Device checks require Python 3, adb and a dedicated emulator. The script
 installs and **clears test data for only the two storage fixture packages**.
 
-Both normal and shell packaging passed this sequence:
+Both normal and shell packaging passed this sequence on API 28 and API 36.1:
 
 1. Activity writes a unique Room row and enqueues delayed, persisted work.
 2. The script backgrounds the app and kills its exact PID without force-stopping
@@ -34,3 +34,10 @@ Not covered: Hilt Worker injection or Application `Configuration.Provider`, Room
 migrations, Kotlin/KSP Room models, retry/backoff, periodic/foreground work, reboot,
 device-idle scheduling policy, multiprocess work or payload-update compatibility.
 Job dispatch here tests cold component loading, not delivery timing guarantees.
+
+The driver uses unnamespaced JobScheduler IDs/dispatch below API 34. On API 28,
+reopening the old Activity task reused its original enqueue Intent and attempted
+a duplicate Room insert in **normal packaging too**. The final reader now uses
+NEW_TASK | CLEAR_TASK so its verification Intent reaches a fresh Activity. This
+tests durable database state, not Activity task restoration. Launch completion
+uses per-run reports rather than `am start -W` draw waits.

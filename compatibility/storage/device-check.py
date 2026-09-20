@@ -39,6 +39,7 @@ def result(app, key, token):
 
 
 def check_mode(mode):
+    namespaced = int(adb("shell", "getprop", "ro.build.version.sdk")) >= 34
     suffix = "normal" if mode == "normal" else "paravoid"
     app = "com.lelloman.paravoidcompat.storage." + suffix
     component = f"{app}/com.lelloman.paravoidcompat.storage.ProbeActivity"
@@ -47,11 +48,12 @@ def check_mode(mode):
     # These two dedicated fixture packages contain test-only data.
     adb("shell", "pm", "clear", app)
     token = str(uuid.uuid4())
-    adb("shell", "am", "start", "-W", "-n", component, "--es", "probeRun", token)
+    adb("shell", "am", "start", "-n", component, "--es", "probeRun", token)
     wait_for("persisted Room row and enqueued work", lambda: result(app, "enqueued", token))
     def scheduled_job():
         jobs = adb("shell", "dumpsys", "jobscheduler")
-        return re.search(r"JOB androidx\.work\.systemjobscheduler:[^/\n]+/(\d+):[^\n]*" + re.escape(app) + r"/androidx\.work", jobs)
+        prefix = r"JOB androidx\.work\.systemjobscheduler:" if namespaced else r"JOB #"
+        return re.search(prefix + r"[^/\n]+/(\d+):[^\n]*" + re.escape(app) + r"/androidx\.work", jobs)
     job = wait_for("OS job registration", scheduled_job).group(1)
     adb("shell", "input", "keyevent", "KEYCODE_HOME")
     pid = adb("shell", "pidof", app)
@@ -62,8 +64,8 @@ def check_mode(mode):
     # Allow WorkManager's own initial delay to elapse; then request OS dispatch if needed.
     time.sleep(21)
     if not result(app, "completed", token):
-        output = adb("shell", "cmd", "jobscheduler", "run", "-f", "-n",
-                     "androidx.work.systemjobscheduler", app, job)
+        namespace = ["-n", "androidx.work.systemjobscheduler"] if namespaced else []
+        output = adb("shell", "cmd", "jobscheduler", "run", "-f", *namespace, app, job)
         assert "Running job" in output, output
     wait_for("cold worker reads and updates Room", lambda: result(app, "completed", token))
     worker_pid = adb("shell", "pidof", app)
@@ -72,7 +74,10 @@ def check_mode(mode):
     assert worker_pid.isdecimal()
     adb("shell", "run-as", app, "kill", "-9", worker_pid)
     wait_for("worker process exits", lambda: not adb("shell", "pidof", app, check=False))
-    adb("shell", "am", "start", "-W", "-n", component, "--es", "probeRun", token, "--ez", "verify", "true")
+    # This is a fresh DB reader, not a saved-task restoration test. API 28 can
+    # restore the old root Intent (enqueue) when reusing the previous task.
+    adb("shell", "am", "start", "-f", "0x10008000", "-n", component,
+        "--es", "probeRun", token, "--ez", "verify", "true")
     wait_for("Room survives both process deaths", lambda: result(app, "verified", token))
     adb("shell", "am", "force-stop", app)
     print(f"PASS {mode}: Room generated DAO, persistent work, cold JobService/Worker and durable worker write", flush=True)
