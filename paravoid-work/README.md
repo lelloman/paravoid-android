@@ -57,13 +57,22 @@ established by the current probes.
 ANDROID_HOME=/path/to/Android/Sdk ./gradlew :paravoid-work:test :paravoid-work:validatePlugins
 ANDROID_HOME=/path/to/Android/Sdk ANDROID_SERIAL=emulator-5584 \
     bash compatibility/hilt-work/check.sh lazy --device
+# Both Hilt and non-Hilt custom configuration:
+ANDROID_HOME=/path/to/Android/Sdk ANDROID_SERIAL=emulator-5584 \
+    bash compatibility/work-check.sh
 ```
 
 The [Hilt Work probe](../compatibility/hilt-work/README.md) now passes lazy
-configuration in both modes on API 36.1/debug/x86_64: cold injected worker without
+configuration in both modes on API 28, 29 and 36.1/debug/x86_64: cold injected worker without
 an Activity, fresh graph, and Room persistence across three processes.
 The [storage probe](../compatibility/storage/README.md) includes an independent
 non-Hilt custom-configuration control.
+That custom-configuration control also passes both modes on API 28, 29 and 36.1.
+The API 28/29 expansion adds eight complete three-process scenarios (two fixtures
+× two modes × two APIs), without production changes. Storage now shares the
+guarded process-death helper: API 29 Google APIs rev13 requires its existing
+debug-emulator `su` fallback after a denied `run-as` signal. The five helper guard
+tests pass. No SELinux/adbd changes or target-side instrumentation were used.
 
 Verified on the same API 36.1 emulator in normal/shell modes:
 
@@ -79,5 +88,6 @@ initialization fixtures.
 69 host tests pass across core, runtime, Hilt and Work integrations, along with all
 plugin validators. Nine Work tests cover exact rewrite scope, generated bridge
 behavior, selected version rejection, payload-only packaging, incremental reuse
-and opt-out. Device results are debug/x86_64; API 28/29, release, physical devices
-and other ABIs have not been verified for this new integration.
+and opt-out. Default-initializer-with-adapter and opt-out device evidence remains
+API 36.1 only. Device results are debug/x86_64; release, physical devices and other
+ABIs have not been verified for this integration.

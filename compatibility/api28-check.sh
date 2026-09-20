@@ -16,6 +16,7 @@ for fixture in language views storage network; do
     echo "API 28: $fixture"
     bash "$repo_dir/compatibility/$fixture/check.sh" --device
 done
+bash "$repo_dir/compatibility/work-check.sh"
 echo 'SKIP JNI: payload native-library discovery requires API 29+.'
 echo 'SKIP Compose/Hilt shell: transitive libandroidx.graphics.path.so requires minSdk 29; builds now reject lower values. Historical API 28 normal control passed.'
 echo 'SKIP resource packs: public ResourcesLoader requires API 30+.'

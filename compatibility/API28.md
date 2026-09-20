@@ -35,6 +35,7 @@ Verified on the image above, normal **and** shell packaging:
 | Views / fragments | 170 assertions plus lifecycle identity checks pass |
 | Compose / Navigation / Hilt | Normal passes rotation/navigation/process death; shell startup fails the API 29+ native-library guard because the APK includes `libandroidx.graphics.path.so` |
 | Room / WorkManager | Both modes pass generated DAO, persisted work, cold JobService/Worker and committed write verification after two process deaths |
+| Custom WorkManager configuration | Optional `paravoid-work`: Hilt assisted Worker and non-Hilt WorkerFactory both pass lazy configuration, cold startup without an Activity and Room durability across three processes |
 | Networking / JSON / KSP | 76 assertions and eight HTTP/HTTPS request audits pass, including TLS rejection and cold/restored processes |
 
 Host regression suite: 58 tests and plugin validation pass; OS fixture lint passes.
@@ -44,6 +45,11 @@ These are debug x86_64 results, not a full API/ABI or release-support declaratio
 The expanded pass also reran Compose and Room/WorkManager on API 36.1 in both
 packaging modes successfully. Only test-driver changes were needed for this
 expansion; no additional production loader changes were made.
+The subsequent WorkManager expansion separately verifies both custom-configuration
+fixtures through `compatibility/work-check.sh`, now included in this baseline.
+It uses the same pinned libraries and APKs as API 29/36.1. This establishes neither
+arbitrary WorkManager features nor Compose support on API 28. No production change
+was required for this expansion; the process-death helper's five host tests pass.
 
 - OS: FileProvider/cold provider, AndroidX activity-result success/cancellation
   with caller process death, Binder binding-Intent Parcelables, explicit-loader

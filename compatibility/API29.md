@@ -1,4 +1,4 @@
-# API 29 native-loading boundary
+# API 29 native-loading and WorkManager boundaries
 
 Verified debug production APKs, normal and shell packaging, on Android 10.
 This is a selected boundary test, not the entire compatibility matrix.
@@ -21,6 +21,8 @@ pinned NDK/CMake are required. Device provisioning is separate.
 | Compose / Hilt / Navigation | Resources, navigation-scoped ViewModels, shared singleton, rotation and real process-death saved-state restoration pass |
 | JNI, uncompressed APK-backed libraries | 52 assertions pass across both packaging modes and cold/restored processes |
 | JNI, compressed/extracted libraries | 52 assertions pass across both packaging modes and cold/restored processes |
+| Hilt + WorkManager lazy configuration | With `paravoid-work`, cold assisted worker, new graph and Room durability across three processes pass |
+| Non-Hilt WorkManager custom configuration | With `paravoid-work`, cold configuration/factory callbacks, real Application context and three-process Room sequence pass |
 
 All 104 JNI assertions pass: provider/Application startup, ordinary library loads,
 RegisterNatives/exported symbols, linked dependencies, dlopen, native-thread
@@ -33,6 +35,13 @@ successfully starts and completes its lifecycle checks on API 29. Its transitive
 `libandroidx.graphics.path.so` remains installed APK content. This validates this
 graph at the native-loading floor, not every Compose native code path.
 No production runtime/plugin changes were necessary.
+
+The later WorkManager expansion runs `compatibility/work-check.sh`, now included
+in the API 29 runner. Both fixtures use the same pinned production APKs as API 28
+and 36.1; explicit initialization is not used. Both drivers use the guarded
+process-kill helper below (including its existing API 29 `su` fallback). No further
+production changes were required. Default-initializer and plugin-opt-out controls
+for the new adapter remain API 36.1 evidence only.
 
 ## Driver portability finding
 

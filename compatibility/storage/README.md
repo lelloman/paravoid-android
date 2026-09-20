@@ -37,8 +37,9 @@ Job dispatch here tests cold component loading, not delivery timing guarantees.
 
 The separate [Hilt Work probe](../hilt-work/README.md) now covers Hilt Worker
 injection: lazy configuration passes both modes with `paravoid-work`; without that
-optional plugin, shell mode needs explicit initialization. This default-factory
-fixture and its API 28 evidence do not imply that the Hilt combination passed there.
+optional plugin, shell mode needs explicit initialization. The Hilt custom path
+is separately verified on API 28, 29 and 36.1; default-factory results alone are
+not evidence for that combination.
 
 The driver uses unnamespaced JobScheduler IDs/dispatch below API 34. On API 28,
 reopening the old Activity task reused its original enqueue Intent and attempted
@@ -58,11 +59,13 @@ The separate `--configured` mode uses distinct package IDs, a
 `ParavoidAndroidApplication` implementing `Configuration.Provider`, a custom
 WorkerFactory, and `com.lelloman.paravoid.work`. There is no Hilt dependency or
 manual initialization. Its manifest removes the default WorkManager initializer.
-Both modes pass on API 36.1/debug/x86_64: configuration/factory callbacks run in the
+Both modes pass on API 28, 29 and 36.1/debug/x86_64: configuration/factory callbacks run in the
 new worker PID after Application onCreate, without an Activity in that process,
 and the factory receives the real Application context. The same Room/process-death
-sequence remains in force. Its results do not extend the default fixture's API 28
-evidence to custom configuration.
+sequence remains in force. These are separate custom-configuration runs, not
+inferences from the default-factory fixture. The driver uses the shared guarded
+process-death helper; API 29's debuggable-emulator fallback is described in
+[the integration report](../../paravoid-work/README.md).
 
 For build-only checks use `check.sh --configured`. Normal and configured builds
 share APK output paths: run each matching driver immediately after building.

@@ -27,11 +27,16 @@ the same file passed. That interrupted repeat is not counted as a full pass.
 ## Automatic configuration with paravoid-work
 
 With the optional [paravoid-work integration](../../paravoid-work/README.md), lazy
-configuration now passes in normal **and** shell packaging on API 36.1/debug/x86_64.
+configuration now passes in normal **and** shell packaging on API 28, 29 and
+36.1/debug/x86_64.
 No manual initialization call is needed: the fixture's `EXPLICIT_INITIALIZATION`
 flag is false. The same cold-worker/three-process Room assertions run in both modes.
 The adapter resolves only the configuration owner from the payload Application;
 the real Application context passed to WorkManager remains unchanged.
+API 28/29 use the same pinned production APKs and assertions, with no downstream
+initialization workaround. API 29 uses the documented guarded emulator process-kill
+fallback. Explicit-initialization and plugin opt-out device results below remain
+API 36.1 evidence, not claims that those separate modes were rerun on older APIs.
 
 Retained negative reproducer without that integration (normal passes, shell fails):
 

@@ -6,7 +6,8 @@ otherwise. Normal packaging is the control; production shell APKs are tested
 without moving application libraries into the parent loader.
 
 The [API 28 baseline](API28.md) additionally verifies selected OS, Binder,
-language, Views, Room/WorkManager and networking scenarios on Android 9, in both
+language, Views, Room/WorkManager (including Hilt/non-Hilt custom configuration)
+and networking scenarios on Android 9, in both
 packaging modes. Compose passed normally there but its shell failed the API 29+
 native-library guard due to transitive `libandroidx.graphics.path.so`. Builds now
 reject native-bearing shell variants below minSdk 29; the Compose shell flavor
@@ -16,7 +17,8 @@ skips/omissions; newer-device evidence elsewhere is not implied to cover API 28.
 
 The [API 29 native-loading boundary](API29.md) passes Compose/Hilt/Navigation
 and all 104 JNI assertions in both packaging modes, including APK-backed and
-extracted libraries and process-death restoration. Other matrix rows are not
+extracted libraries and process-death restoration. It also verifies Hilt and
+non-Hilt lazy WorkManager configuration with `paravoid-work`. Other matrix rows are not
 implicitly verified on API 29.
 
 | Area | Evidence / status | Important remaining cases |
