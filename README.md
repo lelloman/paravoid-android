@@ -129,6 +129,10 @@ Context factories are not yet covered.
 The [JNI probe](compatibility/jni/README.md) verifies native dependencies and callbacks
 with APK-backed and extracted libraries. Native-bearing shell apps require API 29+;
 their native binaries remain installed APK content, not independently updated payloads.
+The [network probe](compatibility/network/README.md) covers Retrofit/OkHttp,
+Gson/Moshi adapters, KSP, cancellation, caching and local HTTPS verification.
+Its pinned Moshi/KSP2 generated-qualifier limitation is explicitly documented;
+ordinary generated models and reflective qualifiers are tested separately.
 
 `sample-app` is one Android app with a custom `SampleApplication`, an ordinary
 `MainActivity`, and a native counter screen. Both generated packaging modes use
@@ -160,7 +164,8 @@ Parcelable state and XML Views, not arbitrary object graphs or widgets.
 
 Paravoid packaging moves application/dependency classes into an embedded DEX payload;
 only Paravoid Android infrastructure remains in the shell's ordinary DEX. Normal
-packaging uses ordinary Android classes. No server or network permission is needed.
+packaging uses ordinary Android classes. The main sample needs no server or network
+permission; the network fixture declares INTERNET and its own network security policy.
 
 This remains an entry-point and code-packaging experiment:
 
@@ -184,8 +189,9 @@ This remains an entry-point and code-packaging experiment:
 
 Requirements: JDK 17+ (tested with 21), Android SDK platform 36 and Build Tools
 35.0.0, and Android 9 / API 28+ for the example. The wrapper pins Gradle 8.13 and
-the plugin uses AGP 8.13.2. Build dependencies may require network access; the apps
-run offline. Set `ANDROID_HOME` or an ignored `local.properties`:
+the plugin uses AGP 8.13.2. Build dependencies may require network access; the main
+sample runs offline. The network fixture starts its own local servers. Set
+`ANDROID_HOME` or an ignored `local.properties`:
 
 ```properties
 sdk.dir=/path/to/Android/Sdk
@@ -258,6 +264,8 @@ remains separate work.
 
 Further independent probes exercise larger downstream stacks:
 
+- [Networking and JSON adapters](compatibility/network/README.md): local HTTP/HTTPS,
+  reflective/KSP-generated adapters, callbacks, cancellation, cache and TLS negative controls.
 - [JNI and native libraries](compatibility/jni/README.md): CMake library dependencies,
   provider startup, JNI callbacks and real process restart in both native storage modes.
 - [Views + bindings + fragments](compatibility/views/README.md): custom View state,
@@ -326,6 +334,7 @@ and payload-update compatibility remain future coverage.
 | `compatibility/language` | Compiler plugins, reflection and implicit discovery probe |
 | `compatibility/views` | Bindings, custom Views, fragment state and configuration contexts |
 | `compatibility/jni` | Native dependencies, library discovery, callbacks and startup |
+| `compatibility/network` | HTTP/HTTPS, Retrofit adapters, Moshi KSP, cancellation and caching |
 
 The old `sample-shell` and `sample-standalone` source projects are replaced by
 generated flavors. The old module/shell plugins and `AppEntry` loader remain as
@@ -370,7 +379,7 @@ the host application's privileges; this is not an isolation boundary.
    behavior, and supported Android versions beyond the current sample.
 2. Turn the independent-resource experiment into automatic app/library resource
    packaging with stable-ID and installed-manifest contracts. Test broader library
-   cases: Hilt Workers, Room migrations, networking adapters and third-party native SDKs.
+   cases: Hilt Workers, Room migrations, OS integration and third-party native SDKs.
 3. Define independently signed payloads and negative signature tests before accepting
    code from outside the APK. Sign with the product shell's signing key and verify
    against the installed shell certificate's public key; matching certificates

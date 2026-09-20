@@ -10,13 +10,13 @@ without moving application libraries into the parent loader.
 | Java dependencies, annotations, generics, lambdas, ServiceLoader | Sample + `language` explicit/default discovery pass | Existing threads, shared pools, custom loaders |
 | Application, provider, receiver, service startup | Sample + `hilt` probes pass | Direct boot, multiprocess, isolated services, bound/foreground services |
 | Hilt plugin + Java annotation processing | `hilt`, pinned 2.57.2 | Fragments/Views, Hilt Workers, other versions |
-| Kotlin, kapt, Compose compiler, navigation | `compose` passes | KSP, other Kotlin versions, deep links |
+| Kotlin, kapt, KSP, Compose compiler, navigation | `compose` + `network` Moshi KSP-generated ordinary models pass | Moshi 1.15.2 generated qualifiers fail with pinned KSP2 in both modes; other processors/versions, deep links |
 | Saved state and real process death | `compose` navigation counters + `language` generated Parcelable/Serializable pass | Other object graphs, payload-version changes |
 | Room + default WorkManager factory | `storage` passes cold worker / durable writes | Migrations, retries, reboot, custom/Hilt factory configuration |
 | Independent resources and assets | `resources` passes local A/B switching | Automatic app/library resource split, API 30 device coverage |
 | Serialization/Parcelize compiler plugins, Kotlin reflection, dynamic proxies | [Language probe](language/README.md): 64 assertions pass, including background discovery | Other versions, reflection patterns, existing-thread loaders, R8 |
 | ViewBinding/DataBinding, XML custom views, fragments | [Views probe](views/README.md): 170 assertions, including process death, fragment back stack and configured-context inflation | Nested fragments, custom factories, Hilt injection, other Context factories/overrides |
-| Networking stacks and reflective adapters | Not tested | Retrofit/OkHttp, Gson/Moshi, coroutine execution, TLS |
+| Networking stacks and reflective adapters | [Network probe](network/README.md): 76 assertions and 8 server audits; Retrofit/OkHttp, Gson/Moshi, cancellation, cache, TLS rejection controls | HTTP/2, WebSockets, public DNS/proxies, pinning/mTLS, authentication refresh, other versions |
 | Native libraries / JNI | [JNI probe](jni/README.md): 104 assertions, APK-backed/extracted libraries, dependencies and native-thread callbacks; requires API 29+ | ARM/32-bit execution, actual split installation, 16 KiB devices, third-party SDKs |
 | OS integration | Not tested | Permissions, activity results, notifications/PendingIntent, FileProvider, App Links |
 | Third-party SDKs and Gradle transforms | Not tested | Firebase, crash reporting, bytecode instrumentation, SDK startup providers |

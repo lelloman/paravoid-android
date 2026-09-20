@@ -29,6 +29,9 @@ crash also invalidated an earlier attempt; neither is counted as a Paravoid fail
 ## Evidence
 
 76 device assertions pass: 19 checks × normal/shell × cold/restored process.
+The complete corrected harness passed twice consecutively with fresh run tokens
+and certificates. All 50 existing host tests and both-mode lint also passed;
+no production runtime/plugin change was required for these cases.
 Eight independent HTTP/HTTPS server audits verify exact request counts, interceptor headers,
 unique run/PID tags, and POST JSON bodies. This prevents a stale response or a
 skipped request from masquerading as success. The driver verifies actual process
