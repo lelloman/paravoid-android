@@ -30,9 +30,19 @@ public final class BootReceiver extends BroadcastReceiver {
             .put("noActivity", !ProbeApplication.activityCreated)
             .put("loader", memory == context.getPackageName().endsWith(".paravoid"));
     }
-    private static void record(Context context, JSONObject value) throws Exception {
+    private static synchronized void record(Context context, JSONObject value) throws Exception {
         String kind = value.getString("kind");
         SharedPreferences prefs = device(context);
+        // Leaving the stopped state can deliver BOOT_COMPLETED during preparation.
+        // Count observations per real boot, not across setup and the subsequent reboot.
+        if (prefs.getInt("observationBoot", -1) != boot(context)) {
+            SharedPreferences.Editor reset = prefs.edit().putInt("observationBoot", boot(context));
+            for (String previous : new String[] {"application", "locked", "alarm", "initialized",
+                    "unlockAttempt", "bootCompleted", "error"}) {
+                reset.remove(previous).remove(previous + "Count");
+            }
+            if (!reset.commit()) throw new IllegalStateException("Observation reset failed");
+        }
         int count = prefs.getInt(kind + "Count", 0) + 1;
         value.put("count", count);
         if (!prefs.edit().putString(kind, value.toString()).putInt(kind + "Count", count).commit())
@@ -49,6 +59,9 @@ public final class BootReceiver extends BroadcastReceiver {
             device(context).edit().clear().putString("run", run).putString("deviceValue", "device-λ-" + run).commit();
             context.getSharedPreferences("credential", Context.MODE_PRIVATE).edit()
                 .putString("value", "credential-λ-" + run).commit();
+            // Exercise initialization in the setup boot too: the next real boot
+            // must not mistake these observations for duplicate unlock work.
+            initializeUnlocked(context, "preparation");
             record(context, event(context, "prepared"));
         } catch (Exception error) { fail(context, error); }
     }

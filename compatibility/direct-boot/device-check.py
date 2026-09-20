@@ -43,7 +43,7 @@ def boot_changed(old_boot):
     return bool(re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', current)) and current != old_boot
 
 
-def observation(app, run, kind):
+def observation(app, run, kind, boot=None):
     raw = adb('logcat', '-d', '-v', 'raw', '-s', 'DirectBootProbe:I', '*:S')
     found = None
     for line in raw.splitlines():
@@ -53,7 +53,7 @@ def observation(app, run, kind):
             continue
         if value.get('app') == app and value.get('run') == run:
             assert 'error' not in value, value
-            if value.get('kind') == kind:
+            if value.get('kind') == kind and (boot is None or value.get('boot') == boot):
                 found = value
     return found
 
@@ -114,26 +114,27 @@ def main():
         adb('shell', 'svc', 'power', 'reboot', check=False)
         wait('real reboot', lambda: boot_changed(old_boot), 180)
         assert user_state() == 'RUNNING_LOCKED', user_state()
+        current_boot = int(adb('shell', 'settings', 'get', 'global', 'boot_count'))
         for app, run, mode in cases:
-            application = wait('locked Application', lambda: observation(app, run, 'application'))
-            locked = wait('LOCKED_BOOT_COMPLETED', lambda: observation(app, run, 'locked'))
-            alarm = wait('alarm before unlock', lambda: observation(app, run, 'alarm'))
+            application = wait('locked Application', lambda: observation(app, run, 'application', current_boot))
+            locked = wait('LOCKED_BOOT_COMPLETED', lambda: observation(app, run, 'locked', current_boot))
+            alarm = wait('alarm before unlock', lambda: observation(app, run, 'alarm', current_boot))
             for value in (application, locked, alarm):
                 verify_locked(value, initial[app]['boot'])
             assert locked['credentialRejected'] and locked['deviceData'] and alarm['parcel'], (locked, alarm)
             assert application['pid'] == locked['pid'], (application, locked)
-            assert not observation(app, run, 'initialized') and not observation(app, run, 'bootCompleted')
+            assert not observation(app, run, 'initialized', current_boot) and not observation(app, run, 'bootCompleted', current_boot)
             assert user_state() == 'RUNNING_LOCKED'
             print(f'PASS {mode}: PIN-locked real boot, cold payload Application/receiver, DE data, CE rejection, alarm Parcelable', flush=True)
         unlock()
         for app, run, mode in cases:
-            completed = wait('BOOT_COMPLETED', lambda: observation(app, run, 'bootCompleted'))
-            initialized = wait('deferred initialization', lambda: observation(app, run, 'initialized'))
-            wait('both unlock paths', lambda: (value := observation(app, run, 'unlockAttempt'))
+            completed = wait('BOOT_COMPLETED', lambda: observation(app, run, 'bootCompleted', current_boot))
+            initialized = wait('deferred initialization', lambda: observation(app, run, 'initialized', current_boot))
+            wait('both unlock paths', lambda: (value := observation(app, run, 'unlockAttempt', current_boot))
                  and value['count'] == 2)
             assert completed['unlocked'] and completed['noActivity'] and completed['count'] == 1, completed
             assert initialized['credential'] and initialized['count'] == 1 and initialized['unlocked'], initialized
-            assert observation(app, run, 'application')['count'] == 1, 'Application unexpectedly restarted'
+            assert observation(app, run, 'application', current_boot)['count'] == 1, 'Application unexpectedly restarted'
             # After unlock, independently inspect persisted DE observations, not only logcat.
             raw = adb('shell', 'run-as', app, 'cat', '/data/user_de/0/' + app + '/shared_prefs/direct-boot.xml')
             persisted = {node.get('name'): node.text if node.tag == 'string' else node.get('value')

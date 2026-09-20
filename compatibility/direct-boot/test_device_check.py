@@ -34,6 +34,12 @@ class DirectBootGuards(unittest.TestCase):
         with patch.object(driver, 'adb', return_value=raw):
             self.assertIsNone(driver.observation('app', 'new', 'locked'))
 
+    def test_same_run_previous_boot_ignored(self):
+        raw = '{"app":"app","run":"run","kind":"initialized","boot":1}'
+        with patch.object(driver, 'adb', return_value=raw):
+            self.assertIsNone(driver.observation('app', 'run', 'initialized', 2))
+            self.assertEqual(1, driver.observation('app', 'run', 'initialized', 1)['boot'])
+
     def test_any_current_run_error_rejected(self):
         raw = '{"app":"app","run":"run","kind":"error","error":"CE access"}'
         with patch.object(driver, 'adb', return_value=raw), self.assertRaises(AssertionError):
