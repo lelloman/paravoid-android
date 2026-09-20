@@ -35,11 +35,15 @@ Verified on the image above, normal **and** shell packaging:
 | Views / fragments | 170 assertions plus lifecycle identity checks pass |
 | Compose / Navigation / Hilt | Normal passes rotation/navigation/process death; shell startup fails the API 29+ native-library guard because the APK includes `libandroidx.graphics.path.so` |
 | Room / WorkManager | Both modes pass generated DAO, persisted work, cold JobService/Worker and committed write verification after two process deaths |
+| Networking / JSON / KSP | 76 assertions and eight HTTP/HTTPS request audits pass, including TLS rejection and cold/restored processes |
 
 Host regression suite: 58 tests and plugin validation pass; OS fixture lint passes.
 With the fix, API 36.1 also passed all 8 result scenarios, 64 language assertions
 and 170 Views assertions plus lifecycle identity checks again.
 These are debug x86_64 results, not a full API/ABI or release-support declaration.
+The expanded pass also reran Compose and Room/WorkManager on API 36.1 in both
+packaging modes successfully. Only test-driver changes were needed for this
+expansion; no additional production loader changes were made.
 
 - OS: FileProvider/cold provider, AndroidX activity-result success/cancellation
   with caller process death, Binder binding-Intent Parcelables, explicit-loader
@@ -88,7 +92,7 @@ and pending runtime permission dialogs remain separate coverage.
   control passes; shell Hilt/navigation/state behavior cannot be evaluated on this
   image because initialization is rejected first. The driver remains a failing
   reproducer on API 28; native dependency removal or bypass is not a validated fix.
-- Networking, sample instrumentation, release
+- Sample instrumentation, release
   APK/AAB installation, other ABIs and physical devices are outside this selected
   first pass. Their newer-device results must not be relabeled as API 28 evidence.
 

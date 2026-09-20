@@ -3,7 +3,7 @@
 Pinned fixture: Kotlin 2.2.21, KSP **2.2.21-2.0.4 / KSP2**, Retrofit and converters
 2.11.0, OkHttp 4.12.0, Gson 2.11.0, Moshi/Moshi codegen 1.15.2, kotlin-reflect
 2.2.21 and coroutines 1.10.2. The repository pins Gradle 8.13 / AGP 8.13.2.
-The app declares minSdk 28; device evidence is API 36.1/debug/x86_64, not every
+The app declares minSdk 28; device evidence is API 28 and API 36.1/debug/x86_64, not every
 supported Android version.
 
 ```sh
@@ -29,6 +29,9 @@ crash also invalidated an earlier attempt; neither is counted as a Paravoid fail
 ## Evidence
 
 76 device assertions pass: 19 checks × normal/shell × cold/restored process.
+The same production APK driver also passes all 76 assertions and eight server
+audits on API 28, including TLS trust/hostname rejection and real process-death
+restoration. No API 28-specific network fixture or runtime changes were needed.
 The complete corrected harness passed twice consecutively with fresh run tokens
 and certificates. All 50 existing host tests and both-mode lint also passed;
 no production runtime/plugin change was required for these cases.

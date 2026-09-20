@@ -12,12 +12,13 @@ bash "$repo_dir/compatibility/os/check.sh"
 python3 "$repo_dir/compatibility/os/device-check.py"
 python3 "$repo_dir/compatibility/os/results-device-check.py"
 python3 "$repo_dir/compatibility/os/binder-device-check.py"
-for fixture in language views; do
+for fixture in language views storage network; do
     echo "API 28: $fixture"
     bash "$repo_dir/compatibility/$fixture/check.sh" --device
 done
 echo 'SKIP JNI: payload native-library discovery requires API 29+.'
+echo 'KNOWN FAILURE Compose/Hilt fixture: normal passes, shell rejects transitive libandroidx.graphics.path.so (requires API 29+). Run compose/check.sh --device to reproduce.'
 echo 'SKIP resource packs: public ResourcesLoader requires API 30+.'
 echo 'NOT RUN notification/foreground drivers: currently exercise API 33+/34+ permission/type policies; basic features exist on API 28.'
-echo 'NOT RUN in this baseline: Compose/Hilt, Room/WorkManager, networking, sample instrumentation and release builds.'
+echo 'NOT RUN in this baseline: sample instrumentation and release builds.'
 echo 'PASS: selected API 28 baseline (not the full compatibility matrix).'
