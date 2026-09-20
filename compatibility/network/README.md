@@ -1,0 +1,59 @@
+# Networking, JSON adapters and KSP compatibility
+
+Pinned fixture: Kotlin 2.2.21, KSP **2.2.21-2.0.4 / KSP2**, Retrofit and converters
+2.11.0, OkHttp 4.12.0, Gson 2.11.0, Moshi/Moshi codegen 1.15.2, kotlin-reflect
+2.2.21 and coroutines 1.10.2. The repository pins Gradle 8.13 / AGP 8.13.2.
+The app declares minSdk 28; device evidence is API 36.1/debug/x86_64, not every
+supported Android version.
+
+```sh
+ANDROID_HOME=/path/to/Android/Sdk bash compatibility/network/check.sh
+ANDROID_HOME=/path/to/Android/Sdk ANDROID_SERIAL=emulator-5584 \
+  bash compatibility/network/check.sh --device
+```
+
+Device checks require Python 3.8+, adb on PATH and a dedicated unlocked emulator.
+The driver starts a loopback-only HTTP server, creates its own ephemeral adb
+reverse mapping and removes that mapping on exit. It installs and clears only the
+fixture apps. No external HTTP service is needed. INTERNET permission and a
+network security configuration belong in the installed manifest/resources; the
+fixture permits cleartext only for 127.0.0.1, not globally.
+
+## Evidence
+
+64 device assertions pass: 16 checks × normal/shell × cold/restored process.
+Four independent server audits verify exact request counts, interceptor headers,
+unique run/PID tags, and POST JSON bodies. This prevents a stale response or a
+skipped request from masquerading as success. The driver verifies actual process
+death, a new PID and saved-state restoration, then repeats fresh requests; it does
+not claim in-flight HTTP calls survive process death.
+
+Covered: Retrofit service proxies and Java default methods; Gson generic/nested
+models, field-name annotations and Unicode round trips; Moshi generic KSP-generated
+adapters and reflection-based Kotlin adapters with constructor defaults; custom
+qualifiers through reflection; main-thread success/cancellation callbacks; suspend
+APIs and cancellation propagation to OkHttp; HTTP 422 responses and HttpException;
+malformed JSON; timeouts; disk cache hits; network security policy and payload
+classloader isolation. Generated-adapter cases do not install a reflection fallback.
+
+## Known toolchain limitation
+
+With these pins, KSP generation for a model using a custom JsonQualifier fails
+in **both normal and shell** builds, before Paravoid payload packaging. This
+matches [Moshi issue #1874](https://github.com/square/moshi/issues/1874). Ordinary
+models use KSP; the qualifier model deliberately uses KotlinJsonAdapterFactory.
+This is not a Paravoid runtime fix, nor evidence that generated qualifiers work.
+
+Retained negative reproducer (expected failure in both processing tasks):
+
+```sh
+./gradlew -p compatibility/network -PprobeGeneratedQualifier=true \
+  kspNormalDebugKotlin kspParavoidAndroidDebugKotlin --continue
+```
+
+Omit that property to return to the passing fixture. Other Moshi/KSP combinations
+need their own verification. The existing SDK D8 Kotlin-metadata warnings remain
+visible; passing these cases does not certify every metadata consumer or R8.
+
+Still untested: TLS, public DNS/proxies, HTTP/2, WebSockets, authentication refresh,
+multipart/streaming transfers, offline transitions, other library versions and R8.

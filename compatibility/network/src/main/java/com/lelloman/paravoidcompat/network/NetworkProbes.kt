@@ -89,7 +89,7 @@ class NetworkProbes(private val context: Context, private val url: String, priva
                 check(value.run == run && value.data.single() == ReflectiveItem("caffè ☕", 7))
             }
             probe("moshi.qualifier") {
-                val value = runBlocking { moshi().qualified() }
+                val value = runBlocking { moshi(reflect = true).qualified() }
                 check(value.run == run && value.label == "MIXED")
             }
             probe("retrofit.errorResponse") {

@@ -12,7 +12,7 @@ data class ReflectiveItem(@Json(name = "display_name") val name: String, val cou
 @Retention(AnnotationRetention.RUNTIME)
 @JsonQualifier
 annotation class Uppercase
-@JsonClass(generateAdapter = true)
+@JsonClass(generateAdapter = false)
 data class Qualified(@Uppercase val label: String, val run: String)
 class QualifierAdapter {
     @FromJson @Uppercase fun fromJson(value: String): String = value.uppercase(java.util.Locale.ROOT)
