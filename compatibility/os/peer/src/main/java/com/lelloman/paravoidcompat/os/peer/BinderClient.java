@@ -70,6 +70,17 @@ final class BinderClient implements ServiceConnection {
                 boolean rejected = false;
                 try { api.reject(); } catch (IllegalArgumentException expected) { rejected = "probe-rejected".equals(expected.getMessage()); }
                 WireMessage reply = received.get();
+                Bundle nested = new Bundle();
+                nested.putParcelable("value", request);
+                Bundle input = new Bundle();
+                input.putBundle("nested", nested);
+                String rawStatus = api.exchangeBundle(input, false).getString("status");
+                Bundle prepared = api.exchangeBundle(input, true);
+                prepared.setClassLoader(WireMessage.class.getClassLoader());
+                Bundle preparedNested = prepared.getBundle("nested");
+                if (preparedNested == null) throw new IllegalStateException("Prepared Bundle failed: " + prepared.getString("status"));
+                preparedNested.setClassLoader(WireMessage.class.getClassLoader());
+                WireMessage bundleValue = preparedNested.getParcelable("value");
                 JSONObject result = new JSONObject().put("run", run).put("pid", response.pid)
                     .put("peerPid", android.os.Process.myPid()).put("instance", response.instance)
                     .put("remote", binder.queryLocalInterface(IProbe.DESCRIPTOR) == null)
@@ -80,7 +91,13 @@ final class BinderClient implements ServiceConnection {
                         && reply.instance.equals(response.instance) && reply.pid == response.pid)
                     .put("list", list.size() == 3 && run.equals(list.get(0).text) && list.get(1) == null && "尾".equals(list.get(2).text))
                     .put("null", api.exchange(null, callback) == null && api.echoList(null) == null)
-                    .put("exception", rejected);
+                    .put("exception", rejected)
+                    .put("bundleRawRejected", rawStatus != null && rawStatus.contains("BadParcelableException")
+                        && rawStatus.contains("ClassNotFoundException"))
+                    .put("bundlePrepared", "PASS".equals(prepared.getString("status")) && bundleValue != null
+                        && ("bundle-λ-" + run).equals(bundleValue.text) && bundleValue.loader
+                        && bundleValue.pid == response.pid && bundleValue.instance.equals(response.instance)
+                        && bundleValue.callerUid == android.os.Process.myUid());
                 prefs().edit().putString("binder" + phase, result.toString()).commit();
             } catch (Exception failure) { error(failure); }
         });

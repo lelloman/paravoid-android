@@ -58,6 +58,16 @@ and [bound Service lifecycle](https://developer.android.com/develop/background-w
 
 ## Limits
 
+AIDL nested-Bundle coverage also passes on API 36.1 in both modes and all three
+connection stages: without explicit Bundle loaders, decoding the custom class
+fails in **normal and shell** packaging. With `setClassLoader()` before reading
+the outer/nested Bundles, the request and response preserve Unicode, caller UID,
+Service instance/PID and payload loader identity. The receiver uses the Service's
+`getClassLoader()`; the peer sets its own wire-class loader on the response. This
+is ordinary [Android AIDL Bundle handling](https://developer.android.com/develop/background-work/services/aidl),
+not an automatic Paravoid Bundle rewrite. Typed AIDL and dynamically decoded
+Bundle values exercise different paths; downstream apps must handle the latter.
+
 Binding-Intent regression: adding `WireMessage` to the bind Intent initially passed
 normally but failed in shell `onBind` with `BadParcelableException`. The plugin
 now gives manifest-declared payload Services the same defining-loader override as
@@ -70,8 +80,7 @@ The driver now reinstalls the peer after installing each permission-defining
 target APK, so signature-permission install ordering is not mistaken for a
 payload failure.
 
-This is typed AIDL Parcel serialization, not arbitrary `Bundle` object discovery.
-Custom Parcelables in Bundle values, target `android:process`,
+Arbitrary Bundle graphs and Serializable values, target `android:process`,
 isolated services, foreground services, client death, large transactions,
 file descriptors, concurrent load/backpressure, version-skewed contracts, release
 shrinking and other Android versions remain unvalidated. No remote payload update

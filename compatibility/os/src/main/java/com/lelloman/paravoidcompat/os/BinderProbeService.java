@@ -31,6 +31,23 @@ public final class BinderProbeService extends Service {
         }
         @Override public List<WireMessage> echoList(List<WireMessage> messages) { return messages; }
         @Override public void reject() { throw new IllegalArgumentException("probe-rejected"); }
+        @Override public android.os.Bundle exchangeBundle(android.os.Bundle request, boolean prepareLoader) {
+            android.os.Bundle response = new android.os.Bundle();
+            try {
+                // AIDL Bundle unmarshalling requires an explicit loader in normal apps too.
+                if (prepareLoader) request.setClassLoader(getClassLoader());
+                android.os.Bundle nested = request.getBundle("nested");
+                if (prepareLoader) nested.setClassLoader(getClassLoader());
+                WireMessage value = nested.getParcelable("value");
+                android.os.Bundle reply = new android.os.Bundle();
+                reply.putParcelable("value", new WireMessage("bundle-λ-" + value.text,
+                    android.os.Process.myPid(), Binder.getCallingUid(), instance,
+                    value.getClass().getClassLoader() == BinderProbeService.class.getClassLoader()));
+                response.putBundle("nested", reply);
+                response.putString("status", "PASS");
+            } catch (Exception error) { response.putString("status", error.toString()); }
+            return response;
+        }
     };
     @Override public IBinder onBind(Intent intent) {
         String observed;

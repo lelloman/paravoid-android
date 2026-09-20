@@ -15,7 +15,8 @@ def phase(number, token):
 def verify(app, result):
     assert report(app).get('binderBinding') == result['run'], report(app)
     assert report(app).get('binderBindingInstance') == result['instance'], report(app)
-    for key in ('remote', 'uid', 'loader', 'text', 'callback', 'list', 'null', 'exception'):
+    for key in ('remote', 'uid', 'loader', 'text', 'callback', 'list', 'null', 'exception',
+                'bundleRawRejected', 'bundlePrepared'):
         assert result[key] is True, (key, result)
     assert str(result['pid']) == adb('shell', 'pidof', app) == report(app)['startupPid'], result
     assert str(result['peerPid']) == adb('shell', 'pidof', PEER), result
@@ -41,7 +42,7 @@ def check_mode(mode):
         verify(app, second)
         assert second['instance'] != first['instance'], 'Service instance was reused after destruction'
         assert second['peerPid'] == first['peerPid'], 'Peer process changed'
-        print(f'PASS {mode}: cold remote AIDL, typed Parcelables/callback/list/null/exception/UID/loaders, final unbind and new service instance', flush=True)
+        print(f'PASS {mode}: binding Intent, AIDL typed/nested Bundle Parcelables, negative Bundle control, callback/list/null/exception/UID/loaders, unbind/rebind', flush=True)
         # Keep the binding and peer alive. Force-stop would change binding semantics;
         # kill only the verified service PID. Auto-restart can be too fast to sample
         # an empty pidof, so prove death via DeathRecipient and a different new PID.
