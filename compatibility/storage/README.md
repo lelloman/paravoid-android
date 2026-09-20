@@ -35,6 +35,11 @@ migrations, Kotlin/KSP Room models, retry/backoff, periodic/foreground work, reb
 device-idle scheduling policy, multiprocess work or payload-update compatibility.
 Job dispatch here tests cold component loading, not delivery timing guarantees.
 
+The separate [Hilt Work probe](../hilt-work/README.md) now covers Hilt Worker
+injection: explicit Application initialization passes both modes, while automatic
+`Configuration.Provider` lookup fails in shell packaging. This default-factory
+fixture and its API 28 evidence do not imply that the Hilt combination passed there.
+
 The driver uses unnamespaced JobScheduler IDs/dispatch below API 34. On API 28,
 reopening the old Activity task reused its original enqueue Intent and attempted
 a duplicate Room insert in **normal packaging too**. The final reader now uses

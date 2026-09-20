@@ -147,6 +147,10 @@ The [network probe](compatibility/network/README.md) covers Retrofit/OkHttp,
 Gson/Moshi adapters, KSP, cancellation, caching and local HTTPS verification.
 Its pinned Moshi/KSP2 generated-qualifier limitation is explicitly documented;
 ordinary generated models and reflective qualifiers are tested separately.
+The [Hilt WorkManager probe](compatibility/hilt-work/README.md) verifies injected
+cold workers and Room persistence with explicit initialization in Application
+`onCreate`, after Hilt injection. Automatic `Configuration.Provider` lookup fails
+in shell packaging; the optional Hilt plugin does not currently adapt that path.
 
 `sample-app` is one Android app with a custom `SampleApplication`, an ordinary
 `MainActivity`, and a native counter screen. Both generated packaging modes use
@@ -297,6 +301,9 @@ Further independent probes exercise larger downstream stacks:
 - [Room + WorkManager](compatibility/storage/README.md): generated DAOs, persistent
   data, and cold background JobService/Worker execution in both modes. This uses
   the default Worker factory, not Hilt Worker injection.
+- [Hilt + WorkManager](compatibility/hilt-work/README.md): generated assisted
+  factories and cold injected workers pass with explicit Application initialization;
+  automatic `Configuration.Provider` discovery remains a confirmed shell gap.
 - [Independent resources](compatibility/resources/README.md): an API 30+ experiment
   using separate, hash-pinned resource-only APKs and stable IDs. It tests Views,
   Compose, themes, locale lookup and assets while keeping the installed app APK
@@ -399,7 +406,8 @@ the host application's privileges; this is not an isolation boundary.
    behavior, and supported Android versions beyond the current sample.
 2. Turn the independent-resource experiment into automatic app/library resource
    packaging with stable-ID and installed-manifest contracts. Test broader library
-   cases: Hilt Workers, Room migrations, OS integration and third-party native SDKs.
+   cases: automatic WorkManager configuration lookup, Room migrations, OS integration
+   and third-party native SDKs.
 3. Define independently signed payloads and negative signature tests before accepting
    code from outside the APK. Sign with the product shell's signing key and verify
    against the installed shell certificate's public key; matching certificates

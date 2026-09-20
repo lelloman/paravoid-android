@@ -53,7 +53,8 @@ def check_mode(mode, policy):
     app = f"com.lelloman.paravoidcompat.hiltwork.{policy}." + ("normal" if mode == "normal" else "paravoid")
     component = f"{app}/com.lelloman.paravoidcompat.hiltwork.ProbeActivity"
     apk = ROOT / f"build/outputs/apk/{mode}/debug/hilt-work-compatibility-{mode}-debug.apk"
-    adb("install", "-r", str(apk))
+    # Avoid streamed-install digest failures observed with a host-verified APK.
+    adb("install", "--no-streaming", "-r", str(apk))
     adb("shell", "pm", "clear", app)  # Dedicated fixture data only.
     token = str(uuid.uuid4())
     try:
