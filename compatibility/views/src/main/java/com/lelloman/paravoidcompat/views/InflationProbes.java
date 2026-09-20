@@ -18,9 +18,24 @@ final class InflationProbes {
     }
     private static void inflate(String name, Context context, JSONObject results) throws Exception {
         try {
-            StatefulView view = (StatefulView) LayoutInflater.from(context).inflate(R.layout.inflation_probe, null);
+            LayoutInflater inflater = LayoutInflater.from(context);
+            if (inflater != LayoutInflater.from(context)) throw new AssertionError("Inflater is not cached");
+            StatefulView view = (StatefulView) inflater.inflate(R.layout.inflation_probe, null);
             if (view.value != 19 || view.getClass().getClassLoader() != InflationProbes.class.getClassLoader()) {
                 throw new AssertionError("Wrong XML attribute or defining loader");
+            }
+            if (name.contains("configured")) {
+                if (!"italiano".equals(view.getResources().getString(R.string.configuration_probe))) {
+                    throw new AssertionError("Configuration resources lost");
+                }
+                Configuration nestedConfig = new Configuration(context.getResources().getConfiguration());
+                nestedConfig.setLocale(java.util.Locale.ENGLISH);
+                Context nested = context.createConfigurationContext(nestedConfig);
+                StatefulView nestedView = (StatefulView) LayoutInflater.from(nested).inflate(R.layout.inflation_probe, null);
+                if (!"default".equals(nestedView.getResources().getString(R.string.configuration_probe))
+                        || !"italiano".equals(context.getString(R.string.configuration_probe))) {
+                    throw new AssertionError("Nested configuration isolation lost");
+                }
             }
             results.put(name, "PASS");
         } catch (RuntimeException | LinkageError | AssertionError error) {

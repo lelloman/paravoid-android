@@ -68,6 +68,7 @@ abstract class PackageApplicationTask extends DefaultTask {
         }
         payloadTransformers.get().each { it.transform(classes) }
         PayloadActivityLoader.adapt(classes, info.getProperty('activity').replace('.', '/'))
+        PayloadConfigurationContext.adapt(classes, info.getProperty('activity').replace('.', '/'))
         PayloadSavedState.adapt(classes, info.getProperty('activity').replace('.', '/'))
         File shell = shellClasses.get().asFile
         shell.parentFile.mkdirs()

@@ -82,6 +82,9 @@ public final class ShellApplication extends Application {
     @Override public ClassLoader getClassLoader() {
         return payloadLoader != null ? payloadLoader : super.getClassLoader();
     }
+    @Override public Context createConfigurationContext(Configuration configuration) {
+        return PayloadContext.wrap(super.createConfigurationContext(configuration), getClassLoader());
+    }
     @Override public void onConfigurationChanged(Configuration configuration) {
         super.onConfigurationChanged(configuration);
         if (application != null && failure == null) application.onConfigurationChanged(configuration);
