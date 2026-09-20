@@ -3,7 +3,7 @@ package com.lelloman.paravoidandroid.gradle
 import org.objectweb.asm.*
 import static org.objectweb.asm.Opcodes.*
 
-/** ActivityThread assigns the installed loader to state; repair it before payload onCreate. */
+/** Repair ActivityThread's installed loaders for launch extras/state before payload onCreate. */
 class PayloadSavedState {
     static final String HELPER = 'com/lelloman/paravoidandroid/runtime/PayloadSavedState'
     static final String CREATE = '(Landroid/os/Bundle;)V'

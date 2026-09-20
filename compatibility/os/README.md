@@ -50,9 +50,13 @@ Intent grant; that explicit grant is not tied to the original Activity lifetime.
 
 ### Notification scenario
 
-Initial API 36.1 result: normal passes; shell broadcast action passes but the cold
-notification Activity fails with `BadParcelableException` for `ProbeParcel`.
-This is a regression reproducer, not yet a passing compatibility claim.
+API 36.1/debug: both packaging modes pass. The initial reproducer passed normally
+but failed on shell cold Activity entry with `BadParcelableException` for
+`ProbeParcel`. Android's `ActivityThread` overwrites the launch Intent extras
+loader after `AppComponentFactory` returns. The existing pre-`onCreate` hook now
+repairs both the launch Intent and saved-state Bundle, including null-state cold
+entries. The broadcast action already worked. The driver remains a regression
+test for this failure; the fixture never sets an extras loader manually.
 
 `notifications-device-check.py` posts a real channel notification, checks the
 published content/action tokens, and hands the published broadcast action token

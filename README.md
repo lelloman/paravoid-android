@@ -99,8 +99,9 @@ Loading a DEX class is not sufficient to make Android instantiate an Activity.
 The runtime must integrate payload class loading with Android component creation;
 the example uses `AppComponentFactory` on API 28+. The shell initializes the embedded
 payload during Application startup, so direct Activity creation does not depend on
-visiting the launcher. The plugin prepares saved-state Bundles with the payload
-loader before Activity `onCreate`; the Compose probe tests navigation and state
+visiting the launcher. The plugin prepares launch Intent extras and saved-state
+Bundles with the payload loader before Activity `onCreate`; the OS probe covers
+cold notification delivery of a payload Parcelable. The Compose probe tests navigation and state
 restoration after process death. The language probe additionally covers generated
 Parcelable and Serializable saved-state objects. Other object graphs, state across
 payload updates and downloaded payloads still need explicit coverage.
