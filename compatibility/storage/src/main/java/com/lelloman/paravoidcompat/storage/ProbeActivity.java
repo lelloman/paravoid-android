@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 public final class ProbeActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        getSharedPreferences("storage-probe", MODE_PRIVATE).edit().putInt("activityPid", Process.myPid()).commit();
         TextView text = new TextView(this);
         text.setText("Room + WorkManager: awaiting test request");
         setContentView(text);

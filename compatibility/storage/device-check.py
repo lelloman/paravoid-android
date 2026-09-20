@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run a persisted WorkManager job in a fresh process and verify its Room write."""
 import os
+import argparse
 from pathlib import Path
 import re
 import subprocess
@@ -38,13 +39,13 @@ def result(app, key, token):
         return False
 
 
-def check_mode(mode):
+def check_mode(mode, configured=False):
     namespaced = int(adb("shell", "getprop", "ro.build.version.sdk")) >= 34
     suffix = "normal" if mode == "normal" else "paravoid"
-    app = "com.lelloman.paravoidcompat.storage." + suffix
+    app = "com.lelloman.paravoidcompat.storage." + ("configured." if configured else "") + suffix
     component = f"{app}/com.lelloman.paravoidcompat.storage.ProbeActivity"
     apk = ROOT / f"build/outputs/apk/{mode}/debug/storage-compatibility-{mode}-debug.apk"
-    adb("install", "-r", str(apk))
+    adb("install", "--no-streaming", "-r", str(apk))
     # These two dedicated fixture packages contain test-only data.
     adb("shell", "pm", "clear", app)
     token = str(uuid.uuid4())
@@ -70,6 +71,10 @@ def check_mode(mode):
     wait_for("cold worker reads and updates Room", lambda: result(app, "completed", token))
     worker_pid = adb("shell", "pidof", app)
     assert worker_pid != pid
+    if configured:
+        values = ET.fromstring(adb("shell", "run-as", app, "cat", "shared_prefs/storage-probe.xml"))
+        for key in ("configurationPid", "factoryPid"):
+            assert values.find(f"int[@name='{key}']").get("value") == worker_pid, key
     # Kill the worker process too: a third process must read its committed database update.
     assert worker_pid.isdecimal()
     adb("shell", "run-as", app, "kill", "-9", worker_pid)
@@ -84,11 +89,14 @@ def check_mode(mode):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--configured", action="store_true")
+    args = parser.parse_args()
     try:
         adb("shell", "input", "keyevent", "KEYCODE_WAKEUP")
         adb("shell", "wm", "dismiss-keyguard")
         for mode in ("normal", "paravoidAndroid"):
-            check_mode(mode)
+            check_mode(mode, args.configured)
     except Exception:
         print(adb("logcat", "-d", "-s", "AndroidRuntime:E", "ParavoidAndroid:E", "StorageProbe:E", "WM-WorkerFactory:E"))
         raise

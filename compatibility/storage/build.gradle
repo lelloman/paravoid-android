@@ -1,13 +1,25 @@
-plugins { id 'com.lelloman.paravoid' }
+plugins {
+    id 'com.lelloman.paravoid'
+    id 'com.lelloman.paravoid.work' apply false
+}
+def configured = providers.gradleProperty('configuredWork').isPresent()
+if ((configured || providers.gradleProperty('workProbeEnableIntegration').isPresent())
+        && !providers.gradleProperty('workProbeDisableIntegration').isPresent()) {
+    apply plugin: 'com.lelloman.paravoid.work'
+}
 android {
     namespace 'com.lelloman.paravoidcompat.storage'
     compileSdk 36
     defaultConfig {
-        applicationId 'com.lelloman.paravoidcompat.storage'
+        applicationId 'com.lelloman.paravoidcompat.storage' + (configured ? '.configured' : '')
         minSdk 28
         targetSdk 36
         versionCode 1
         versionName '1.0'
+    }
+    if (configured) {
+        sourceSets.main.java.srcDir 'src/configured/java'
+        sourceSets.main.manifest.srcFile 'src/configured/AndroidManifest.xml'
     }
     productFlavors {
         normal { applicationIdSuffix '.normal' }
