@@ -51,8 +51,8 @@ and [AlarmManager contract](https://developer.android.com/reference/android/app/
 
 The [lifecycle extension](ALARM-LIFECYCLE.md) additionally verifies pending-alarm
 revocation/regrant, forced deep idle and framework-managed reboot/rescheduling in
-both modes on API 36.1. It documents the idle-exit observation race and an
-unresolved immediate-reboot observation separately.
+both modes on API 36.1. It documents the idle-exit observation race and a
+controlled reproduction of Android package-state rollback on immediate reboot.
 
 The basic test above is an awake-emulator functional test, not an exact wall-clock latency or
 infinite non-delivery guarantee. It does not cover inexact/repeating alarms, RTC

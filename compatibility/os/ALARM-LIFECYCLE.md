@@ -58,13 +58,40 @@ release command, requires delivery after that timestamp, and confirms ACTIVE.
 It still requires the allow-while-idle callback to observe idle=true.
 
 An initial immediate `adb reboot` run delivered BOOT_COMPLETED to the normal
-package but not the shell package, with no shell startup/crash. The receiver and
-permission were installed correctly. A package-state persistence race after
-`pm clear`/first launch is a hypothesis, not an established Paravoid defect. The
-driver now uses the ordinary framework shutdown path and explicitly checks
-package stopped/not-launched flags on both sides of reboot. It tolerates the adb
-transport closing during `svc` and verifies the changed boot ID instead. Abrupt
-reboot/power-loss durability is not covered by this test.
+package but not the shell package, with no shell startup/crash. Follow-up diagnosis
+reproduced lost package state in **both** modes, independently of payload loading:
+
+- Repeating the original setup in normal-first and shell-first order delivered
+  both boot broadcasts and alarms. The failure is timing-sensitive, not a
+  deterministic shell receiver failure.
+- Merely clearing and waiting was not a reliable stopped-state precondition:
+  granting exact-alarm access could already start the manifest receiver.
+- The controlled case granted access, force-stopped both fixtures **before** the
+  test launches, waited 15 seconds for that state to settle, then launched and
+  killed their exact PIDs. Both packages reported `stopped=false` immediately
+  before reboot. Immediate `adb reboot` restored `stopped=true` for **both**.
+  Their saved desired schedules remained intact, but boot delivery never entered
+  either Application. All observations were captured before cleanup.
+- Repeating that controlled setup but waiting 15 seconds **after launch** before
+  `adb reboot` preserved `stopped=false` and delivered the real boot broadcast and
+  rescheduled alarm in both modes, with no user Activity in the new boot.
+- The same controlled setup followed immediately by `svc power reboot` also
+  preserved the flags and delivered both callbacks and alarms, without the extra
+  post-launch wait. These diagnosis runs used API 36.1 x86_64 build
+  `BE4B.251210.005/14574095`; no production code or manifest was changed.
+
+The Android 16 QPR2 [PackageManagerService implementation](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android16-qpr2-release/services/core/java/com/android/server/pm/PackageManagerService.java)
+queues stopped-state persistence with a ten-second delay; its framework shutdown
+path flushes pending settings. The [intent resolver](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android16-qpr2-release/services/core/java/com/android/server/IntentResolver.java)
+filters stopped targets, using the [component resolver's package-state check](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android16-qpr2-release/services/core/java/com/android/server/pm/resolution/ComponentResolver.java).
+This establishes an Android package-state rollback mechanism that can explain
+the original asymmetry; the original run lacked pre-cleanup package-state captures,
+so its exact persisted flags cannot be retrospectively proven.
+
+The regression driver uses framework-managed reboot and checks package flags on
+both sides. It tolerates adb transport closure during `svc` and verifies the
+changed boot ID. No production Paravoid fix is indicated by this reproduction.
+Abrupt reboot/power-loss durability is not covered by the passing reboot contract.
 
 Five device-free assertion tests guard active-alarm parsing against historical
 records and other packages, stale run tokens, fixture errors, duplicate delivery,
