@@ -30,6 +30,13 @@ public final class PeerActivity extends Activity {
             result.putExtra("write", error.toString());
         }
         setResult(RESULT_OK, result);
+        if (getIntent().getBooleanExtra("cold", false)) {
+            getSharedPreferences("os-probe", MODE_PRIVATE).edit()
+                .putString("run", result.getStringExtra("run"))
+                .putString("read", result.getStringExtra("read"))
+                .putString("write", result.getStringExtra("write"))
+                .putInt("uid", android.os.Process.myUid()).commit();
+        }
         finish();
     }
 }

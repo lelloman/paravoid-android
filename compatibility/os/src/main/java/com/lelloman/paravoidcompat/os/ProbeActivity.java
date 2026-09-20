@@ -20,6 +20,8 @@ public final class ProbeActivity extends Activity {
     }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        getSharedPreferences("os-probe", MODE_PRIVATE).edit()
+            .putInt("activityPid", android.os.Process.myPid()).commit();
         run = getIntent().getStringExtra("probeRun");
         try {
             File directory = new File(getFilesDir(), "shared");
@@ -63,7 +65,13 @@ public final class ProbeActivity extends Activity {
             else if (request == 11) {
                 revokeUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 launchPeer(12, false);
-            } else report();
+            } else {
+                // Explicit package grant survives Activity completion and process death.
+                // The driver clears fixture packages, so this test grant cannot leak runs.
+                grantUriPermission("com.lelloman.paravoidcompat.os.peer", uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                report();
+            }
         } catch (Exception error) { fail(error); }
     }
     private void fail(Exception error) {
@@ -72,6 +80,8 @@ public final class ProbeActivity extends Activity {
     }
     private void report() {
         getSharedPreferences("os-probe", MODE_PRIVATE).edit().putString("run", run)
+            .putString("uri", uri == null ? "" : uri.toString())
+            .putInt("activityPid", android.os.Process.myPid())
             .putString("results", results.toString()).commit();
     }
 }

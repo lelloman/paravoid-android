@@ -23,7 +23,8 @@ def adb(*args, check=True):
 def report(app):
     raw = adb('shell', 'run-as', app, 'cat', 'shared_prefs/os-probe.xml', check=False)
     try:
-        return {node.get('name'): node.text for node in ET.fromstring(raw)}
+        return {node.get('name'): node.text if node.tag == 'string' else node.get('value')
+                for node in ET.fromstring(raw)}
     except ET.ParseError:
         return {}
 
@@ -48,9 +49,43 @@ def check_mode(mode):
                 for name, value in results.items():
                     print(f'{mode} {name}: {value}', flush=True)
                 assert len(results) == 16 and all(value == 'PASS' for value in results.values()), results
-                return
+                break
             time.sleep(0.3)
-        raise AssertionError(f'Timed out waiting for {mode}: {report(app)}')
+        else:
+            raise AssertionError(f'Timed out waiting for {mode}: {report(app)}')
+
+        adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+        old_pid = adb('shell', 'pidof', app)
+        assert old_pid.isdecimal() and old_pid == snapshot['activityPid']
+        adb('shell', 'run-as', app, 'kill', '-9', old_pid)
+        deadline = time.monotonic() + 15
+        while adb('shell', 'pidof', app, check=False):
+            assert time.monotonic() < deadline, 'Target process did not exit'
+            time.sleep(0.2)
+        # No launcher entry and no new Intent URI grant: the explicit package grant
+        # from the now-dead target is the only authority to read the content URI.
+        adb('shell', 'am', 'start', '-W', '-n', PEER + '/.PeerActivity',
+            '-d', snapshot['uri'], '--es', 'run', token, '--ez', 'cold', 'true')
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            peer = report(PEER)
+            if peer.get('run') == token:
+                break
+            time.sleep(0.3)
+        else:
+            raise AssertionError(f'No cold peer report: {report(PEER)}')
+        restarted = report(app)
+        cold_results = {
+            'cold_exact_read': peer.get('read') == 'hello-λ-' + token,
+            'cold_write_denied': peer.get('write') == 'DENIED',
+            'cold_new_application_pid': restarted.get('startupPid', '').isdecimal()
+                and restarted['startupPid'] != old_pid
+                and restarted['startupPid'] == adb('shell', 'pidof', app),
+            'cold_no_activity_entry': restarted.get('activityPid') == old_pid,
+        }
+        for name, passed in cold_results.items():
+            print(f'{mode} {name}: {"PASS" if passed else "FAIL"}', flush=True)
+        assert all(cold_results.values()), (cold_results, restarted, peer)
     finally:
         adb('shell', 'am', 'force-stop', app, check=False)
         adb('shell', 'am', 'force-stop', PEER, check=False)
@@ -62,4 +97,4 @@ if __name__ == '__main__':
     adb('install', '-r', str(ROOT / 'peer/build/outputs/apk/debug/peer-debug.apk'))
     for packaging in ('normal', 'paravoidAndroid'):
         check_mode(packaging)
-    print('PASS: 32 cross-UID sharing and activity-result assertions.')
+    print('PASS: 40 cross-UID sharing, activity-result and cold-provider assertions.')

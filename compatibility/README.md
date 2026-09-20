@@ -18,7 +18,7 @@ without moving application libraries into the parent loader.
 | ViewBinding/DataBinding, XML custom views, fragments | [Views probe](views/README.md): 170 assertions, including process death, fragment back stack and configured-context inflation | Nested fragments, custom factories, Hilt injection, other Context factories/overrides |
 | Networking stacks and reflective adapters | [Network probe](network/README.md): 76 assertions and 8 server audits; Retrofit/OkHttp, Gson/Moshi, cancellation, cache, TLS rejection controls | HTTP/2, WebSockets, public DNS/proxies, pinning/mTLS, authentication refresh, other versions |
 | Native libraries / JNI | [JNI probe](jni/README.md): 104 assertions, APK-backed/extracted libraries, dependencies and native-thread callbacks; requires API 29+ | ARM/32-bit execution, actual split installation, 16 KiB devices, third-party SDKs |
-| OS integration | [OS probe](os/README.md): 32 cross-UID FileProvider and framework activity-result assertions | Cold provider entry, AndroidX result registry/process death, permissions, notifications/PendingIntent, App Links |
+| OS integration | [OS probe](os/README.md): 40 cross-UID FileProvider, framework activity-result and cold provider-entry assertions | AndroidX result registry/process death, permissions, notifications/PendingIntent, App Links |
 | Third-party SDKs and Gradle transforms | Not tested | Firebase, crash reporting, bytecode instrumentation, SDK startup providers |
 | Release/toolchain matrix | Limited APK/AAB packaging tests | R8/resource shrinking (currently rejected), AGP versions, configuration cache, Android API/ABI matrix |
 
