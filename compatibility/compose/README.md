@@ -5,11 +5,12 @@ An independent, two-screen Kotlin app with one ordinary `ComponentActivity` and 
 compiler 2.2.21, Material3 1.3.2, Activity Compose 1.10.1, Navigation Compose 2.8.9,
 AndroidX Hilt Navigation Compose 1.2.0 and Hilt 2.57.2, using kapt.
 
-Both packaging modes passed the checks below on API 36.1.
+Both packaging modes passed the checks below on API 29 and API 36.1.
 On API 28, normal packaging passes, but shell startup fails: this dependency
 graph packages `libandroidx.graphics.path.so`, and Paravoid's native-library
 loading requires API 29+. This is a transitive native dependency, not a Hilt
-injection or saved-state failure. API 29 execution remains unverified here.
+injection or saved-state failure. The [API 29 boundary run](../API29.md) passes
+without changing the dependency graph or the production runtime.
 
 ## Run
 

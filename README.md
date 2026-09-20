@@ -141,6 +141,8 @@ Context factories are not yet covered.
 The [JNI probe](compatibility/jni/README.md) verifies native dependencies and callbacks
 with APK-backed and extracted libraries. Native-bearing shell apps require API 29+;
 their native binaries remain installed APK content, not independently updated payloads.
+The [API 29 boundary suite](compatibility/API29.md) verifies Compose/Hilt lifecycle
+restoration and both JNI storage modes at that minimum API.
 The [network probe](compatibility/network/README.md) covers Retrofit/OkHttp,
 Gson/Moshi adapters, KSP, cancellation, caching and local HTTPS verification.
 Its pinned Moshi/KSP2 generated-qualifier limitation is explicitly documented;

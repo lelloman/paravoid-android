@@ -20,7 +20,7 @@ Only fixture app data is cleared.
 
 ## Evidence
 
-**104 passing device assertions** on API 36.1/debug, x86_64: 13 checks × two
+**104 passing device assertions on each of API 29 and API 36.1**, debug/x86_64: 13 checks × two
 packaging modes × two native storage modes × cold/restored processes.
 
 - JNI initialization during provider startup, before Application `onCreate`, and
@@ -69,8 +69,8 @@ The native-search-path constructor is available from **API 29**. Native-bearing
 shell apps must target a minimum of 29 or higher; runtime initialization rejects
 older devices with an explicit error. There is no build-time minimum-SDK check for
 native dependencies yet. Code-only application packaging retains its API 28 floor;
-this does not raise the minimum for every app. API 29 itself has not been
-device-tested in this batch.
+this does not raise the minimum for every app. The [API 29 boundary run](../API29.md)
+now verifies both native storage modes at that floor, with no further loader changes.
 
 ## Limits
 

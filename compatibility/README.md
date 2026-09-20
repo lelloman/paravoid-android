@@ -12,6 +12,11 @@ native-library guard due to transitive `libandroidx.graphics.path.so`. The basel
 found and fixed eager saved-state decoding before `onCreate`. Its runner reports explicit
 skips/omissions; newer-device evidence elsewhere is not implied to cover API 28.
 
+The [API 29 native-loading boundary](API29.md) passes Compose/Hilt/Navigation
+and all 104 JNI assertions in both packaging modes, including APK-backed and
+extracted libraries and process-death restoration. Other matrix rows are not
+implicitly verified on API 29.
+
 | Area | Evidence / status | Important remaining cases |
 | --- | --- | --- |
 | Java dependencies, annotations, generics, lambdas, ServiceLoader | Sample + `language` explicit/default discovery pass | Existing threads, shared pools, custom loaders |
