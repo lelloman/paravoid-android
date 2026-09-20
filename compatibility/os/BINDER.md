@@ -56,7 +56,7 @@ Use explicit service binding and normal Android threading/lifecycle rules. See
 [Android AIDL documentation](https://developer.android.com/develop/background-work/services/aidl)
 and [bound Service lifecycle](https://developer.android.com/develop/background-work/services/bound-services).
 
-## Limits
+## Binding Intent and Bundle coverage
 
 AIDL nested-Bundle coverage also passes on API 36.1 in both modes and all three
 connection stages: without explicit Bundle loaders, decoding the custom class
@@ -80,8 +80,11 @@ The driver now reinstalls the peer after installing each permission-defining
 target APK, so signature-permission install ordering is not mistaken for a
 payload failure.
 
+## Remaining limits
+
 Arbitrary Bundle graphs and Serializable values, target `android:process`,
-isolated services, foreground services, client death, large transactions,
+isolated services, client death, large transactions,
 file descriptors, concurrent load/backpressure, version-skewed contracts, release
 shrinking and other Android versions remain unvalidated. No remote payload update
 or ABI/schema migration is exercised.
+Foreground-service evidence is tracked separately in [FOREGROUND.md](FOREGROUND.md).

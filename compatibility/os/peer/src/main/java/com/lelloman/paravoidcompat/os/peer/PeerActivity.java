@@ -12,6 +12,31 @@ public final class PeerActivity extends Activity {
     private BinderClient binderClient;
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        if ("foreground".equals(getIntent().getStringExtra("scenario"))) {
+            android.widget.Button button = new android.widget.Button(this);
+            button.setText("Start foreground service");
+            boolean[] started = {false};
+            setContentView(button);
+            button.setOnClickListener(view -> {
+                try {
+                    Intent service = new Intent().setClassName(getIntent().getStringExtra("target"),
+                        "com.lelloman.paravoidcompat.os.ForegroundProbeService")
+                        .putExtra("foregroundParcel", new com.lelloman.paravoidcompat.os.contract.WireMessage(
+                            getIntent().getStringExtra("run"), 0, 0, "foreground", false));
+                    if (!started[0]) startForegroundService(service);
+                    else if (!stopService(service)) throw new IllegalStateException("Service was not running");
+                    started[0] = !started[0];
+                    button.setText(started[0] ? "Stop foreground service" : "Start foreground service");
+                } catch (Exception error) {
+                    getSharedPreferences("os-probe", MODE_PRIVATE).edit()
+                        .putString("foregroundPeerError", error.toString()).commit();
+                }
+            });
+            getSharedPreferences("os-probe", MODE_PRIVATE).edit()
+                .putString("foregroundReady", getIntent().getStringExtra("run"))
+                .putInt("foregroundPeerPid", android.os.Process.myPid()).commit();
+            return;
+        }
         if ("binder".equals(getIntent().getStringExtra("scenario"))) {
             binderClient = new BinderClient(this);
             binderClient.start();

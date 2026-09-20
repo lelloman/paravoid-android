@@ -8,7 +8,7 @@ without moving application libraries into the parent loader.
 | Area | Evidence / status | Important remaining cases |
 | --- | --- | --- |
 | Java dependencies, annotations, generics, lambdas, ServiceLoader | Sample + `language` explicit/default discovery pass | Existing threads, shared pools, custom loaders |
-| Application, provider, receiver, service startup | Sample + `hilt` probes; [Binder/AIDL](os/BINDER.md) cold cross-UID binding, typed Parcelables/callbacks, unbind/rebind and Binder death recovery pass | Direct boot, multiprocess, isolated/foreground services, client death and wire-version changes |
+| Application, provider, receiver, service startup | Sample + `hilt`; [Binder/AIDL](os/BINDER.md) binding Intents, explicit-loader Bundles and death recovery; [foreground dataSync](os/FOREGROUND.md) cold start, Intent redelivery and stop/restart pass | Direct boot, multiprocess, isolated services, other foreground types/timeouts, client death and wire-version changes |
 | Hilt plugin + Java annotation processing | `hilt`, pinned 2.57.2 | Fragments/Views, Hilt Workers, other versions |
 | Kotlin, kapt, KSP, Compose compiler, navigation | `compose` + `network` Moshi KSP-generated ordinary models pass | Moshi 1.15.2 generated qualifiers fail with pinned KSP2 in both modes; other processors/versions, deep links |
 | Saved state and real process death | `compose` navigation counters + `language` generated Parcelable/Serializable pass | Other object graphs, payload-version changes |

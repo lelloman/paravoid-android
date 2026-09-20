@@ -109,7 +109,11 @@ See [Android's activity-result requirements](https://developer.android.com/train
 ## Remaining coverage
 
 The [Binder/AIDL probe](BINDER.md) adds cross-UID cold service binding, typed
-Parcelables, callbacks, explicit unbind/rebind and service process-death recovery.
+Parcelables, binding Intents, nested Bundles, callbacks, explicit unbind/rebind and
+service process-death recovery. The [foreground Service probe](FOREGROUND.md)
+adds cold `dataSync` starts, notification/type checks, Parcelable Intent redelivery
+after process death and explicit stop/restart. Full device checks now require
+API 34+; all device evidence so far remains API 36.1.
 
 This does not yet prove revocation while a peer still holds an open descriptor,
 persistable grants or chooser flows. The last no-grant call proves access
