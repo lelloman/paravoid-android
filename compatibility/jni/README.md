@@ -67,10 +67,25 @@ the API floor. Split installation itself is not yet device-tested.
 
 The native-search-path constructor is available from **API 29**. Native-bearing
 shell apps must target a minimum of 29 or higher; runtime initialization rejects
-older devices with an explicit error. There is no build-time minimum-SDK check for
-native dependencies yet. Code-only application packaging retains its API 28 floor;
+older devices with an explicit error. Shell APK/AAB builds also validate AGP's
+merged native libraries and reject minSdk below 29, listing the library paths and
+suggesting a shell-flavor or defaultConfig minimum change. This includes transitive
+dependencies and respects `packaging.jniLibs.excludes`. It is conservative across
+ABIs: AGP merges libraries before final `ndk.abiFilters` filtering, so ABI filters
+alone do not bypass the check. It does not inspect
+arbitrary assets or prove native ABI/symbol compatibility. Normal packaging is
+unaffected. Code-only application packaging retains its API 28 floor;
 this does not raise the minimum for every app. The [API 29 boundary run](../API29.md)
 now verifies both native storage modes at that floor, with no further loader changes.
+
+Build-time validation regression evidence: 60 host tests and both plugin validators
+pass. TestKit covers code-only API 28, adding JNI after an up-to-date build,
+normal APK/AAB controls, shell APK/AAB rejection, shell-only minSdk 29 acceptance,
+transitive AAR libraries, exclusions and conservative ABI-filter behavior. The real
+Compose graph fails its retained minSdk 28 negative build and builds at shell
+minSdk 29; this JNI fixture also rebuilds successfully in both storage modes with
+artifact checks. No device rerun was needed for the build-only guard; device
+evidence above predates that guard.
 
 ## Limits
 

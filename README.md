@@ -186,8 +186,13 @@ This remains an entry-point and code-packaging experiment:
 - Resources, assets, Java resources, and native libraries follow ordinary AGP
   packaging into the installed APK. They are not independently updatable yet.
 - Native-bearing shells use installed native-library search paths on API 29+.
-  Older devices receive an explicit initialization error; there is not yet a
-  build-time minimum-SDK check for native dependencies. Code-only apps retain API 28+.
+  Shell APK/AAB builds reject minSdk below 29 when AGP's merged native output
+  contains libraries, including transitive dependencies. The error lists library
+  paths; set `minSdk 29` on the `paravoidAndroid` flavor or in `defaultConfig`.
+  Native-library exclusions are respected; the merged-artifact check conservatively
+  includes all ABIs, even those filtered out later by `ndk.abiFilters`.
+  Normal packaging is unaffected, and code-only shells retain API 28+. The runtime
+  guard remains as defense in depth.
 - The main sample uses Java and Android Views; a separate Compose/Hilt/Navigation
   fixture verifies Kotlin UI and process-death state restoration.
 - Extra Activities, Activity aliases, and component factories other than the

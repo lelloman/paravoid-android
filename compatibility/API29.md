@@ -59,5 +59,7 @@ The image was provisioned in an isolated temporary AVD, without modifying other 
 Not covered: other fixtures on API 29, release/R8, AAB/split installation, ARM or
 32-bit execution, 16 KiB pages, physical/OEM devices, arbitrary third-party native
 SDKs, native hot replacement or payload-version migration. The runtime API 29
-native-library floor is unchanged; native-bearing minSdk violations still lack a
-build-time diagnostic. API 28 code-only support is unchanged.
+native-library floor is unchanged. A subsequent build-time check now rejects
+native-bearing shell variants with minSdk below 29, before APK/AAB packaging;
+the Compose shell flavor now declares 29 while its normal flavor remains 28.
+API 28 code-only support is unchanged.

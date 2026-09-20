@@ -18,7 +18,11 @@ android {
     }
     productFlavors {
         normal { applicationIdSuffix '.normal' }
-        paravoidAndroid { applicationIdSuffix '.paravoid' }
+        paravoidAndroid {
+            applicationIdSuffix '.paravoid'
+            // Test-only override retains a reproducible negative build at API 28.
+            minSdk providers.gradleProperty('shellMinSdk').orElse('29').get().toInteger()
+        }
     }
     buildFeatures { compose true }
     compileOptions {

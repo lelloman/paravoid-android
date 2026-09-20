@@ -90,8 +90,10 @@ and pending runtime permission dialogs remain separate coverage.
 - Compose/Hilt was attempted: the pinned Compose graph includes a transitive native
   library, so it is outside the supported API 28 code-only shell subset. The normal
   control passes; shell Hilt/navigation/state behavior cannot be evaluated on this
-  image because initialization is rejected first. The driver remains a failing
-  reproducer on API 28; native dependency removal or bypass is not a validated fix.
+  image because initialization was rejected first. Subsequent build validation now
+  rejects native-bearing minSdk 28 shell builds; the fixture's shell flavor declares
+  29 (normal remains 28). See its README for the negative build reproducer. Native
+  dependency removal or bypass is not a validated fix.
 - Sample instrumentation, release
   APK/AAB installation, other ABIs and physical devices are outside this selected
   first pass. Their newer-device results must not be relabeled as API 28 evidence.

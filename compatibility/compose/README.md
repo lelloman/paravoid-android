@@ -6,11 +6,22 @@ compiler 2.2.21, Material3 1.3.2, Activity Compose 1.10.1, Navigation Compose 2.
 AndroidX Hilt Navigation Compose 1.2.0 and Hilt 2.57.2, using kapt.
 
 Both packaging modes passed the checks below on API 29 and API 36.1.
-On API 28, normal packaging passes, but shell startup fails: this dependency
+The earlier API 28 experiment passed normal packaging but failed shell startup: this dependency
 graph packages `libandroidx.graphics.path.so`, and Paravoid's native-library
 loading requires API 29+. This is a transitive native dependency, not a Hilt
 injection or saved-state failure. The [API 29 boundary run](../API29.md) passes
-without changing the dependency graph or the production runtime.
+without changing the dependency graph or the production runtime. Builds now catch
+this incompatibility: the shell flavor declares minSdk 29; normal remains 28.
+
+Retained negative build (expected failure naming `libandroidx.graphics.path.so`):
+
+```sh
+ANDROID_HOME=/path/to/Android/Sdk ./gradlew -p compatibility/compose \
+  assembleParavoidAndroidDebug -PshellMinSdk=28
+```
+
+`shellMinSdk` is a test-fixture override, not a Paravoid plugin option. Downstream
+apps set `android.productFlavors.paravoidAndroid.minSdk = 29` or raise defaultConfig.
 
 ## Run
 
@@ -26,8 +37,8 @@ runner, Kotlin classes or Hilt types are added to the shell. The script installs
 both fixture APKs, clears only their test data, taps real accessibility nodes and
 restores rotation settings. API 28 rotation uses system settings, not newer `wm`
 commands; launch readiness is checked by PID/state rather than a launcher draw wait.
-Running on API 28 intentionally still fails at shell startup; it is not skipped
-or counted as a successful compatibility run.
+The current shell APK cannot install on API 28; its historical runtime failure is
+now prevented by build-time validation and the declared minimum SDK.
 
 ## Checks
 

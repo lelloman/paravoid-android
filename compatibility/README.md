@@ -7,8 +7,10 @@ without moving application libraries into the parent loader.
 
 The [API 28 baseline](API28.md) additionally verifies selected OS, Binder,
 language, Views, Room/WorkManager and networking scenarios on Android 9, in both
-packaging modes. Compose passes normally there but its shell fails the API 29+
-native-library guard due to transitive `libandroidx.graphics.path.so`. The baseline
+packaging modes. Compose passed normally there but its shell failed the API 29+
+native-library guard due to transitive `libandroidx.graphics.path.so`. Builds now
+reject native-bearing shell variants below minSdk 29; the Compose shell flavor
+declares 29 while normal remains 28. The baseline
 found and fixed eager saved-state decoding before `onCreate`. Its runner reports explicit
 skips/omissions; newer-device evidence elsewhere is not implied to cover API 28.
 
