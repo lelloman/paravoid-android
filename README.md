@@ -313,6 +313,10 @@ Further independent probes exercise larger downstream stacks:
   Compose, themes, locale lookup and assets while keeping the installed app APK
   unchanged. This is fixture scaffolding, not automatic AGP resource splitting;
   the core plugin still packages resources in the installed APK.
+- [Direct Boot](compatibility/direct-boot/README.md): real PIN-locked reboot loads
+  the payload Application/receiver and delivers an alarm before unlock. Both modes
+  verify DE storage, CE rejection and deferred initialization after unlock on
+  API 36.1; third-party library startup remains separate coverage.
 
 ```sh
 ./gradlew :paravoid-gradle-plugin:test :paravoid-gradle-plugin:validatePlugins \

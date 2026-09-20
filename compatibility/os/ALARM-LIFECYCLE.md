@@ -120,6 +120,10 @@ storage before unlock. The app has been launched once before reboot and is not
 force-stopped as a test precondition. The driver does not set standby buckets;
 restricted-bucket boot policies are not separately exercised.
 
+The separate [Direct Boot fixture](../direct-boot/README.md) tests actual PIN-locked
+startup, device-protected preferences and a pre-unlock alarm. Its minimal startup
+stack does not imply that this OS fixture's dependencies are Direct-Boot compatible.
+
 Android documents that exact-alarm revocation removes pending exact alarms and
 that the grant broadcast requires a fresh access check; see the
 [AlarmManager permission-state contract](https://developer.android.com/reference/android/app/AlarmManager#ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED).

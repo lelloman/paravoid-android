@@ -51,6 +51,26 @@ AVD only. No account credentials or user PINs are requested.
    logcat events because credential-backed `run-as` working directories need not
    be accessible. Log tokens, boot identity and count checks reject stale results.
 
+## Verification evidence
+
+API 36.1 x86_64/debug: both normal and shell pass the locked boot/alarm stage and
+the real PIN-unlock/deferred-initialization stage (four PASS reports). Both variant
+lint tasks and seven device-free assertion-guard tests pass. No production runtime
+or plugin changes were required. This evidence does not extend to other APIs,
+ABIs or library startup stacks.
+
+## Fixture finding: boot broadcasts during setup
+
+On a repeat run, the normal control received BOOT_COMPLETED after leaving the
+stopped state during preparation, before the intended test reboot. Android
+[documents this behavior starting in Android 15](https://developer.android.com/about/versions/15/behavior-changes-all#stopped-state).
+Counting those setup events together with the next boot incorrectly reported
+duplicate initialization. Observations now reset on boot-count changes and the
+host filters by run token **and** current boot. Setup deliberately performs one
+credential initialization before reboot, making this counter-reset regression
+deterministic. Within the tested boot, duplicates are still rejected; the
+initializer remains deduplicated per boot rather than per callback.
+
 ## Integration requirements and limits
 
 The installed manifest must declare RECEIVE_BOOT_COMPLETED and mark the receiver
