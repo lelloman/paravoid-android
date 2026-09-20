@@ -12,5 +12,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Fixture-only adb control; never a production integration requirement. -->
+        <receiver android:name=".StressControl" android:exported="true" />
     </application>
 </manifest>
