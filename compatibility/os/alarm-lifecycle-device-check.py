@@ -109,7 +109,14 @@ def reboot():
             cases.append((mode, app, run, scheduled))
             kill_target(app, scheduled['pid'])
         old_boot = adb('shell', 'cat', '/proc/sys/kernel/random/boot_id')
-        adb('reboot')
+        for _, app, _, _ in cases:
+            state = adb('shell', 'dumpsys', 'package', app)
+            assert re.search(r'User 0:.*stopped=false.*notLaunched=false', state), state
+        # A framework reboot flushes package/usage state. Direct `adb reboot`
+        # immediately after pm clear/first launch can race those asynchronous writes.
+        # The shell transport can disappear before svc returns; boot ID below
+        # proves acceptance instead of relying on its exit status.
+        adb('shell', 'svc', 'power', 'reboot', check=False)
         deadline = time.monotonic() + 180
         while time.monotonic() < deadline:
             if adb('shell', 'getprop', 'sys.boot_completed', check=False) == '1':
@@ -122,6 +129,8 @@ def reboot():
         adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
         adb('shell', 'wm', 'dismiss-keyguard')
         for mode, app, run, scheduled in cases:
+            state = adb('shell', 'dumpsys', 'package', app)
+            assert re.search(r'User 0:.*stopped=false.*notLaunched=false', state), state
             restored = wait_for('BOOT_COMPLETED receiver', lambda: event(app, 'lifecycleRecovered', run))
             assert restored['action'] == 'android.intent.action.BOOT_COMPLETED', restored
             assert restored['noActivity'] and restored['boot'] > scheduled['boot'], restored

@@ -33,10 +33,12 @@ the API 28/29 or general OS runner.
   idle is released, then deliver, with the device subsequently confirmed ACTIVE.
   No whitelist or quota configuration is changed.
 - **Reboot:** persist a desired wall-clock due time and register an alarm in each
-  packaging mode; kill both scheduling processes and reboot once. Verify a changed
+  packaging mode; kill both scheduling processes and perform a framework-managed
+  reboot (`svc power reboot`). Verify a changed
   kernel boot ID and increased Android boot count. Real BOOT_COMPLETED delivery
   loads each payload without a user Activity and reconstructs an elapsed-time
   alarm from the persisted wall deadline. Observe both post-boot deliveries.
+  Assert that both packages are launched/not stopped before and after reboot.
 
 The fixture deliberately owns persistence and rescheduling: Paravoid does not
 provide an alarm database. The reboot example imposes a ten-second minimum delay
@@ -55,6 +57,15 @@ the alarm is pending and absent while forced idle remains active, timestamps the
 release command, requires delivery after that timestamp, and confirms ACTIVE.
 It still requires the allow-while-idle callback to observe idle=true.
 
+An initial immediate `adb reboot` run delivered BOOT_COMPLETED to the normal
+package but not the shell package, with no shell startup/crash. The receiver and
+permission were installed correctly. A package-state persistence race after
+`pm clear`/first launch is a hypothesis, not an established Paravoid defect. The
+driver now uses the ordinary framework shutdown path and explicitly checks
+package stopped/not-launched flags on both sides of reboot. It tolerates the adb
+transport closing during `svc` and verifies the changed boot ID instead. Abrupt
+reboot/power-loss durability is not covered by this test.
+
 Five device-free assertion tests guard active-alarm parsing against historical
 records and other packages, stale run tokens, fixture errors, duplicate delivery,
 and missing cold-entry/Parcelable/loader checks:
@@ -62,6 +73,14 @@ and missing cold-entry/Parcelable/loader checks:
 ```sh
 python3 -m unittest discover -s compatibility/os -p test_alarm_lifecycle_driver.py
 ```
+
+## Verification evidence
+
+API 36.1 x86_64/debug: revocation/recovery, forced deep-idle delivery/deferral and
+framework-managed reboot/rescheduling each pass in normal and shell packaging
+(six PASS reports). Both variant lint tasks, the five host assertion-guard
+tests and all four basic-alarm regression cases pass. No production runtime or Gradle plugin change was needed. Other OS
+versions/ABIs are not implied by this evidence.
 
 ## Requirements and boundaries
 
@@ -71,7 +90,8 @@ accepts genuine system broadcasts; there is no fixture-side synthetic dispatch.
 The desired schedule uses credential-protected preferences: this tests ordinary
 BOOT_COMPLETED after unlock, **not** Direct Boot/LOCKED_BOOT_COMPLETED or encrypted
 storage before unlock. The app has been launched once before reboot and is not
-force-stopped or in a restricted bucket as a test precondition.
+force-stopped as a test precondition. The driver does not set standby buckets;
+restricted-bucket boot policies are not separately exercised.
 
 Android documents that exact-alarm revocation removes pending exact alarms and
 that the grant broadcast requires a fresh access check; see the

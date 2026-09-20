@@ -49,8 +49,13 @@ check access and handle denial rather than copy this intentional exception probe
 See Android's [alarm scheduling guide](https://developer.android.com/develop/background-work/services/alarms)
 and [AlarmManager contract](https://developer.android.com/reference/android/app/AlarmManager).
 
-This is an awake-emulator functional test, not an exact wall-clock latency or
+The [lifecycle extension](ALARM-LIFECYCLE.md) additionally verifies pending-alarm
+revocation/regrant, forced deep idle and framework-managed reboot/rescheduling in
+both modes on API 36.1. It documents the idle-exit observation race and an
+unresolved immediate-reboot observation separately.
+
+The basic test above is an awake-emulator functional test, not an exact wall-clock latency or
 infinite non-delivery guarantee. It does not cover inexact/repeating alarms, RTC
-clock changes, OnAlarmListener, Doze/standby quotas, allow-while-idle/alarm-clock
-APIs, revocation with pending alarms, permission UI, reboot/boot rescheduling,
+clock changes, OnAlarmListener, Doze/standby quotas, alarm-clock
+APIs, permission UI, Direct Boot or abrupt-power-loss recovery,
 force-stop semantics, payload updates, OEM devices, release/R8 or other ABIs.
