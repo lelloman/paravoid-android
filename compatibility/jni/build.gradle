@@ -1,0 +1,27 @@
+plugins { id 'com.lelloman.paravoid' }
+def legacyNative = providers.gradleProperty('nativeLegacyPackaging').getOrElse('false').toBoolean()
+android {
+    namespace 'com.lelloman.paravoidcompat.jni'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.lelloman.paravoidcompat.jni.' + (legacyNative ? 'extracted' : 'archive')
+        minSdk 28
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+        ndk { abiFilters 'x86_64', 'arm64-v8a' }
+    }
+    productFlavors {
+        normal { applicationIdSuffix '.normal' }
+        paravoidAndroid { applicationIdSuffix '.paravoid' }
+    }
+    packaging { jniLibs { useLegacyPackaging = legacyNative } }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+dependencies {
+    implementation project(':paravoid-runtime')
+    implementation project(':native-library')
+}
