@@ -1,0 +1,70 @@
+plugins {
+    id 'com.lelloman.paravoid'
+    id 'org.jetbrains.kotlin.android' version '2.2.21'
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.2.21'
+}
+android {
+    namespace 'com.lelloman.paravoidcompat.resources'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.lelloman.paravoidcompat.resources'
+        minSdk 30
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+    }
+    productFlavors {
+        normal { applicationIdSuffix '.normal' }
+        paravoidAndroid { applicationIdSuffix '.paravoid' }
+    }
+    buildFeatures { compose true }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    kotlinOptions { jvmTarget = '11' }
+    sourceSets.main.java.srcDir(layout.buildDirectory.dir('resource-probe/java'))
+}
+dependencies {
+    implementation project(':paravoid-runtime')
+    implementation 'androidx.activity:activity-compose:1.10.1'
+    implementation 'androidx.compose.material3:material3:1.3.2'
+}
+
+// Experiment-only packaging. Production AGP resources are not split by the core plugin yet.
+def packs = tasks.register('resourcePacks') {
+    def output = layout.buildDirectory.dir('resource-probe')
+    inputs.dir('packs')
+    inputs.file(new File(android.sdkDirectory, 'build-tools/35.0.0/aapt2'))
+    inputs.file(new File(android.sdkDirectory, 'platforms/android-36/android.jar'))
+    outputs.dir(output)
+    doLast {
+        File root = output.get().asFile
+        root.mkdirs()
+        File generatedJava = new File(root, 'java')
+        generatedJava.mkdirs()
+        String aapt = new File(android.sdkDirectory, 'build-tools/35.0.0/aapt2').absolutePath
+        exec { commandLine aapt, 'compile', '--dir', file('packs/common/res'), '-o', new File(root, 'common.zip') }
+        Map hashes = [:]
+        ['A', 'B'].each { version ->
+            exec { commandLine aapt, 'compile', '--dir', file("packs/${version}/res"), '-o', new File(root, "${version}.zip") }
+            List command = [aapt, 'link', '-I', new File(android.sdkDirectory, 'platforms/android-36/android.jar'),
+                '--manifest', file('packs/AndroidManifest.xml'), '--package-id', '0x80',
+                '--emit-ids', new File(root, "${version}.ids"), '-A', file("packs/${version}/assets"),
+                '-o', new File(root, "${version}.apk"), new File(root, 'common.zip'), new File(root, "${version}.zip")]
+            if (version == 'A') command.addAll(['--java', generatedJava])
+            else command.addAll(['--stable-ids', new File(root, 'A.ids')])
+            exec { commandLine command }
+            hashes[version] = java.security.MessageDigest.getInstance('SHA-256').digest(new File(root, "${version}.apk").bytes).encodeHex().toString()
+        }
+        File trusted = new File(generatedJava, 'com/lelloman/paravoidcompat/resources/TrustedPacks.java')
+        trusted.parentFile.mkdirs()
+        trusted.text = """package com.lelloman.paravoidcompat.resources;
+public final class TrustedPacks {
+    public static final String A = "${hashes.A}";
+    public static final String B = "${hashes.B}";
+}
+"""
+    }
+}
+tasks.named('preBuild').configure { dependsOn(packs) }

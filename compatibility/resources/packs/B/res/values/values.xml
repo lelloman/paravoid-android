@@ -1,0 +1,6 @@
+<resources>
+    <string name="a_new">Added in B</string>
+    <string name="title">Resource payload B</string>
+    <color name="accent">#ff000099</color>
+    <color name="panel">#ffccccff</color>
+</resources>
