@@ -36,7 +36,13 @@ Initial execution found a driver portability issue: `am start -W` timed out for
 the short-lived FileProvider peer after its result was already persisted. The
 driver now launches without the draw wait and retains its bounded run-token/PID
 completion checks. This was reproduced in normal packaging, not a shell failure.
-Remaining execution evidence will be recorded after verification.
+The next run passed all 40 FileProvider/provider checks and the normal result
+cases, but exposed a shell process-death failure: Android 9's
+`Activity.performCreate` calls `restoreHasCurrentPermissionRequest` before user
+`onCreate`. Reading its Boolean eagerly unmarshals the entire saved-state root,
+including payload-only `ProbeParcel`, using the installed shell loader. The
+existing pre-`onCreate` repair is therefore too late. This is a real API 28
+regression reproducer; results are not yet a passing baseline.
 
 ## Explicit omissions
 
