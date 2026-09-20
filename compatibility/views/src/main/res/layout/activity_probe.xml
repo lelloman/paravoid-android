@@ -1,0 +1,15 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical" android:paddingTop="48dp"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+    <Button android:id="@+id/advance" android:text="Advance"
+        android:layout_width="match_parent" android:layout_height="48dp" />
+    <Button android:id="@+id/recreate" android:text="Recreate"
+        android:layout_width="match_parent" android:layout_height="48dp" />
+    <Button android:id="@+id/back" android:text="Pop back stack"
+        android:layout_width="match_parent" android:layout_height="48dp" />
+    <androidx.fragment.app.FragmentContainerView android:id="@+id/root_fragment"
+        android:name="com.lelloman.paravoidcompat.views.RootFragment" android:tag="root"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
+    <androidx.fragment.app.FragmentContainerView android:id="@+id/detail"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
+</LinearLayout>

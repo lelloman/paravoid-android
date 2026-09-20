@@ -1,0 +1,14 @@
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <data><variable name="model" type="com.lelloman.paravoidcompat.views.ProbeModel" /></data>
+    <LinearLayout android:orientation="vertical"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+        <EditText android:id="@+id/editor" android:inputType="text" android:importantForAutofill="no"
+            android:text="@={model.text}" android:contentDescription="Bound editor"
+            android:layout_width="match_parent" android:layout_height="48dp" />
+        <TextView android:id="@+id/echo" app:probeText="@{model.text}"
+            android:layout_width="match_parent" android:layout_height="48dp" />
+        <com.lelloman.paravoidcompat.views.StatefulView android:id="@+id/custom"
+            app:seed="5" android:layout_width="match_parent" android:layout_height="48dp" />
+    </LinearLayout>
+</layout>

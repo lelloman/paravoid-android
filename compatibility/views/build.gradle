@@ -1,0 +1,28 @@
+plugins { id 'com.lelloman.paravoid' }
+android {
+    namespace 'com.lelloman.paravoidcompat.views'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.lelloman.paravoidcompat.views'
+        minSdk 28
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+    }
+    productFlavors {
+        normal { applicationIdSuffix '.normal' }
+        paravoidAndroid { applicationIdSuffix '.paravoid' }
+    }
+    buildFeatures { viewBinding true; dataBinding true }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+dependencies {
+    implementation project(':paravoid-runtime')
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.fragment:fragment:1.8.5'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-savedstate:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-livedata:2.8.7'
+}

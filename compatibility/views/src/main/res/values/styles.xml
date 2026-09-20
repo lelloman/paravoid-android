@@ -1,0 +1,4 @@
+<resources>
+    <style name="ProbeTheme" parent="Theme.AppCompat.Light.NoActionBar" />
+    <declare-styleable name="StatefulView"><attr name="seed" format="integer" /></declare-styleable>
+</resources>
