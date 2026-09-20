@@ -33,6 +33,7 @@ Verified on the image above, normal **and** shell packaging:
 | Binder / AIDL | Cold bind, explicit rebind and automatic death recovery pass; binding Parcelables and both nested-Bundle controls pass at every connection |
 | Language / discovery | 64 assertions pass, including generated Parcelable and Serializable process-death restoration |
 | Views / fragments | 170 assertions plus lifecycle identity checks pass |
+| Compose / Navigation / Hilt | Normal passes rotation/navigation/process death; shell startup fails the API 29+ native-library guard because the APK includes `libandroidx.graphics.path.so` |
 
 Host regression suite: 58 tests and plugin validation pass; OS fixture lint passes.
 With the fix, API 36.1 also passed all 8 result scenarios, 64 language assertions
@@ -81,7 +82,12 @@ and pending runtime permission dialogs remain separate coverage.
 - Notification and foreground drivers currently target API 33+/34+ permission
   and service-type policies. Those drivers are not run here; notifications and
   foreground Services themselves are not unsupported merely because API 28 is old.
-- Compose/Hilt, Room/WorkManager, networking, sample instrumentation, release
+- Compose/Hilt was attempted: the pinned Compose graph includes a transitive native
+  library, so it is outside the supported API 28 code-only shell subset. The normal
+  control passes; shell Hilt/navigation/state behavior cannot be evaluated on this
+  image because initialization is rejected first. The driver remains a failing
+  reproducer on API 28; native dependency removal or bypass is not a validated fix.
+- Room/WorkManager, networking, sample instrumentation, release
   APK/AAB installation, other ABIs and physical devices are outside this selected
   first pass. Their newer-device results must not be relabeled as API 28 evidence.
 

@@ -6,6 +6,10 @@ compiler 2.2.21, Material3 1.3.2, Activity Compose 1.10.1, Navigation Compose 2.
 AndroidX Hilt Navigation Compose 1.2.0 and Hilt 2.57.2, using kapt.
 
 Both packaging modes passed the checks below on API 36.1.
+On API 28, normal packaging passes, but shell startup fails: this dependency
+graph packages `libandroidx.graphics.path.so`, and Paravoid's native-library
+loading requires API 29+. This is a transitive native dependency, not a Hilt
+injection or saved-state failure. API 29 execution remains unverified here.
 
 ## Run
 
@@ -15,10 +19,14 @@ ANDROID_HOME=/path/to/Android/Sdk ANDROID_SERIAL=emulator-5592 \
   bash compatibility/compose/check.sh --device
 ```
 
-Device checks need Python 3.8+, adb and a dedicated, unlocked API 36.1 emulator
+Device checks need Python 3.8+, adb and a dedicated, unlocked emulator
 with sufficient free storage. Do not share it with other UI test runs. No test
 runner, Kotlin classes or Hilt types are added to the shell. The script installs
-both fixture APKs, taps real accessibility nodes and restores rotation settings.
+both fixture APKs, clears only their test data, taps real accessibility nodes and
+restores rotation settings. API 28 rotation uses system settings, not newer `wm`
+commands; launch readiness is checked by PID/state rather than a launcher draw wait.
+Running on API 28 intentionally still fails at shell startup; it is not skipped
+or counted as a successful compatibility run.
 
 ## Checks
 

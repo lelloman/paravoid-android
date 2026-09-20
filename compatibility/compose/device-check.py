@@ -57,7 +57,9 @@ def tap(label):
 
 
 def launch(app, launcher):
-    return adb("shell", "am", "start", "-W", "-a", "android.intent.action.MAIN", "-c",
+    # The shell's short-lived launcher need not report a drawn window on API 28.
+    # State/PID assertions below establish readiness instead.
+    return adb("shell", "am", "start", "-a", "android.intent.action.MAIN", "-c",
                "android.intent.category.LAUNCHER", "-f", "0x10200000", "-n", f"{app}/{launcher}")
 
 
@@ -84,9 +86,12 @@ def check_mode(mode):
     apk = ROOT / f"build/outputs/apk/{mode}/debug/compose-compatibility-{mode}-debug.apk"
     packaging(apk, shell)
     adb("install", "-r", str(apk))
-    adb("shell", "am", "force-stop", app)
+    # Only this dedicated fixture's data; make repeated runs independent.
+    adb("shell", "pm", "clear", app)
     launch(app, launcher)
-    first = state(app, route="list", count=0, local=0, pid=int(adb("shell", "pidof", app)))
+    pid = wait_for("launched process", lambda: adb("shell", "pidof", app, check=False))
+    assert pid.isdecimal(), pid
+    first = state(app, route="list", count=0, local=0, pid=int(pid))
     assert first["resource"] == "Compose resource lookup"
     tap("Increment")
     listing = state(app, route="list", count=1, local=1)
@@ -96,9 +101,9 @@ def check_mode(mode):
     for count in (1, 2):
         tap("Increment")
         detail = state(app, route="detail", count=count, local=count)
-    current_rotation = adb("shell", "dumpsys", "window", "displays")
-    current = int(re.search(r"mRotation=(\d)", current_rotation).group(1))
-    adb("shell", "wm", "user-rotation", "lock", "1" if current == 0 else "0")
+    # API 28 has neither `wm user-rotation` nor the newer display dump format.
+    current = adb("shell", "settings", "get", "system", "user_rotation")
+    adb("shell", "settings", "put", "system", "user_rotation", "1" if current == "0" else "0")
     rotated = wait_for("rotation recreates Activity", lambda: (r if (r := report(app)).get("activity") != detail["activity"] else None))
     assert all(rotated[k] == detail[k] for k in ("route", "count", "local", "model", "graph", "pid")), rotated
     # Kill only this debuggable app's validated PID after saving state, preserving its task.
