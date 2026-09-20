@@ -8,14 +8,18 @@ import dalvik.system.InMemoryDexClassLoader
 import org.json.JSONObject
 
 class ProbeApplication : ParavoidAndroidApplication() {
+    init { constructorResult = outcome { check(Probes.discovery()) } }
     override fun onCreate() {
         super.onCreate()
         mainResult = outcome { check(Probes.discovery()) }
     }
-    companion object { var mainResult = "not run" }
+    companion object {
+        var mainResult = "not run"
+        var constructorResult = "not run"
+    }
 }
 
-private fun outcome(block: () -> Unit): String = try {
+internal fun outcome(block: () -> Unit): String = try {
     block(); "PASS"
 } catch (error: Throwable) {
     android.util.Log.e("LanguageProbe", "Probe failure", error)
@@ -28,6 +32,8 @@ class ProbeActivity : Activity() {
         super.onCreate(state)
         run = state?.getString("run") ?: intent.getStringExtra("probeRun") ?: "manual"
         val results = JSONObject().put("service.applicationMain", ProbeApplication.mainResult)
+            .put("service.applicationConstructor", ProbeApplication.constructorResult)
+            .put("service.provider", ProbeProvider.result)
         results.put("state.payloadObjects", outcome {
             if (state != null) {
                 check(state.getParcelable<ParcelModel>("parcel") == ParcelModel(run, listOf(8, 9)))

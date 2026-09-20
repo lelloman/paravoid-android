@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:name=".ProbeApplication" android:label="Paravoid Language Probe"
         android:theme="@android:style/Theme.Material.Light.NoActionBar" android:allowBackup="false">
+        <provider android:name=".ProbeProvider" android:authorities="${applicationId}.probe" android:exported="false" />
         <activity android:name=".ProbeActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" /></intent-filter>

@@ -70,7 +70,7 @@ def check_mode(mode):
     assert restored["restored"] is True, restored
     failures = []
     for stage, value in (("cold", cold), ("restored", restored)):
-        assert len(value["results"]) == 14, value
+        assert len(value["results"]) == 16, value
         for name, result in value["results"].items():
             print(f"{mode} {stage} {name}: {result}", flush=True)
             if result != "PASS": failures.append((mode, stage, name, result))
@@ -87,7 +87,7 @@ if __name__ == "__main__":
             failures.extend(check_mode(mode))
         if failures:
             raise AssertionError(f"{len(failures)} failed checks: {failures}")
-        print("PASS: 14 checks in each mode, before and after process death (56 assertions).")
+        print("PASS: 16 checks in each mode, before and after process death (64 assertions).")
     except Exception:
         print(adb("logcat", "-d", "-s", "AndroidRuntime:E", "ParavoidAndroid:E", "LanguageProbe:E"))
         raise

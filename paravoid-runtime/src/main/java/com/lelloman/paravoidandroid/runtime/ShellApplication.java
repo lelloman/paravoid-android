@@ -26,6 +26,9 @@ public final class ShellApplication extends Application {
         try {
             ModuleBundle bundle = ModuleBundle.read(getAssets().open("paravoid/module.zip"), Build.VERSION.SDK_INT);
             payloadLoader = bundle.createClassLoader(super.getClassLoader());
+            // Library discovery defaults to this loader; newly created threads inherit it.
+            // Set it before user constructors and provider initialization, not just onCreate.
+            Thread.currentThread().setContextClassLoader(payloadLoader);
             metadata = getPackageManager().getApplicationInfo(getPackageName(), android.content.pm.PackageManager.GET_META_DATA).metaData;
             String name = metadata.getString("paravoid.application");
             if (name != null) {
