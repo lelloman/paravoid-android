@@ -96,7 +96,7 @@ def check_mode(mode):
     snapshots.append(("back-stack-popped", stage(2, 2)))
     failures = []
     for name, snapshot in snapshots:
-        assert len(snapshot["results"]) == 12, snapshot
+        assert len(snapshot["results"]) == 16, snapshot
         for test, result in snapshot["results"].items():
             print(f"{mode} {name} {test}: {result}", flush=True)
             if result != "PASS": failures.append((mode, name, test, result))
@@ -113,7 +113,7 @@ if __name__ == "__main__":
             failures.extend(check_mode(mode))
         if failures:
             raise AssertionError(f"{len(failures)} failed checks: {failures}")
-        print("PASS: 12 checks x 5 lifecycle stages x 2 packaging modes (120 assertions).")
+        print("PASS: 16 checks x 5 lifecycle stages x 2 packaging modes (160 assertions).")
     except Exception:
-        print(adb("logcat", "-d", "-s", "AndroidRuntime:E", "ParavoidAndroid:E"))
+        print(adb("logcat", "-d", "-s", "AndroidRuntime:E", "ParavoidAndroid:E", "ViewsProbe:E"))
         raise

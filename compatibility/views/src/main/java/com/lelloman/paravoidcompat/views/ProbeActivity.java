@@ -53,6 +53,7 @@ public final class ProbeActivity extends AppCompatActivity {
             root.binding.executePendingBindings();
             String expected = phase == 0 ? "initial" : "edited";
             JSONObject results = new JSONObject();
+            InflationProbes.run(this, results);
             check(results, "viewBinding", binding.rootFragment == findViewById(R.id.root_fragment));
             check(results, "xml.fragment", root.isAdded() && root.getView() != null);
             check(results, "appcompat.inflater", root.binding.editor instanceof AppCompatEditText);
