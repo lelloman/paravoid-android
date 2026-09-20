@@ -185,6 +185,45 @@ class ApplicationPackagingTest {
         assertFalse(new File(root, 'app/build/intermediates/merged_manifest/paravoidAndroidDebug/prepareParavoidAndroidDebugParavoidManifest/AndroidManifest.xml').text.contains('paravoid.application'))
     }
 
+    @Test void rejectsNativeApi28OnlyForShellAndTracksAddedLibraries() {
+        File root = fixture()
+        run(root, ':app:assembleParavoidAndroidDebug').build()
+        // Introducing JNI after a successful code-only build must invalidate validation.
+        write(root, 'app/src/main/jniLibs/x86_64/libfixture.so', 'packaging-only native fixture')
+        run(root, ':app:assembleNormalDebug', ':app:bundleNormalRelease').build()
+        [':app:assembleParavoidAndroidDebug', ':app:bundleParavoidAndroidRelease'].each { task ->
+            String output = run(root, task).buildAndFail().output
+            assertTrue(output, output.contains('native libraries require minSdk >= 29'))
+            assertTrue(output, output.contains('libfixture.so'))
+            assertTrue(output, output.contains('paravoidAndroid flavor'))
+        }
+        new File(root, 'app/build.gradle') << '\nandroid.productFlavors.paravoidAndroid.minSdk = 29\n'
+        run(root, ':app:assembleParavoidAndroidDebug', ':app:bundleParavoidAndroidRelease').build()
+        assertEquals(TaskOutcome.UP_TO_DATE, run(root, ':app:assembleParavoidAndroidDebug').build()
+            .task(':app:validateParavoidAndroidDebugParavoidNativeLibraries').outcome)
+    }
+
+    @Test void detectsTransitiveAarNativeLibrariesAndRespectsExclusions() {
+        File root = fixture()
+        new File(root, 'settings.gradle') << "\ninclude ':nativeleaf', ':wrapper'\n"
+        ['nativeleaf', 'wrapper'].each { name ->
+            write(root, "${name}/build.gradle", "plugins { id 'com.android.library' }; android { namespace 'example.${name}'; compileSdk 36; defaultConfig { minSdk 28 } }")
+            write(root, "${name}/src/main/AndroidManifest.xml", '<manifest />')
+        }
+        write(root, 'nativeleaf/src/main/jniLibs/x86_64/libtransitive.so', 'packaging-only native fixture')
+        new File(root, 'wrapper/build.gradle') << "\ndependencies { api project(':nativeleaf') }\n"
+        new File(root, 'app/build.gradle') << "\ndependencies { implementation project(':wrapper') }\n"
+        String output = run(root, ':app:assembleParavoidAndroidDebug').buildAndFail().output
+        assertTrue(output, output.contains('native libraries require minSdk >= 29'))
+        assertTrue(output, output.contains('libtransitive.so'))
+        new File(root, 'app/build.gradle') << "\nandroid.packaging.jniLibs.excludes.add('**/libtransitive.so')\n"
+        run(root, ':app:assembleParavoidAndroidDebug').build()
+        new File(root, 'app/build.gradle') << "\nandroid.packaging.jniLibs.excludes.clear(); android.defaultConfig.ndk.abiFilters.add('arm64-v8a')\n"
+        // MERGED_NATIVE_LIBS precedes final ABI filtering; deliberately conservative.
+        assertTrue(run(root, ':app:assembleParavoidAndroidDebug').buildAndFail().output
+            .contains('ndk.abiFilters alone does not bypass it'))
+    }
+
     private File fixture() {
         File root = temporary.newFolder()
         File repo = new File(System.getProperty('paravoid.repo'))

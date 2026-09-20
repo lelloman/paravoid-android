@@ -20,6 +20,11 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             if (android.buildTypes.getByName(variant.buildType).minifyEnabled) throw new GradleException('ParavoidAndroid application packaging does not yet support shrinking.')
             if (android.compileOptions.coreLibraryDesugaringEnabled) throw new GradleException('ParavoidAndroid application packaging does not yet support core library desugaring.')
             String cap = variant.name.capitalize()
+            def nativeValidation = project.tasks.register("validate${cap}ParavoidNativeLibraries", ValidateNativeLibrariesTask) {
+                nativeLibraries.from(variant.artifacts.get(SingleArtifact.MERGED_NATIVE_LIBS.INSTANCE))
+                minSdk.set(variant.minSdk.apiLevel)
+                validationFile.set(project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/native-validation.txt"))
+            }
             def manifest = project.tasks.register("prepare${cap}ParavoidManifest", ApplicationManifestTask) {
                 outputManifest.set(project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/AndroidManifest.xml"))
                 payloadMetadata.set(project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/payload.properties"))
@@ -27,6 +32,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             variant.artifacts.use(manifest).wiredWithFiles({ it.inputManifest }, { it.outputManifest })
                 .toTransform(SingleArtifact.MERGED_MANIFEST.INSTANCE)
             def pack = project.tasks.register("package${cap}ParavoidApplication", PackageApplicationTask) {
+                dependsOn(nativeValidation)
                 metadata.set(manifest.flatMap { it.payloadMetadata })
                 minSdk.set(variant.minSdk.apiLevel)
                 d8Jar.set(components.sdkComponents.sdkDirectory.map { it.file("build-tools/${android.buildToolsVersion}/lib/d8.jar") })
