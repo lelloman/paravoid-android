@@ -21,10 +21,15 @@ public final class ProbeActivity extends ComponentActivity {
     }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        ProbeApplication.activityCreated = true;
         getSharedPreferences("os-probe", MODE_PRIVATE).edit()
             .putInt("activityPid", android.os.Process.myPid()).commit();
         run = getIntent().getStringExtra("probeRun");
         String scenario = getIntent().getStringExtra("scenario");
+        if ("alarmLifecycle".equals(scenario)) {
+            AlarmLifecycleReceiver.start(this, run, getIntent().getStringExtra("alarmMode"));
+            return;
+        }
         if ("alarm".equals(scenario)) {
             AlarmReceiver.schedule(this, run);
             return;

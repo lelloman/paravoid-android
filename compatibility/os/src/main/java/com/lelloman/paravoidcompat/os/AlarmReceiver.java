@@ -13,7 +13,7 @@ import org.json.JSONObject;
 
 /** Fixture-only alarm observations. Receiver delivery must not repair its own extras loader. */
 public final class AlarmReceiver extends BroadcastReceiver {
-    private static PendingIntent token(Context context, String run, String kind, String value) {
+    static PendingIntent token(Context context, String run, String kind, String value) {
         Intent intent = new Intent(context, AlarmReceiver.class)
             .setData(Uri.parse("paravoid-alarm://" + run + "/" + kind))
             .putExtra("run", run).putExtra("kind", kind)
@@ -71,6 +71,9 @@ public final class AlarmReceiver extends BroadcastReceiver {
             boolean memory = getClass().getClassLoader() instanceof dalvik.system.InMemoryDexClassLoader;
             result.put("run", run).put("pid", android.os.Process.myPid())
                 .put("at", SystemClock.elapsedRealtime())
+                .put("idle", context.getSystemService(android.os.PowerManager.class).isDeviceIdleMode())
+                .put("noActivity", !ProbeApplication.activityCreated)
+                .put("boot", android.provider.Settings.Global.getInt(context.getContentResolver(), "boot_count", -1))
                 .put("parcel", parcel != null && (kind + "-λ-" + run).equals(parcel.value))
                 .put("loader", memory == context.getPackageName().endsWith(".paravoid"));
         } catch (Exception error) {
