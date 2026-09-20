@@ -25,6 +25,10 @@ public final class ProbeActivity extends ComponentActivity {
             .putInt("activityPid", android.os.Process.myPid()).commit();
         run = getIntent().getStringExtra("probeRun");
         String scenario = getIntent().getStringExtra("scenario");
+        if ("alarm".equals(scenario)) {
+            AlarmReceiver.schedule(this, run);
+            return;
+        }
         if ("result".equals(scenario)) {
             activityResults.start(state, run, getIntent().getBooleanExtra("cancel", false));
             return;
