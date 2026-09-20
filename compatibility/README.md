@@ -17,7 +17,7 @@ without moving application libraries into the parent loader.
 | Serialization/Parcelize compiler plugins, Kotlin reflection, dynamic proxies | [Language probe](language/README.md): 64 assertions pass, including background discovery | Other versions, reflection patterns, existing-thread loaders, R8 |
 | ViewBinding/DataBinding, XML custom views, fragments | [Views probe](views/README.md): 170 assertions, including process death, fragment back stack and configured-context inflation | Nested fragments, custom factories, Hilt injection, other Context factories/overrides |
 | Networking stacks and reflective adapters | Not tested | Retrofit/OkHttp, Gson/Moshi, coroutine execution, TLS |
-| Native libraries / JNI | Not tested | ABI packaging, System.loadLibrary, native callbacks |
+| Native libraries / JNI | [JNI probe](jni/README.md): 104 assertions, APK-backed/extracted libraries, dependencies and native-thread callbacks; requires API 29+ | ARM/32-bit execution, actual split installation, 16 KiB devices, third-party SDKs |
 | OS integration | Not tested | Permissions, activity results, notifications/PendingIntent, FileProvider, App Links |
 | Third-party SDKs and Gradle transforms | Not tested | Firebase, crash reporting, bytecode instrumentation, SDK startup providers |
 | Release/toolchain matrix | Limited APK/AAB packaging tests | R8/resource shrinking (currently rejected), AGP versions, configuration cache, Android API/ABI matrix |

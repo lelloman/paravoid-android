@@ -126,6 +126,9 @@ XML Views, fragment restoration and inflation from Application/configuration con
 Configuration contexts from the shell Application and default Activity implementation
 retain the payload loader; explicit Activity overrides are preserved, and other
 Context factories are not yet covered.
+The [JNI probe](compatibility/jni/README.md) verifies native dependencies and callbacks
+with APK-backed and extracted libraries. Native-bearing shell apps require API 29+;
+their native binaries remain installed APK content, not independently updated payloads.
 
 `sample-app` is one Android app with a custom `SampleApplication`, an ordinary
 `MainActivity`, and a native counter screen. Both generated packaging modes use
@@ -163,6 +166,9 @@ This remains an entry-point and code-packaging experiment:
 
 - Resources, assets, Java resources, and native libraries follow ordinary AGP
   packaging into the installed APK. They are not independently updatable yet.
+- Native-bearing shells use installed native-library search paths on API 29+.
+  Older devices receive an explicit initialization error; there is not yet a
+  build-time minimum-SDK check for native dependencies. Code-only apps retain API 28+.
 - The main sample uses Java and Android Views; a separate Compose/Hilt/Navigation
   fixture verifies Kotlin UI and process-death state restoration.
 - Extra Activities, Activity aliases, and component factories other than the
@@ -252,6 +258,8 @@ remains separate work.
 
 Further independent probes exercise larger downstream stacks:
 
+- [JNI and native libraries](compatibility/jni/README.md): CMake library dependencies,
+  provider startup, JNI callbacks and real process restart in both native storage modes.
 - [Views + bindings + fragments](compatibility/views/README.md): custom View state,
   two-way DataBinding, SavedStateHandle, restored back stacks and configuration contexts.
 - [Language and discovery](compatibility/language/README.md): Serialization/Parcelize
@@ -317,6 +325,7 @@ and payload-update compatibility remain future coverage.
 | `compatibility/resources` | Local resource-pack switching with public API 30+ loaders |
 | `compatibility/language` | Compiler plugins, reflection and implicit discovery probe |
 | `compatibility/views` | Bindings, custom Views, fragment state and configuration contexts |
+| `compatibility/jni` | Native dependencies, library discovery, callbacks and startup |
 
 The old `sample-shell` and `sample-standalone` source projects are replaced by
 generated flavors. The old module/shell plugins and `AppEntry` loader remain as
@@ -340,7 +349,8 @@ Multi-DEX bundles use `format=2` and `dexCount=N`, with contiguous entries
 per file and 64 MiB total uncompressed DEX, plus 4 KiB metadata. The reader rejects
 missing, duplicate, unexpected or noncontiguous entries and invalid counts/headers.
 All DEX buffers load together through one `InMemoryDexClassLoader`. Format 2 needs
-API 27+; application packaging still requires API 28+. Old shells reject format 2,
+API 27+; code-only application packaging requires API 28+ (native-bearing apps need
+API 29+). Old shells reject format 2,
 so multi-DEX support requires a shell update, not just a replacement payload.
 
 The reader validates metadata and size limits. The shell uses
@@ -360,7 +370,7 @@ the host application's privileges; this is not an isolation boundary.
    behavior, and supported Android versions beyond the current sample.
 2. Turn the independent-resource experiment into automatic app/library resource
    packaging with stable-ID and installed-manifest contracts. Test broader library
-   cases: Hilt Workers, Room migrations, custom views and native dependencies.
+   cases: Hilt Workers, Room migrations, networking adapters and third-party native SDKs.
 3. Define independently signed payloads and negative signature tests before accepting
    code from outside the APK. Sign with the product shell's signing key and verify
    against the installed shell certificate's public key; matching certificates
