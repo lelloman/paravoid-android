@@ -11,6 +11,21 @@ import java.nio.charset.StandardCharsets;
 public final class PeerActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        if ("result".equals(getIntent().getStringExtra("scenario"))) {
+            android.widget.Button button = new android.widget.Button(this);
+            button.setText("Return activity result");
+            setContentView(button);
+            getSharedPreferences("os-probe", MODE_PRIVATE).edit()
+                .putString("resultReady", getIntent().getStringExtra("run"))
+                .putInt("resultPeerPid", android.os.Process.myPid()).commit();
+            button.setOnClickListener(view -> {
+                if (getIntent().getBooleanExtra("cancel", false)) setResult(RESULT_CANCELED);
+                else setResult(RESULT_OK, new Intent().putExtra("run", getIntent().getStringExtra("run"))
+                    .putExtra("reply", "reply-λ").putExtra("uid", android.os.Process.myUid()));
+                finish();
+            });
+            return;
+        }
         if ("pending".equals(getIntent().getStringExtra("scenario"))) {
             android.app.PendingIntent pending = getIntent().getParcelableExtra("pending");
             android.widget.Button button = new android.widget.Button(this);

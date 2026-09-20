@@ -1,7 +1,7 @@
 # OS integration probe
 
-Pinned AndroidX Core 1.15.0, compile/target SDK 36, min SDK 28, Java 11.
-The target has one ordinary framework Activity and a manifest FileProvider.
+Pinned AndroidX Core 1.15.0 and Activity 1.10.1, compile/target SDK 36, min SDK 28,
+Java 11. The target has one ordinary ComponentActivity and a manifest FileProvider.
 The peer is a separate conventional APK/UID, with no Paravoid dependency or
 storage permissions. Its Activity does not count against the target's one-Activity
 rule. No instrumentation moves payload dependencies into the shell loader.
@@ -46,9 +46,7 @@ No special Paravoid adapter or production changes were needed for this scenario.
 The cold scenario uses `grantUriPermission`, not a persistable grant or a fresh
 Intent grant; that explicit grant is not tied to the original Activity lifetime.
 
-## Limits
-
-### Notification scenario
+## Notification scenario
 
 API 36.1/debug: both packaging modes pass. The initial reproducer passed normally
 but failed on shell cold Activity entry with `BadParcelableException` for
@@ -83,12 +81,38 @@ The content scenario deliberately creates a fresh task; existing-task
 `onNewIntent`, back-stack policies, mutable/RemoteInput tokens, services,
 notification action-button UI, reboot and payload updates are not covered.
 
-### Remaining coverage
+## AndroidX activity-result scenario
+
+API 36.1/debug: all **8 scenarios pass** (two packaging modes × success/cancel ×
+alive/process-death). No additional runtime adapter was needed beyond the existing
+Activity loader/saved-state hooks and the launch-Intent repair described above.
+
+`results-device-check.py` exercises `StartActivityForResult` with a separate-UID
+peer holding the result. It tests success (exact Unicode data/run token/peer UID)
+and cancellation (no data), each with an alive caller and after killing its
+verified stopped PID. The peer remains alive and returns through its UI button;
+the driver never relaunches the target to retrieve the result.
+
+The callback verifies the registry's delivery, caller recreation, a payload-only
+Parcelable restored from saved state, AndroidX's payload defining loader, exactly
+one callback and exactly one peer launch. The driver checks Application and
+Activity PIDs and that the callback/launch counts remain unchanged after delivery.
+This complements the original framework callback sharing tests, which still run.
+
+As in ordinary Android apps, registrations must be unconditional and ordered
+consistently on every recreation, before the Activity starts. Launch only for a
+new request; save any extra callback state separately. This fixture registers in
+field initialization and saves its checkpoint in `onSaveInstanceState`; it does
+not recover callback state from preferences. Preferences only report observations.
+See [Android's activity-result requirements](https://developer.android.com/training/basics/intents/result).
+
+## Remaining coverage
 
 This does not yet prove revocation while a peer still holds an open descriptor,
-persistable grants, chooser flows, AndroidX Activity Result
-contracts or results across process death. The last no-grant call proves access
+persistable grants or chooser flows. The last no-grant call proves access
 is denied after revocation, not that task completion alone would retain a grant.
 Runtime permissions, App Links, other Android
-versions and release builds remain separate coverage. This fixture intentionally
-uses the framework activity-result callback, not AndroidX's registry.
+versions and release builds remain separate coverage. Additional result contracts
+(camera, documents, permissions), Fragment-owned registries, multiple in-flight
+requests, peer process death, and pending results across payload-version changes
+are not covered by the `StartActivityForResult` scenarios.

@@ -13,4 +13,5 @@ fi
 if [[ ${1:-} == '--device' ]]; then
     python3 "$probe_dir/device-check.py"
     python3 "$probe_dir/notifications-device-check.py"
+    python3 "$probe_dir/results-device-check.py"
 fi

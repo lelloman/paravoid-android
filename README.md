@@ -336,7 +336,7 @@ and payload-update compatibility remain future coverage.
 | `compatibility/views` | Bindings, custom Views, fragment state and configuration contexts |
 | `compatibility/jni` | Native dependencies, library discovery, callbacks and startup |
 | `compatibility/network` | HTTP/HTTPS, Retrofit adapters, Moshi KSP, cancellation and caching |
-| [`compatibility/os`](compatibility/os/README.md) | Cross-UID FileProvider permissions and framework activity results |
+| [`compatibility/os`](compatibility/os/README.md) | Cross-UID FileProvider, cold notification PendingIntents and AndroidX result restoration |
 
 The old `sample-shell` and `sample-standalone` source projects are replaced by
 generated flavors. The old module/shell plugins and `AppEntry` loader remain as

@@ -52,11 +52,11 @@ def install(mode):
     return app
 
 
-def launch(app, mode, scenario, token):
+def launch(app, mode, scenario, token, *extras):
     launcher = ('com.lelloman.paravoidandroid.runtime.LauncherActivity' if mode == 'paravoidAndroid'
                 else 'com.lelloman.paravoidcompat.os.ProbeActivity')
     adb('shell', 'am', 'start', '-W', '-n', app + '/' + launcher,
-        '--es', 'scenario', scenario, '--es', 'probeRun', token)
+        '--es', 'scenario', scenario, '--es', 'probeRun', token, *extras)
 
 
 def prepare():

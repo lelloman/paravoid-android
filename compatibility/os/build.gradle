@@ -21,4 +21,5 @@ android {
 dependencies {
     implementation project(':paravoid-runtime')
     implementation 'androidx.core:core:1.15.0'
+    implementation 'androidx.activity:activity:1.10.1'
 }

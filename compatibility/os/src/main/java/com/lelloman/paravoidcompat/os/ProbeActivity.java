@@ -1,6 +1,6 @@
 package com.lelloman.paravoidcompat.os;
 
-import android.app.Activity;
+import androidx.activity.ComponentActivity;
 import android.content.ClipData;
 import android.content.Intent;
 import android.net.Uri;
@@ -11,7 +11,8 @@ import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 
-public final class ProbeActivity extends Activity {
+public final class ProbeActivity extends ComponentActivity {
+    private final ResultProbe activityResults = new ResultProbe(this);
     private final JSONObject results = new JSONObject();
     private Uri uri;
     private String run;
@@ -24,6 +25,10 @@ public final class ProbeActivity extends Activity {
             .putInt("activityPid", android.os.Process.myPid()).commit();
         run = getIntent().getStringExtra("probeRun");
         String scenario = getIntent().getStringExtra("scenario");
+        if ("result".equals(scenario)) {
+            activityResults.start(state, run, getIntent().getBooleanExtra("cancel", false));
+            return;
+        }
         if ("notification".equals(scenario)) {
             NotificationProbe.post(this, run);
             return;
@@ -64,6 +69,7 @@ public final class ProbeActivity extends Activity {
     }
     @Override protected void onActivityResult(int request, int code, Intent data) {
         super.onActivityResult(request, code, data);
+        if (request < 10 || request > 12) return;
         try {
             check("result_" + request, code == RESULT_OK && data != null && run.equals(data.getStringExtra("run")));
             check("cross_uid_" + request, data.getIntExtra("uid", -1) > 0
@@ -86,6 +92,10 @@ public final class ProbeActivity extends Activity {
     private void fail(Exception error) {
         try { results.put("error", error.toString()); } catch (Exception ignored) { }
         report();
+    }
+    @Override protected void onSaveInstanceState(Bundle state) {
+        super.onSaveInstanceState(state);
+        activityResults.save(state);
     }
     private void report() {
         getSharedPreferences("os-probe", MODE_PRIVATE).edit().putString("run", run)
