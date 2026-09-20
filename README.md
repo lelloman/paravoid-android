@@ -305,6 +305,9 @@ Further independent probes exercise larger downstream stacks:
 - [Hilt + WorkManager](compatibility/hilt-work/README.md): generated assisted
   factories and cold injected workers pass with lazy Application initialization
   using optional `paravoid-work`; opt-out retains the original shell failure.
+  The [stress extension](compatibility/hilt-work/STRESS.md) verifies a mixed
+  Hilt/ordinary-worker retry chain, Data propagation and active cancellation across
+  process death in both modes on API 36.1.
 - [Independent resources](compatibility/resources/README.md): an API 30+ experiment
   using separate, hash-pinned resource-only APKs and stable IDs. It tests Views,
   Compose, themes, locale lookup and assets while keeping the installed app APK
@@ -410,7 +413,7 @@ the host application's privileges; this is not an isolation boundary.
    behavior, and supported Android versions beyond the current sample.
 2. Turn the independent-resource experiment into automatic app/library resource
    packaging with stable-ID and installed-manifest contracts. Test broader library
-   cases: WorkManager retries/chains and foreground work, Room migrations, OS integration
+   cases: broader WorkManager DAGs/constraints and foreground work, Room migrations, OS integration
    and third-party native SDKs.
 3. Define independently signed payloads and negative signature tests before accepting
    code from outside the APK. Sign with the product shell's signing key and verify

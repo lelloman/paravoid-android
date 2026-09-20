@@ -60,7 +60,18 @@ not a delivery-time or background-quota guarantee.
   did not run. Five pure-Python tests ensure pruning cannot hide missing/changed
   parent state, unexpected work or a dependent that was never cancelled.
 
-## Limits
+## Verification evidence
+
+On an API 36.1 x86_64 emulator, debug normal and shell packaging each pass the
+retry chain and active-cancellation scenarios (four passing cases). Both observe
+the cancelled dependent being pruned on database reopen. Both variant lint tasks
+pass, as do the five cancellation-retention assertion tests and the five shared
+process-kill guard tests. The existing lazy Hilt/Room cold-worker regression also
+passes in both modes, with persistence across three PIDs. No production runtime
+or plugin change was required.
+These new scenarios have not yet been verified on API 28/29 or other ABIs.
+
+## Coverage limits
 
 This is a two-node sequential chain, one linear-backoff retry and active
 cancellation of its root. It does not prove exactly-once side effects, infinite

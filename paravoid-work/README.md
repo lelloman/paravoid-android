@@ -47,9 +47,14 @@ class lives only in the payload; disabling the plugin removes that adaptation.
 This is not arbitrary Application interface forwarding, a generic WorkManager
 version adapter, or a multiprocess integration. Hilt field injection still must
 finish before configuration is requested. Provider-time access before Application
-`onCreate`, retries/chains, foreground/periodic work, reboot, Kotlin worker
+`onCreate`, arbitrary work DAGs/changing constraints, foreground/periodic work, reboot, Kotlin worker
 generation, payload-version migration and other WorkManager versions are not
 established by the current probes.
+
+The [targeted stress probe](../compatibility/hilt-work/STRESS.md) verifies one
+linear-backoff retry across process death, a mixed Hilt/ordinary-worker chain with
+Data propagation, and active cancellation in both packaging modes on API 36.1.
+It also documents cancelled-dependent pruning; WorkInfo is not a permanent audit log.
 
 ## Verification
 

@@ -121,9 +121,15 @@ initialize only from an Activity would not satisfy that requirement. Configurati
 must set the injected factory; restoring the default initializer/default factory
 is not equivalent. The fixture uses the same source in both packaging modes.
 
+The separate [chain/retry/cancellation stress probe](STRESS.md) passes on API 36.1
+in both modes: a Hilt root retries across process death, passes Data to an ordinary
+reflectively constructed dependent, and retains successful state after restart.
+Active cancellation verifies `onStopped`, blocked-dependent cancellation and
+retained parent state after restart; cancelled dependents may be pruned.
+
 Still untested: provider-time WorkManager access before Application `onCreate`,
 Hilt `@ApplicationContext` use beyond this probe, Kotlin/kapt/KSP worker generation,
-CoroutineWorker, retries/backoff, chains, cancellation, periodic/foreground work,
+CoroutineWorker, broader retry policies/DAGs/constraints, periodic/foreground work,
 reboot, multiprocess, payload-version changes, release/R8, other OS/library versions
 and ABIs. Explicit initialization is not a fix for arbitrary libraries expecting
 interfaces on the real Application. WorkManager lazy lookup requires
