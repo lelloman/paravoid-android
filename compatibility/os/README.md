@@ -22,6 +22,11 @@ permission prompt. Only the named fixture packages are changed.
 
 ## Evidence and requirements
 
+The separate [AlarmManager probe](ALARMS.md) covers exact-alarm access denial,
+cold receiver delivery with payload Parcelables, same-token replacement and
+cancellation. Run its standalone driver on API 31+; it is not part of the older
+API baseline runners. Doze, reboot and permission UI remain separate coverage.
+
 API 36.1 x86_64/debug: **40 assertions pass**, 20 per packaging mode:
 
 The same 40 checks, all eight AndroidX result scenarios, and the Binder/Bundle

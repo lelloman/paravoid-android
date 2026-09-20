@@ -32,6 +32,14 @@ PendingIntent identity uses an explicit component and run/kind URI, not extras.
 The receiver records timestamps, PID, payload-classloader checks and per-kind
 delivery counts. Preferences are observations only, not a scheduling mechanism.
 
+## Verification evidence
+
+API 36.1 x86_64/debug: both packaging modes pass the denied-access case and the
+allowed cold-delivery/replacement/cancellation case (four PASS reports). Both
+variant lint tasks and the existing cold notification action/Activity regression
+pass. No production runtime or plugin changes were required.
+Other API levels and ABIs have not been verified for this probe.
+
 ## Requirements and limits
 
 Declare the receiver and any required permission in the installed manifest; shell
