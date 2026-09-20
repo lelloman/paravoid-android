@@ -1,0 +1,24 @@
+plugins { id 'com.lelloman.paravoid' }
+android {
+    namespace 'com.lelloman.paravoidcompat.os'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.lelloman.paravoidcompat.os'
+        minSdk 28
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+    }
+    productFlavors {
+        normal { applicationIdSuffix '.normal' }
+        paravoidAndroid { applicationIdSuffix '.paravoid' }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+dependencies {
+    implementation project(':paravoid-runtime')
+    implementation 'androidx.core:core:1.15.0'
+}
