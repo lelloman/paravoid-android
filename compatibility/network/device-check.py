@@ -4,19 +4,18 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import threading
 import time
 import uuid
 import xml.etree.ElementTree as ET
-from local_server import ProbeServer
+from local_server import running_server
 
 ROOT = Path(__file__).resolve().parent
 SERIAL = os.environ["ANDROID_SERIAL"]
 
 
-def adb(*args, check=True):
+def adb(*args, check=True, timeout=40):
     result = subprocess.run(["adb", "-s", SERIAL, *args], text=True,
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=40)
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
     if check and result.returncode:
         raise RuntimeError(f"adb {args}: {result.stdout}")
     return result.stdout.strip()
@@ -40,7 +39,7 @@ def prefs(app):
         return {}
 
 
-def check_mode(mode, server, port):
+def check_mode(mode, server, port, secure_server, secure_port):
     shell = mode == "paravoidAndroid"
     app = "com.lelloman.paravoidcompat.network." + ("paravoid" if shell else "normal")
     launcher = "com.lelloman.paravoidandroid.runtime.LauncherActivity" if shell else "com.lelloman.paravoidcompat.network.ProbeActivity"
@@ -49,10 +48,12 @@ def check_mode(mode, server, port):
     adb("shell", "pm", "clear", app)  # Dedicated fixture data only.
     token = str(uuid.uuid4())
     server.tokens.add(token)
+    secure_server.tokens.add(token)
     def launch():
         adb("shell", "am", "start", "-a", "android.intent.action.MAIN", "-c",
             "android.intent.category.LAUNCHER", "-f", "0x10200000", "-n", app + "/" + launcher,
-            "--es", "probeRun", token, "--es", "baseUrl", f"http://127.0.0.1:{port}/")
+            "--es", "probeRun", token, "--es", "baseUrl", f"http://127.0.0.1:{port}/",
+            "--es", "tlsUrl", f"https://127.0.0.1:{secure_port}/tls", "--es", "certificate", secure_server.certificate)
     def report():
         return json.loads(prefs(app).get("report", "{}"))
     try:
@@ -72,13 +73,14 @@ def check_mode(mode, server, port):
         assert restored["restored"] is True, restored
         failures = []
         for stage, snapshot in (("cold", cold), ("restored", restored)):
-            assert len(snapshot["results"]) == 16, snapshot
+            assert len(snapshot["results"]) == 19, snapshot
             for test, result in snapshot["results"].items():
                 print(f"{mode} {stage} {test}: {result}", flush=True)
                 if result != "PASS": failures.append((mode, stage, test, result))
             try:
                 server.audit(token, snapshot["pid"])
-                print(f"PASS {mode}/{stage}: server request audit", flush=True)
+                secure_server.audit(token, snapshot["pid"])
+                print(f"PASS {mode}/{stage}: HTTP and HTTPS server request audits", flush=True)
             except AssertionError as error:
                 failures.append((mode, stage, "server.audit", str(error)))
         return failures
@@ -87,24 +89,28 @@ def check_mode(mode, server, port):
 
 
 if __name__ == "__main__":
-    server = ProbeServer()
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    port = None
-    try:
-        port = int(adb("reverse", "--no-rebind", "tcp:0", f"tcp:{server.server_port}"))
-        adb("shell", "input", "keyevent", "KEYCODE_WAKEUP")
-        adb("shell", "wm", "dismiss-keyguard")
-        failures = []
-        for mode in ("normal", "paravoidAndroid"):
-            failures.extend(check_mode(mode, server, port))
-        if failures: raise AssertionError(f"Network failures: {failures}")
-        print("PASS: 64 device assertions and four independent request audits.")
-    except Exception:
-        print(adb("logcat", "-d", "-s", "AndroidRuntime:E", "ParavoidAndroid:E", "NetworkProbe:E"))
-        raise
-    finally:
-        if port is not None: adb("reverse", "--remove", f"tcp:{port}", check=False)
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=5)
+    wait_for("device boot", lambda: adb("shell", "getprop", "sys.boot_completed", check=False) == "1")
+    with running_server() as server, running_server(secure=True) as secure_server:
+        ports = []
+        try:
+            for endpoint in (server, secure_server):
+                # Host sockets reserve distinct ephemeral ports. Explicit device ports avoid
+                # old adb servers losing reverse authorization with multiple tcp:0 mappings.
+                port = endpoint.server_port
+                adb("reverse", "--no-rebind", f"tcp:{port}", f"tcp:{port}")
+                ports.append(port)
+            adb("shell", "input", "keyevent", "KEYCODE_WAKEUP")
+            adb("shell", "wm", "dismiss-keyguard")
+            failures = []
+            for mode in ("normal", "paravoidAndroid"):
+                failures.extend(check_mode(mode, server, ports[0], secure_server, ports[1]))
+            if failures: raise AssertionError(f"Network failures: {failures}")
+            print("PASS: 76 device assertions and eight independent HTTP/HTTPS request audits.")
+        except Exception:
+            try:
+                print(adb("logcat", "-d", "-s", "AndroidRuntime:E", "ParavoidAndroid:E", "NetworkProbe:E", timeout=5))
+            except Exception as diagnostic_error:
+                print(f"Device diagnostics unavailable: {diagnostic_error}")
+            raise
+        finally:
+            for port in ports: adb("reverse", "--remove", f"tcp:{port}", check=False)

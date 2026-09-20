@@ -28,7 +28,8 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.converter.moshi.MoshiConverterFactory
 
-class NetworkProbes(private val context: Context, private val url: String, private val run: String) {
+class NetworkProbes(private val context: Context, private val url: String, private val run: String,
+                    private val tlsUrl: String, private val certificate: String) {
     private val client = OkHttpClient.Builder().callTimeout(8, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.SECONDS).retryOnConnectionFailure(false)
         .addInterceptor { chain -> chain.proceed(chain.request().newBuilder()
@@ -178,6 +179,7 @@ class NetworkProbes(private val context: Context, private val url: String, priva
                 check(NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted("127.0.0.1"))
                 check(!NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted("example.com"))
             }
+            TlsProbes.cases(client, tlsUrl, certificate, run).forEach { (name, action) -> probe(name, action) }
         } finally {
             client.dispatcher.cancelAll()
             client.dispatcher.executorService.shutdown()
