@@ -36,7 +36,7 @@ or counted as a successful compatibility run.
 - Both `SavedStateHandle` and `rememberSaveable` counters survive rotation.
 - Rotation creates a new Activity but retains the ViewModel and singleton.
 - Background the app, wait for `onSaveInstanceState`, kill only its validated PID
-  through `run-as`, then reopen its launcher task. A genuinely new process restores
+  through the host process-death helper, then reopen its launcher task. A genuinely new process restores
   the detail destination and both counters; its Activity, ViewModel and graph are new.
 - System Back restores the list's independent saved state. Opening detail again
   creates a fresh navigation-scoped ViewModel and counters.
@@ -46,6 +46,14 @@ or counted as a successful compatibility run.
 Preferences are a **write-only observation channel**, never a source of restored
 state. A PID change and newly generated object IDs prevent Activity recreation
 from masquerading as process death.
+
+The helper normally uses `run-as`. API 29 Google APIs image revision 13 denies
+that cross-domain signal under SELinux, even for the same app UID. Only on an
+API 29 debuggable emulator, after rechecking the exact fixture PID, the driver
+falls back to the image's existing `su 0 kill -9`. It does not root adbd, alter
+SELinux, force-stop the package or add target-side test code. The fallback is
+unavailable on physical devices/non-debuggable images. Host guard tests:
+`python3 -m unittest discover -s compatibility -p test_device_process.py`.
 
 ## Issues exposed
 

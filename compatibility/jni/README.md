@@ -39,6 +39,11 @@ packaging modes × two native storage modes × cold/restored processes.
 The driver backgrounds and kills the exact app process, then verifies a new PID,
 the restored saved-state run token, and the complete JNI checks again. Preferences
 are observation output, not state restoration input.
+The shared host process-death helper normally uses `run-as`. On API 29 debuggable
+emulators only, a denied kill falls back to existing `su 0 kill -9` after validating
+the fixture PID again (Google APIs rev13's SELinux denies the run-as signal).
+Physical devices/non-debuggable images cannot use this fallback. No SELinux or
+adbd changes, force-stop, or target-side instrumentation are used.
 
 Artifact checks inspect all four `.so` files (`probe_jni`, `probe_dep`,
 `probe_plugin`, `c++_shared`) for both x86_64 and arm64-v8a, their compression mode,

@@ -6,11 +6,14 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import time
 import xml.etree.ElementTree as ET
 import zipfile
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT.parent))
+from device_process import kill_fixture_process
 SERIAL = os.environ["ANDROID_SERIAL"]
 
 
@@ -115,7 +118,7 @@ def check_mode(mode):
     old_pid = adb("shell", "pidof", app)
     assert old_pid == str(rotated["pid"])
     assert old_pid.isdecimal()
-    adb("shell", "run-as", app, "kill", "-9", old_pid)
+    kill_fixture_process(adb, SERIAL, app, old_pid)
     wait_for("process really exits", lambda: not adb("shell", "pidof", app, check=False))
     launch(app, launcher)
     restored = wait_for("fresh process restores task", lambda: (r if (r := report(app)).get("pid") not in (None, rotated["pid"])

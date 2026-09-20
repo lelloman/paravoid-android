@@ -6,12 +6,15 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import time
 import uuid
 import xml.etree.ElementTree as ET
 from zipfile import ZipFile, ZIP_STORED, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT.parent))
+from device_process import kill_fixture_process
 
 
 def adb(*args, check=True):
@@ -75,7 +78,7 @@ def check_mode(mode, storage, apk):
     time.sleep(1)
     pid = adb("shell", "pidof", app)
     assert pid.isdecimal() and pid == str(cold["pid"])
-    adb("shell", "run-as", app, "kill", "-9", pid)
+    kill_fixture_process(adb, os.environ["ANDROID_SERIAL"], app, pid)
     wait_for("process exits", lambda: not adb("shell", "pidof", app, check=False))
     launch()
     restored = wait_for("restored report", lambda: r if (r := report()).get("run") == token
