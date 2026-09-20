@@ -40,7 +40,9 @@ def check_mode(mode):
     launcher = ('com.lelloman.paravoidandroid.runtime.LauncherActivity' if shell
                 else 'com.lelloman.paravoidcompat.os.ProbeActivity')
     try:
-        adb('shell', 'am', 'start', '-W', '-n', app + '/' + launcher, '--es', 'probeRun', token)
+        # Short-lived launchers/peers can finish before API 28 reports a drawn
+        # Activity to `am start -W`. Wait for the run-token report instead.
+        adb('shell', 'am', 'start', '-n', app + '/' + launcher, '--es', 'probeRun', token)
         deadline = time.monotonic() + 45
         while time.monotonic() < deadline:
             snapshot = report(app)
@@ -64,7 +66,7 @@ def check_mode(mode):
             time.sleep(0.2)
         # No launcher entry and no new Intent URI grant: the explicit package grant
         # from the now-dead target is the only authority to read the content URI.
-        adb('shell', 'am', 'start', '-W', '-n', PEER + '/.PeerActivity',
+        adb('shell', 'am', 'start', '-n', PEER + '/.PeerActivity',
             '-d', snapshot['uri'], '--es', 'run', token, '--ez', 'cold', 'true')
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:

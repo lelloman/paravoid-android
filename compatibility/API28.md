@@ -32,7 +32,11 @@ metadata. There is no APK publication or physical-device testing in this run.
 - Views: ViewBinding/DataBinding, custom XML Views, fragments, saved state and
   configuration contexts.
 
-Initial execution is pending; findings will be recorded here after verification.
+Initial execution found a driver portability issue: `am start -W` timed out for
+the short-lived FileProvider peer after its result was already persisted. The
+driver now launches without the draw wait and retains its bounded run-token/PID
+completion checks. This was reproduced in normal packaging, not a shell failure.
+Remaining execution evidence will be recorded after verification.
 
 ## Explicit omissions
 

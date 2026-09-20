@@ -55,7 +55,9 @@ def install(mode):
 def launch(app, mode, scenario, token, *extras):
     launcher = ('com.lelloman.paravoidandroid.runtime.LauncherActivity' if mode == 'paravoidAndroid'
                 else 'com.lelloman.paravoidcompat.os.ProbeActivity')
-    adb('shell', 'am', 'start', '-W', '-n', app + '/' + launcher,
+    # Completion is observed by the caller's token/PID checks, not a draw wait
+    # which can hang for a shell launcher that immediately finishes on API 28.
+    adb('shell', 'am', 'start', '-n', app + '/' + launcher,
         '--es', 'scenario', scenario, '--es', 'probeRun', token, *extras)
 
 
