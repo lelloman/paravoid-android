@@ -106,6 +106,11 @@ restoration after process death. The language probe additionally covers generate
 Parcelable and Serializable saved-state objects. Other object graphs, state across
 payload updates and downloaded payloads still need explicit coverage.
 
+Manifest-declared payload Services also receive a defining-loader `getClassLoader`
+override unless their hierarchy already provides one. This lets Android decode
+payload Parcelables in service Intents; the Binder probe covers cold bind,
+explicit rebind and reattachment after service process death.
+
 The shell retains the installed manifest, permissions, bootstrap code, and
 resources required by that manifest and bootstrap UI. Payload updates cannot
 dynamically add installed component declarations or permissions. Declared services,

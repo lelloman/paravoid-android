@@ -23,6 +23,23 @@ class ApplicationManifestTest {
         assertTrue(manifest.contains('android:stopWithTask="true"'))
     }
 
+    @Test void qualifiesAllServiceNamesInPayloadMetadata() {
+        def task = fixture('''<service android:name=".First" /><service android:name="Second" />
+            <service android:name="dependency.Third" />''')
+        task.rewrite()
+        Properties info = new Properties()
+        task.payloadMetadata.get().asFile.withInputStream { info.load(it) }
+        assertEquals('example.First;example.Second;dependency.Third', info.getProperty('services'))
+    }
+
+    @Test void recordsEmptyServicesForActivityOnlyApps() {
+        def task = fixture('')
+        task.rewrite()
+        Properties info = new Properties()
+        task.payloadMetadata.get().asFile.withInputStream { info.load(it) }
+        assertEquals('', info.getProperty('services'))
+    }
+
     @Test void stillRejectsAdditionalActivities() {
         def task = fixture('<activity android:name="example.Second" />')
         assertTrue(assertThrows(GradleException, { task.rewrite() }).message.contains('exactly one user Activity'))

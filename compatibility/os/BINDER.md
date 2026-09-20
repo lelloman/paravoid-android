@@ -58,14 +58,20 @@ and [bound Service lifecycle](https://developer.android.com/develop/background-w
 
 ## Limits
 
-Binding-Intent regression: adding `WireMessage` to the bind Intent passes in normal
-packaging but currently fails in shell `onBind` with `BadParcelableException`.
+Binding-Intent regression: adding `WireMessage` to the bind Intent initially passed
+normally but failed in shell `onBind` with `BadParcelableException`. The plugin
+now gives manifest-declared payload Services the same defining-loader override as
+Activities, preserving direct/inherited explicit overrides. Android prepares
+bind/unbind/start Intent extras using `Service.getClassLoader()`. Cold bind,
+explicit rebind and post-process-death binding now pass in both modes; the app
+does not repair the binding Intent manually. Custom Service loader overrides
+remain the app's responsibility. Platform-owned Services are not rewritten.
 The driver now reinstalls the peer after installing each permission-defining
 target APK, so signature-permission install ordering is not mistaken for a
 payload failure.
 
 This is typed AIDL Parcel serialization, not arbitrary `Bundle` object discovery.
-Custom Parcelables in binding Intents/Bundle values, target `android:process`,
+Custom Parcelables in Bundle values, target `android:process`,
 isolated services, foreground services, client death, large transactions,
 file descriptors, concurrent load/backpressure, version-skewed contracts, release
 shrinking and other Android versions remain unvalidated. No remote payload update

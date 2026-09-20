@@ -34,6 +34,10 @@ abstract class ApplicationManifestTask extends DefaultTask {
         def activity = (Element) activities.item(0)
         String pkg = document.documentElement.getAttribute('package')
         String activityName = qualify(pkg, activity.getAttributeNS(ANDROID, 'name'))
+        def serviceNodes = app.getElementsByTagName('service')
+        def services = (0..<serviceNodes.length).collect { index ->
+            ApplicationManifestTask.qualify(pkg, ((Element) serviceNodes.item(index)).getAttributeNS(ANDROID, 'name'))
+        }
         String applicationName = app.getAttributeNS(ANDROID, 'name')
         if (applicationName) applicationName = qualify(pkg, applicationName)
         if (applicationName == 'android.app.Application' || applicationName == 'com.lelloman.paravoidandroid.runtime.ParavoidAndroidApplication') applicationName = ''
@@ -70,7 +74,7 @@ abstract class ApplicationManifestTask extends DefaultTask {
         TransformerFactory.newInstance().newTransformer().transform(new DOMSource(document), new StreamResult(output))
         def metadata = payloadMetadata.get().asFile
         metadata.parentFile.mkdirs()
-        metadata.text = "activity=${activityName}\napplication=${applicationName}\n"
+        metadata.text = "activity=${activityName}\napplication=${applicationName}\nservices=${services.join(';')}\n"
     }
 
     private static String qualify(String pkg, String name) {

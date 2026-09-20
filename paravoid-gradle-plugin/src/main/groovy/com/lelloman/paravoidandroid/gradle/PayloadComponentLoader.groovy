@@ -3,8 +3,8 @@ package com.lelloman.paravoidandroid.gradle
 import org.objectweb.asm.*
 import static org.objectweb.asm.Opcodes.*
 
-/** Framework restoration resolves platform Fragments through Activity.getClassLoader(). */
-class PayloadActivityLoader {
+/** Framework state/Intent decoding uses Activity/Service.getClassLoader(). */
+class PayloadComponentLoader {
     static void adapt(Map<String, byte[]> classes, String activity) {
         // Preserve explicit downstream overrides, including inherited/final ones.
         String parent = activity

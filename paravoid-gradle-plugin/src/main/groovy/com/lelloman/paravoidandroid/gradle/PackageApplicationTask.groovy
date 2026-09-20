@@ -67,7 +67,12 @@ abstract class PackageApplicationTask extends DefaultTask {
             throw new GradleException('The manifest Activity is missing from the application classes.')
         }
         payloadTransformers.get().each { it.transform(classes) }
-        PayloadActivityLoader.adapt(classes, info.getProperty('activity').replace('.', '/'))
+        PayloadComponentLoader.adapt(classes, info.getProperty('activity').replace('.', '/'))
+        info.getProperty('services', '').tokenize(';').each { service ->
+            String name = service.replace('.', '/')
+            // Platform-owned services have no payload class to adapt.
+            if (classes.containsKey(name + '.class')) PayloadComponentLoader.adapt(classes, name)
+        }
         PayloadConfigurationContext.adapt(classes, info.getProperty('activity').replace('.', '/'))
         PayloadSavedState.adapt(classes, info.getProperty('activity').replace('.', '/'))
         File shell = shellClasses.get().asFile
