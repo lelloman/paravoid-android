@@ -15,7 +15,7 @@ without moving application libraries into the parent loader.
 | Room + default WorkManager factory | `storage` passes cold worker / durable writes | Migrations, retries, reboot, custom/Hilt factory configuration |
 | Independent resources and assets | `resources` passes local A/B switching | Automatic app/library resource split, API 30 device coverage |
 | Serialization/Parcelize compiler plugins, Kotlin reflection, dynamic proxies | [Language probe](language/README.md): 64 assertions pass, including background discovery | Other versions, reflection patterns, existing-thread loaders, R8 |
-| ViewBinding/DataBinding, XML custom views, fragments | Not tested | Inflation, generated bindings, fragment restoration |
+| ViewBinding/DataBinding, XML custom views, fragments | [Views probe](views/README.md): 170 assertions, including process death, fragment back stack and configured-context inflation | Nested fragments, custom factories, Hilt injection, other Context factories/overrides |
 | Networking stacks and reflective adapters | Not tested | Retrofit/OkHttp, Gson/Moshi, coroutine execution, TLS |
 | Native libraries / JNI | Not tested | ABI packaging, System.loadLibrary, native callbacks |
 | OS integration | Not tested | Permissions, activity results, notifications/PendingIntent, FileProvider, App Links |

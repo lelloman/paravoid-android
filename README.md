@@ -121,6 +121,11 @@ The [compatibility matrix](compatibility/README.md) tracks verified scenarios an
 untested areas. The [language probe](compatibility/language/README.md) adds Kotlin
 Serialization/Parcelize plugins, reflection, dynamic proxies and default library
 discovery, tested in both packaging modes before and after process death.
+The [Views probe](compatibility/views/README.md) covers generated bindings, custom
+XML Views, fragment restoration and inflation from Application/configuration contexts.
+Configuration contexts from the shell Application and default Activity implementation
+retain the payload loader; explicit Activity overrides are preserved, and other
+Context factories are not yet covered.
 
 `sample-app` is one Android app with a custom `SampleApplication`, an ordinary
 `MainActivity`, and a native counter screen. Both generated packaging modes use
@@ -146,9 +151,9 @@ These tests demonstrate that payload code can use installed resources. They do
 not demonstrate independently updatable resources: `module.zip` still contains
 only metadata and DEX. A packaging regression test checks APK/AAB locations and
 proves an asset edit changes the APK while leaving the DEX payload unchanged.
-Custom XML View classes, arbitrary custom Parcelable saved-state restoration, fonts,
-bitmap/audio/video assets, and native/JNI dependencies are not covered by this
-expansion. No minimum-SDK or runtime loader changes were needed for this matrix.
+Fonts, bitmap/audio/video assets, and native/JNI dependencies are not covered by
+this sample expansion. Separate language and Views probes cover selected custom
+Parcelable state and XML Views, not arbitrary object graphs or widgets.
 
 Paravoid packaging moves application/dependency classes into an embedded DEX payload;
 only Paravoid Android infrastructure remains in the shell's ordinary DEX. Normal
@@ -247,6 +252,10 @@ remains separate work.
 
 Further independent probes exercise larger downstream stacks:
 
+- [Views + bindings + fragments](compatibility/views/README.md): custom View state,
+  two-way DataBinding, SavedStateHandle, restored back stacks and configuration contexts.
+- [Language and discovery](compatibility/language/README.md): Serialization/Parcelize
+  plugins, Kotlin/Java reflection, proxies and thread-context service discovery.
 - [Compose + Navigation + Hilt](compatibility/compose/README.md): Kotlin/kapt,
   navigation-scoped ViewModels, back handling, rotation, and real process-death
   restoration of `rememberSaveable` and `SavedStateHandle` in both modes.
@@ -306,6 +315,8 @@ and payload-update compatibility remain future coverage.
 | `compatibility/compose` | Kotlin Compose, Navigation, Hilt and process-death restoration probe |
 | `compatibility/storage` | Room persistence and cold WorkManager execution probe |
 | `compatibility/resources` | Local resource-pack switching with public API 30+ loaders |
+| `compatibility/language` | Compiler plugins, reflection and implicit discovery probe |
+| `compatibility/views` | Bindings, custom Views, fragment state and configuration contexts |
 
 The old `sample-shell` and `sample-standalone` source projects are replaced by
 generated flavors. The old module/shell plugins and `AppEntry` loader remain as

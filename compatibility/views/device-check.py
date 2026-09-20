@@ -79,6 +79,7 @@ def check_mode(mode):
     click(app, "recreate")
     recreated = stage(1, 1)
     assert recreated["restored"] and recreated["pid"] == cold["pid"]
+    assert recreated["modelInstance"] == cold["modelInstance"], "ViewModel not retained across recreation"
     snapshots.append(("recreated", recreated))
     adb("shell", "input", "keyevent", "KEYCODE_HOME")
     wait_for("state saved", lambda: prefs(app).get("savedPid") == str(cold["pid"])
@@ -91,12 +92,13 @@ def check_mode(mode):
     launch()
     restored = stage(1, 2)
     assert restored["restored"] and restored["pid"] != cold["pid"]
+    assert restored["modelInstance"] != cold["modelInstance"], "ViewModel not newly constructed after death"
     snapshots.append(("process-restored", restored))
     click(app, "back")
     snapshots.append(("back-stack-popped", stage(2, 2)))
     failures = []
     for name, snapshot in snapshots:
-        assert len(snapshot["results"]) == 16, snapshot
+        assert len(snapshot["results"]) == 17, snapshot
         for test, result in snapshot["results"].items():
             print(f"{mode} {name} {test}: {result}", flush=True)
             if result != "PASS": failures.append((mode, name, test, result))
@@ -113,7 +115,7 @@ if __name__ == "__main__":
             failures.extend(check_mode(mode))
         if failures:
             raise AssertionError(f"{len(failures)} failed checks: {failures}")
-        print("PASS: 16 checks x 5 lifecycle stages x 2 packaging modes (160 assertions).")
+        print("PASS: 17 checks x 5 lifecycle stages x 2 packaging modes (170 assertions), plus lifecycle identity checks.")
     except Exception:
         print(adb("logcat", "-d", "-s", "AndroidRuntime:E", "ParavoidAndroid:E", "ViewsProbe:E"))
         raise

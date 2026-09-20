@@ -61,6 +61,9 @@ public final class ProbeActivity extends AppCompatActivity {
             check(results, "customView.savedState", root.binding.custom.value == (phase == 0 ? 5 : 41));
             check(results, "dataBinding.mapper", DataBindingUtil.getBinding(root.requireView()) == root.binding);
             check(results, "dataBinding.twoWay", expected.equals(root.model.text.getValue()));
+            // Read before EditText hierarchy restoration can feed the two-way binding.
+            check(results, "viewModel.savedStateHandle", (generation == 0 ? "initial" : "edited")
+                .equals(root.modelBeforeViewRestore));
             check(results, "dataBinding.adapter", ("adapted:" + expected).contentEquals(root.binding.echo.getText()));
             check(results, "dataBinding.editor", expected.contentEquals(root.binding.editor.getText()));
             DetailFragment detail = (DetailFragment) getSupportFragmentManager().findFragmentByTag("detail");
@@ -79,7 +82,8 @@ public final class ProbeActivity extends AppCompatActivity {
                 && root.getClass().getClassLoader() == loader
                 && root.binding.getClass().getClassLoader() == loader && absent);
             JSONObject report = new JSONObject().put("run", run).put("pid", android.os.Process.myPid())
-                .put("phase", phase).put("generation", generation).put("restored", restored).put("results", results);
+                .put("phase", phase).put("generation", generation).put("restored", restored)
+                .put("modelInstance", root.model.instance).put("results", results);
             getSharedPreferences("views-probe", MODE_PRIVATE).edit().putString("report", report.toString()).commit();
         } catch (Exception e) { throw new IllegalStateException("Probe reporting failed", e); }
     }
