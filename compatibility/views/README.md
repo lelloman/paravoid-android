@@ -19,6 +19,9 @@ with a hierarchy dump rather than silently skipping actions.
 
 ## Scenarios
 
+Verified on API 28 and API 36.1 x86_64/debug in both packaging modes. See the
+[API 28 baseline](../API28.md) for the early saved-state decoding fix and scope.
+
 Seventeen invariants are checked at five stages in each packaging mode (170
 assertions): cold launch, editing/adding a fragment, Activity recreation, real
 process death/restoration, and popping the restored fragment back stack.

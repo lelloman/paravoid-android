@@ -24,6 +24,14 @@ permission prompt. Only the named fixture packages are changed.
 
 API 36.1 x86_64/debug: **40 assertions pass**, 20 per packaging mode:
 
+The same 40 checks, all eight AndroidX result scenarios, and the Binder/Bundle
+driver also pass on API 28. Use the [dedicated baseline runner](../API28.md), not
+the full OS runner with its API 33+/34+ notification/foreground policy probes.
+API 28 exposed eager saved-state decoding before app `onCreate`; the plugin now
+protects callback state in a nested platform Bundle and unwraps it with the
+payload loader. Both API 28 and API 36.1 result checks exercise the envelope,
+including late framework entries and repeated save/restore hooks.
+
 - FileProvider content authority, narrow path rejection, defining-loader identity,
   and shell parent-loader isolation.
 - Three cross-UID calls returning framework activity results: no grant (read

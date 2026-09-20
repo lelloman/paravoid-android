@@ -24,6 +24,21 @@ metadata. There is no APK publication or physical-device testing in this run.
 
 ## Selected checks
 
+Verified on the image above, normal **and** shell packaging:
+
+| Probe | API 28 result |
+| --- | --- |
+| FileProvider / cross-UID access / cold provider | 40 assertions pass |
+| AndroidX activity results | All 8 success/cancel × alive/dead-caller scenarios pass; saved-state envelope controls also pass |
+| Binder / AIDL | Cold bind, explicit rebind and automatic death recovery pass; binding Parcelables and both nested-Bundle controls pass at every connection |
+| Language / discovery | 64 assertions pass, including generated Parcelable and Serializable process-death restoration |
+| Views / fragments | 170 assertions plus lifecycle identity checks pass |
+
+Host regression suite: 58 tests and plugin validation pass; OS fixture lint passes.
+With the fix, API 36.1 also passed all 8 result scenarios, 64 language assertions
+and 170 Views assertions plus lifecycle identity checks again.
+These are debug x86_64 results, not a full API/ABI or release-support declaration.
+
 - OS: FileProvider/cold provider, AndroidX activity-result success/cancellation
   with caller process death, Binder binding-Intent Parcelables, explicit-loader
   nested Bundles, callbacks and service-death recovery.

@@ -16,10 +16,11 @@ also includes this driver. No target instrumentation is installed.
 
 ## Scenarios
 
-API 36.1 x86_64/debug: cold binding, explicit unbind/rebind, and automatic
+API 28 and API 36.1 x86_64/debug: cold binding, explicit unbind/rebind, and automatic
 reconnection after actual service process death pass in both packaging modes.
-The wire checks run on all three connections per mode. No production adapter
-changes were needed for these scenarios.
+The wire checks run on all three connections per mode. Typed AIDL needed no
+Binder-specific adapter; binding Intent extras require the Service loader repair
+described below.
 
 - A foreground peer explicitly binds from a separate UID to a completely cold
   target. The target Service runs in its default app process, with no Activity
@@ -58,7 +59,7 @@ and [bound Service lifecycle](https://developer.android.com/develop/background-w
 
 ## Binding Intent and Bundle coverage
 
-AIDL nested-Bundle coverage also passes on API 36.1 in both modes and all three
+AIDL nested-Bundle coverage also passes on API 28 and API 36.1 in both modes and all three
 connection stages: without explicit Bundle loaders, decoding the custom class
 fails in **normal and shell** packaging. With `setClassLoader()` before reading
 the outer/nested Bundles, the request and response preserve Unicode, caller UID,

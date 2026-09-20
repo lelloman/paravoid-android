@@ -20,10 +20,12 @@ the launcher to verify restoration in a new process. Preferences are observation
 output, not a substitute for saved-state restoration; unique run tokens reject
 stale results.
 
-## Verified on API 36.1 / debug
+## Verified on API 28 and API 36.1 / x86_64 debug
 
 Sixteen checks run in normal and shell packaging, both cold and after actual
 process death: **64 passing assertions**.
+The API 28 run includes the saved-state envelope fix described in the
+[baseline report](../API28.md).
 
 - Generated JSON serializers: sealed polymorphism, nested generic lists and defaults.
 - Kotlin reflection: constructor defaults, properties, annotations and generic types.

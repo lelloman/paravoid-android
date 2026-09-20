@@ -5,6 +5,11 @@ library works. Device evidence so far is API 36.1/debug unless a fixture says
 otherwise. Normal packaging is the control; production shell APKs are tested
 without moving application libraries into the parent loader.
 
+The [API 28 baseline](API28.md) additionally verifies selected OS, Binder,
+language and Views scenarios on Android 9, in both packaging modes. It found and
+fixed eager saved-state decoding before `onCreate`. Its runner reports explicit
+skips/omissions; newer-device evidence elsewhere is not implied to cover API 28.
+
 | Area | Evidence / status | Important remaining cases |
 | --- | --- | --- |
 | Java dependencies, annotations, generics, lambdas, ServiceLoader | Sample + `language` explicit/default discovery pass | Existing threads, shared pools, custom loaders |
