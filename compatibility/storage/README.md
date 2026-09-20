@@ -3,7 +3,7 @@
 An independent Java app using Room 2.6.1 (annotation processing) and WorkManager
 2.10.1. It uses the unmodified dependency manifests, default AndroidX Startup
 initialization and default Worker factory. There is no custom Application or Hilt
-adapter in this fixture.
+adapter in the default mode.
 
 ```sh
 ANDROID_HOME=/path/to/Android/Sdk bash compatibility/storage/check.sh
@@ -36,8 +36,8 @@ device-idle scheduling policy, multiprocess work or payload-update compatibility
 Job dispatch here tests cold component loading, not delivery timing guarantees.
 
 The separate [Hilt Work probe](../hilt-work/README.md) now covers Hilt Worker
-injection: explicit Application initialization passes both modes, while automatic
-`Configuration.Provider` lookup fails in shell packaging. This default-factory
+injection: lazy configuration passes both modes with `paravoid-work`; without that
+optional plugin, shell mode needs explicit initialization. This default-factory
 fixture and its API 28 evidence do not imply that the Hilt combination passed there.
 
 The driver uses unnamespaced JobScheduler IDs/dispatch below API 34. On API 28,
@@ -46,3 +46,27 @@ a duplicate Room insert in **normal packaging too**. The final reader now uses
 NEW_TASK | CLEAR_TASK so its verification Intent reaches a fresh Activity. This
 tests durable database state, not Activity task restoration. Launch completion
 uses per-run reports rather than `am start -W` draw waits.
+
+## Non-Hilt custom configuration
+
+```sh
+ANDROID_HOME=/path/to/Android/Sdk ANDROID_SERIAL=emulator-5584 \
+    bash compatibility/storage/check.sh --configured --device
+```
+
+The separate `--configured` mode uses distinct package IDs, a
+`ParavoidAndroidApplication` implementing `Configuration.Provider`, a custom
+WorkerFactory, and `com.lelloman.paravoid.work`. There is no Hilt dependency or
+manual initialization. Its manifest removes the default WorkManager initializer.
+Both modes pass on API 36.1/debug/x86_64: configuration/factory callbacks run in the
+new worker PID after Application onCreate, without an Activity in that process,
+and the factory receives the real Application context. The same Room/process-death
+sequence remains in force. Its results do not extend the default fixture's API 28
+evidence to custom configuration.
+
+For build-only checks use `check.sh --configured`. Normal and configured builds
+share APK output paths: run each matching driver immediately after building.
+`-PworkProbeDisableIntegration` retains an unadapted configured build;
+`-PworkProbeEnableIntegration` enables the adapter on the default-initializer
+fixture to regression-test apps without a custom Application. These are fixture
+switches, not public plugin options.

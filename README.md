@@ -148,9 +148,10 @@ Gson/Moshi adapters, KSP, cancellation, caching and local HTTPS verification.
 Its pinned Moshi/KSP2 generated-qualifier limitation is explicitly documented;
 ordinary generated models and reflective qualifiers are tested separately.
 The [Hilt WorkManager probe](compatibility/hilt-work/README.md) verifies injected
-cold workers and Room persistence with explicit initialization in Application
-`onCreate`, after Hilt injection. Automatic `Configuration.Provider` lookup fails
-in shell packaging; the optional Hilt plugin does not currently adapt that path.
+cold workers and Room persistence with lazy Application configuration. Add the
+optional [paravoid-work plugin](paravoid-work/README.md) for `Configuration.Provider`
+discovery in shell mode; it supports WorkManager 2.10.1 independently of Hilt and
+needs no manual initialization. The Hilt plugin alone does not adapt that lookup.
 
 `sample-app` is one Android app with a custom `SampleApplication`, an ordinary
 `MainActivity`, and a native counter screen. Both generated packaging modes use
@@ -302,8 +303,8 @@ Further independent probes exercise larger downstream stacks:
   data, and cold background JobService/Worker execution in both modes. This uses
   the default Worker factory, not Hilt Worker injection.
 - [Hilt + WorkManager](compatibility/hilt-work/README.md): generated assisted
-  factories and cold injected workers pass with explicit Application initialization;
-  automatic `Configuration.Provider` discovery remains a confirmed shell gap.
+  factories and cold injected workers pass with lazy Application initialization
+  using optional `paravoid-work`; opt-out retains the original shell failure.
 - [Independent resources](compatibility/resources/README.md): an API 30+ experiment
   using separate, hash-pinned resource-only APKs and stable IDs. It tests Views,
   Compose, themes, locale lookup and assets while keeping the installed app APK
@@ -313,6 +314,7 @@ Further independent probes exercise larger downstream stacks:
 ```sh
 ./gradlew :paravoid-gradle-plugin:test :paravoid-gradle-plugin:validatePlugins \
   :paravoid-hilt:test :paravoid-hilt:validatePlugins \
+  :paravoid-work:test :paravoid-work:validatePlugins \
   :paravoid-runtime:testDebugUnitTest :sample-app:lintNormalDebug :sample-app:lintParavoidAndroidDebug
 ```
 
@@ -352,10 +354,12 @@ and payload-update compatibility remain future coverage.
 | `paravoid-runtime` | Application bases, shell launcher/factory, validation and DEX loading |
 | `paravoid-gradle-plugin` | Flavor generation, manifest rewriting, class transformation and packaging |
 | `paravoid-hilt` | Optional, version-checked Hilt payload transformation and generated lookup bridge |
+| `paravoid-work` | Optional, version-checked WorkManager configuration-owner lookup in the payload |
 | `sample-app` | One downstream app demonstrating both packaging modes |
 | `sample-library` | Conventional Java dependency with service-provider and resource fixtures |
 | `compatibility/compose` | Kotlin Compose, Navigation, Hilt and process-death restoration probe |
 | `compatibility/storage` | Room persistence and cold WorkManager execution probe |
+| `compatibility/hilt-work` | Hilt workers, lazy/explicit Application configuration and cold injected Room writes |
 | `compatibility/resources` | Local resource-pack switching with public API 30+ loaders |
 | `compatibility/language` | Compiler plugins, reflection and implicit discovery probe |
 | `compatibility/views` | Bindings, custom Views, fragment state and configuration contexts |
@@ -406,7 +410,7 @@ the host application's privileges; this is not an isolation boundary.
    behavior, and supported Android versions beyond the current sample.
 2. Turn the independent-resource experiment into automatic app/library resource
    packaging with stable-ID and installed-manifest contracts. Test broader library
-   cases: automatic WorkManager configuration lookup, Room migrations, OS integration
+   cases: WorkManager retries/chains and foreground work, Room migrations, OS integration
    and third-party native SDKs.
 3. Define independently signed payloads and negative signature tests before accepting
    code from outside the APK. Sign with the product shell's signing key and verify

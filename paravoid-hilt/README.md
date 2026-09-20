@@ -69,9 +69,10 @@ ordering. This does not imply support for every Hilt component injection path.
   identity and service-scope renewal after stopping/recreating the service.
   The [Hilt Work probe](../compatibility/hilt-work/README.md) verifies Hilt Workers
   and cold Room writes with explicit initialization after Application injection.
-  Automatic WorkManager `Configuration.Provider` discovery fails in shell mode:
-  the real ShellApplication does not implement the payload interface. This plugin
-  does not adapt that lookup. Other entry points, custom Application casts and
+  Automatic WorkManager `Configuration.Provider` discovery additionally requires
+  the optional [paravoid-work](../paravoid-work/README.md) plugin; Hilt alone does
+  not adapt that lookup. The combined plugins pass lazy cold-worker startup without
+  manual initialization. Other entry points, custom Application casts and
   shrinking remain unvalidated. The Compose probe verifies
   navigation-scoped Hilt ViewModels and saved-state restoration after process death;
   that is not a general guarantee for arbitrary state or payload updates.

@@ -64,3 +64,20 @@ configuration in both modes on API 36.1/debug/x86_64: cold injected worker witho
 an Activity, fresh graph, and Room persistence across three processes.
 The [storage probe](../compatibility/storage/README.md) includes an independent
 non-Hilt custom-configuration control.
+
+Verified on the same API 36.1 emulator in normal/shell modes:
+
+- Hilt lazy configuration and cold assisted worker injection.
+- Non-Hilt custom configuration/factory, cold callback PIDs and real Application context.
+- Default WorkManager Startup initialization with this adapter enabled and no custom Application.
+- Plugin opt-out restores the original lazy shell failure while normal still passes.
+
+The adapted Hilt lazy matrix passed twice, including after rebuilding from the
+opt-out reproducer. Both-mode lint passes for Hilt, non-Hilt configured and default
+initialization fixtures.
+
+69 host tests pass across core, runtime, Hilt and Work integrations, along with all
+plugin validators. Nine Work tests cover exact rewrite scope, generated bridge
+behavior, selected version rejection, payload-only packaging, incremental reuse
+and opt-out. Device results are debug/x86_64; API 28/29, release, physical devices
+and other ABIs have not been verified for this new integration.
