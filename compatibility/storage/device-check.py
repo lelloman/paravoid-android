@@ -5,11 +5,14 @@ import argparse
 from pathlib import Path
 import re
 import subprocess
+import sys
 import time
 import uuid
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT.parent))
+from device_process import kill_fixture_process
 SERIAL = os.environ["ANDROID_SERIAL"]
 
 
@@ -59,7 +62,7 @@ def check_mode(mode, configured=False):
     adb("shell", "input", "keyevent", "KEYCODE_HOME")
     pid = adb("shell", "pidof", app)
     assert pid.isdecimal()
-    adb("shell", "run-as", app, "kill", "-9", pid)
+    kill_fixture_process(adb, SERIAL, app, pid)
     wait_for("original process exits", lambda: not adb("shell", "pidof", app, check=False))
     assert not result(app, "completed", token)
     # Allow WorkManager's own initial delay to elapse; then request OS dispatch if needed.
@@ -77,7 +80,7 @@ def check_mode(mode, configured=False):
             assert values.find(f"int[@name='{key}']").get("value") == worker_pid, key
     # Kill the worker process too: a third process must read its committed database update.
     assert worker_pid.isdecimal()
-    adb("shell", "run-as", app, "kill", "-9", worker_pid)
+    kill_fixture_process(adb, SERIAL, app, worker_pid)
     wait_for("worker process exits", lambda: not adb("shell", "pidof", app, check=False))
     # This is a fresh DB reader, not a saved-task restoration test. API 28 can
     # restore the old root Intent (enqueue) when reusing the previous task.
@@ -85,7 +88,7 @@ def check_mode(mode, configured=False):
         "--es", "probeRun", token, "--ez", "verify", "true")
     wait_for("Room survives both process deaths", lambda: result(app, "verified", token))
     adb("shell", "am", "force-stop", app)
-    print(f"PASS {mode}: Room generated DAO, persistent work, cold JobService/Worker and durable worker write", flush=True)
+    print(f"PASS {'configured' if configured else 'default'}/{mode}: Room generated DAO, persistent work, cold JobService/Worker and durable worker write", flush=True)
 
 
 if __name__ == "__main__":
