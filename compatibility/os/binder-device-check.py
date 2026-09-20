@@ -38,6 +38,22 @@ def check_mode(mode):
         assert second['instance'] != first['instance'], 'Service instance was reused after destruction'
         assert second['peerPid'] == first['peerPid'], 'Peer process changed'
         print(f'PASS {mode}: cold remote AIDL, typed Parcelables/callback/list/null/exception/UID/loaders, final unbind and new service instance', flush=True)
+        # Keep the binding and peer alive. Force-stop would change binding semantics;
+        # kill only the verified service PID. Auto-restart can be too fast to sample
+        # an empty pidof, so prove death via DeathRecipient and a different new PID.
+        pid = adb('shell', 'pidof', app)
+        assert pid.isdecimal() and pid == str(second['pid'])
+        adb('shell', 'run-as', app, 'kill', '-9', pid)
+        death = wait_for('DeathRecipient', lambda: value if (value := report(PEER)).get('binderDeathRun') == token else None)
+        assert death['binderDead'] == 'true' and death['binderDeadCall'] == 'true', death
+        wait_for('onServiceDisconnected', lambda: report(PEER).get('binderDisconnected') == token)
+        third = wait_for('automatic service reconnection', lambda: phase(3, token))
+        verify(app, third)
+        assert third['pid'] != second['pid'] and third['instance'] != second['instance'], third
+        assert third['peerPid'] == first['peerPid'], 'Recovery restarted the client'
+        tap('Unbind service')
+        wait_for('restarted service destroyed', lambda: report(app).get('binderDestroyed') == third['instance'])
+        print(f'PASS {mode}: DeathRecipient, dead-token RemoteException, disconnection, automatic new-process rebind and clean final unbind', flush=True)
     finally:
         cleanup(app)
 

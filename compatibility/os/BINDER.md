@@ -16,8 +16,10 @@ also includes this driver. No target instrumentation is installed.
 
 ## Scenarios
 
-API 36.1 x86_64/debug: cold binding and explicit unbind/rebind pass in both
-packaging modes. No production adapter changes were needed for these scenarios.
+API 36.1 x86_64/debug: cold binding, explicit unbind/rebind, and automatic
+reconnection after actual service process death pass in both packaging modes.
+The wire checks run on all three connections per mode. No production adapter
+changes were needed for these scenarios.
 
 - A foreground peer explicitly binds from a separate UID to a completely cold
   target. The target Service runs in its default app process, with no Activity
@@ -33,6 +35,12 @@ packaging modes. No production adapter changes were needed for these scenarios.
   `onServiceDisconnected`.
 - Each connection verifies payload defining-loader identity and absence of the
   generated interface from the shell's parent loader.
+- With the peer still alive and bound, the driver kills only the verified target
+  PID. The peer observes `DeathRecipient`, `onServiceDisconnected`, a dead Binder
+  and `RemoteException` from a stale-token call. Android automatically reconnects
+  the existing binding to a new target PID/Service instance; the peer is not
+  restarted. Wire checks run again, then final unbind destroys the new Service.
+  This uses process kill, not force-stop or an app update (`onBindingDied`).
 
 ## Integration requirements
 
