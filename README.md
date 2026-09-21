@@ -430,8 +430,10 @@ The [packaging-first roadmap](ROADMAP.md) defines milestones and acceptance chec
 4. Add shell-owned update controls, retained-version management and recovery UI.
 5. Later, upload a full package and deliver configuration-targeted resources/ABIs.
 
-The immediate task is defining the shell/payload resource boundary, stable IDs
-and supported Android versions. The existing compatibility suite is regression
+The [packaging contract](PACKAGING.md) defines the resource boundary, stable IDs
+and API 30+ policy for future complete packaging. Its immediate implementation
+gate is proving same-package resource splitting and early loading; existing
+DEX-only behavior and minimum SDKs are unchanged. The compatibility suite is regression
 coverage, not a reason to defer packaging until every Android scenario is tested.
 
 Downloaded code must use app-private storage with the required read-only protection

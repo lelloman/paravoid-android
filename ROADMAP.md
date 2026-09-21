@@ -32,6 +32,12 @@ Implement in small, independently verified steps:
 
 ### 1a. Define the shell/payload contract
 
+The design baseline is now [defined in PACKAGING.md](PACKAGING.md): API 30+
+complete packaging, pinned shell resources, a shared stable-ID namespace, and a
+versioned shell compatibility contract. The same-package linking/early-loading
+strategy still requires its focused implementation proof; fixture assertions are
+not yet complete.
+
 - Inventory app and dependency outputs from AGP; define which artifacts belong to
   the shell and which belong to the payload. Preserve ordinary normal packaging.
 - Define the installed contract: package/component identities, permissions,
@@ -178,6 +184,6 @@ document requirements and limitations, and make small commits. Add focused probe
 when a concrete risk or real-app failure warrants one. Do not restart an open-ended
 compatibility exploration phase before finishing packaging.
 
-**Immediate next task:** milestone 1a—inspect the AGP resource pipeline and specify
-the shell/payload resource boundary, stable-ID contract and Android-version policy
-before implementing automatic resource packaging.
+**Immediate next task:** prove the [packaging contract's resource strategy](PACKAGING.md#7-first-implementation-gate)
+with a same-package pinned-shell/payload fixture, then implement automatic AGP
+resource packaging. The design is defined; the executable gate is still pending.
