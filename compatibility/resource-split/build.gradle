@@ -1,0 +1,32 @@
+plugins { id 'com.lelloman.paravoid' }
+def packOutput = layout.buildDirectory.dir('packs')
+def packs = tasks.register('resourcePacks', Exec) {
+    inputs.dir('packs')
+    inputs.file('pack-resources.py')
+    inputs.file(new File(android.sdkDirectory, 'build-tools/35.0.0/aapt2'))
+    inputs.file(new File(android.sdkDirectory, 'platforms/android-36/android.jar'))
+    outputs.dir(packOutput)
+    commandLine 'python3', file('pack-resources.py'), android.sdkDirectory, packOutput.get().asFile
+}
+android {
+    namespace 'com.lelloman.paravoidcompat.resourcesplit'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.lelloman.paravoidcompat.resourcesplit'
+        minSdk 30
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+    }
+    sourceSets.main {
+        res.srcDir 'packs/pinned/res'
+        java.srcDir packOutput.map { it.dir('java') }
+    }
+    androidResources.additionalParameters += ['--stable-ids', packOutput.get().file('A.ids').asFile.absolutePath]
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+tasks.named('preBuild').configure { dependsOn(packs) }
+dependencies { implementation project(':paravoid-runtime') }
