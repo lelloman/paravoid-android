@@ -1,0 +1,27 @@
+plugins { id 'com.android.library' }
+def production = file('../../../paravoid-runtime/src/main/java')
+def generated = layout.buildDirectory.dir('generated/runtime')
+def copyRuntime = tasks.register('prepareFixtureRuntime') {
+    inputs.dir(production)
+    outputs.dir(generated)
+    doLast {
+        copy { from production; into generated }
+        File shell = new File(generated.get().asFile, 'com/lelloman/paravoidandroid/runtime/ShellApplication.java')
+        String anchor = 'getAssets().open("paravoid/module.zip")'
+        String original = shell.getText('UTF-8')
+        if (original.count(anchor) != 1) throw new GradleException('Production loader changed: review fixture hook')
+        shell.setText(original.replace(anchor, 'MigrationPayload.open(this)'), 'UTF-8')
+    }
+}
+android {
+    namespace 'com.lelloman.paravoidandroid.runtime'
+    compileSdk 36
+    defaultConfig { minSdk 28 }
+    sourceSets.main.java.srcDir generated
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+tasks.named('preBuild').configure { dependsOn(copyRuntime) }
+dependencies { api project(':paravoid-api') }

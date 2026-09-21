@@ -1,0 +1,33 @@
+plugins { id 'com.lelloman.paravoid' }
+def databaseVersion = providers.gradleProperty('databaseVersion').getOrElse('1').toInteger()
+if (!(databaseVersion in [1, 2])) throw new GradleException('databaseVersion must be 1 or 2')
+android {
+    namespace 'com.lelloman.paravoidcompat.migrations'
+    compileSdk 36
+    buildFeatures { buildConfig true }
+    defaultConfig {
+        applicationId 'com.lelloman.paravoidcompat.migrations'
+        minSdk 28
+        targetSdk 36
+        versionCode databaseVersion
+        versionName "${databaseVersion}"
+        buildConfigField 'int', 'DATABASE_VERSION', "${databaseVersion}"
+        javaCompileOptions.annotationProcessorOptions.arguments += [
+            'room.schemaLocation': file("build/schemas/v${databaseVersion}").absolutePath]
+    }
+    sourceSets.main.java.srcDir "src/v${databaseVersion}/java"
+    sourceSets.main.assets.srcDir 'build/staged-assets'
+    productFlavors {
+        normal { applicationIdSuffix '.normal' }
+        paravoidAndroid { applicationIdSuffix '.paravoid' }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+dependencies {
+    implementation project(':paravoid-runtime')
+    implementation 'androidx.room:room-runtime:2.6.1'
+    annotationProcessor 'androidx.room:room-compiler:2.6.1'
+}
