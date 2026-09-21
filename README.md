@@ -288,7 +288,32 @@ dependencies { implementation project(':paravoid-runtime') }
 The plugin applies `com.android.application` and generates the packaging flavors.
 Declare the Application and Activity in the ordinary manifest; no entry-point
 configuration is needed. With no custom Application, user initialization is skipped.
-The sample adds application ID suffixes for convenience; these are not required.
+By default, `paravoidAndroid` adds `.paravoid` to the application ID; normal
+packaging keeps its existing ID. For example, `example.product` becomes
+`example.product.paravoid`, allowing both apps to coexist with separate data.
+Configure the generated flavor using the ordinary Android DSL:
+
+```groovy
+android {
+    productFlavors {
+        paravoidAndroid {
+            applicationIdSuffix '.sandbox' // Override the default .paravoid.
+            // For a full custom ID, set BOTH instead:
+            // applicationId 'example.separateapp'
+            // applicationIdSuffix ''
+        }
+    }
+}
+```
+
+An empty suffix alone opts into the original application ID. Other flavor and
+build-type suffixes still compose according to AGP rules; `namespace` and class
+names do not change. The sample additionally uses `.normal` for its comparison app.
+Use `${applicationId}` for manifest provider authorities and other per-install
+identifiers. Hardcoded OAuth redirect schemes, API registrations and similar
+package-dependent settings are not rewritten automatically; configure those for
+the chosen ID. Sharing an ID does not permit side-by-side installation: a
+compatible signing identity is required to update the existing installation.
 
 For Paravoid variants, the plugin consumes AGP's scoped classes, transforms the
 Application base with ASM, compiles payload classes through D8, and embeds the

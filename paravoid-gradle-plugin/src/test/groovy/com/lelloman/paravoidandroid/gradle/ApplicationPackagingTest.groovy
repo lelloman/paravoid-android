@@ -21,6 +21,8 @@ class ApplicationPackagingTest {
         run(root, ':app:assembleNormalDebug', ':app:assembleParavoidAndroidDebug', ':app:bundleNormalRelease', ':app:bundleParavoidAndroidRelease').build()
         File normal = new File(root, 'app/build/outputs/apk/normal/debug/app-normal-debug.apk')
         File shell = new File(root, 'app/build/outputs/apk/paravoidAndroid/debug/app-paravoidAndroid-debug.apk')
+        assertEquals('example.fixture', apkApplicationId(normal))
+        assertEquals('example.fixture.paravoid', apkApplicationId(shell))
         new ZipFile(normal).withCloseable { zip ->
             assertNull(zip.getEntry('assets/paravoid/module.zip'))
             assertTrue(dexText(zip).contains('Lexample/MainActivity;'))
@@ -51,8 +53,42 @@ class ApplicationPackagingTest {
         assertTrue(manifest.contains('runtime.ParavoidComponentFactory'))
         assertTrue(manifest.contains('runtime.LauncherActivity'))
         assertTrue(manifest.contains('example.MainActivity'))
+        assertTrue(manifest.contains('package="example.fixture.paravoid"'))
         def second = run(root, ':app:assembleParavoidAndroidDebug').build()
         assertEquals(TaskOutcome.UP_TO_DATE, second.task(':app:packageParavoidAndroidDebugParavoidApplication').outcome)
+    }
+
+    @Test void configuresShellIdentityAndComposesWithOtherVariantSuffixes() {
+        File root = fixture()
+        new File(root, 'app/build.gradle') << '''
+            android {
+                flavorDimensions.add(0, 'audience')
+                productFlavors {
+                    phone { dimension 'audience'; applicationIdSuffix '.phone' }
+                    paravoidAndroid { applicationIdSuffix '.sandbox' }
+                }
+                buildTypes.debug.applicationIdSuffix = '.debug'
+            }
+        '''
+        File manifest = new File(root, 'app/src/main/AndroidManifest.xml')
+        manifest.text = manifest.text.replace('<application', '<permission android:name="${applicationId}.PRIVATE" /><application')
+        run(root, ':app:assemblePhoneNormalDebug', ':app:assemblePhoneParavoidAndroidDebug').build()
+        File normal = new File(root, 'app/build/outputs/apk/phoneNormal/debug/app-phone-normal-debug.apk')
+        File shell = new File(root, 'app/build/outputs/apk/phoneParavoidAndroid/debug/app-phone-paravoidAndroid-debug.apk')
+        assertEquals('example.fixture.phone.debug', apkApplicationId(normal))
+        assertEquals('example.fixture.phone.sandbox.debug', apkApplicationId(shell))
+        String merged = new File(root, 'app/build/intermediates/merged_manifest/phoneParavoidAndroidDebug/preparePhoneParavoidAndroidDebugParavoidManifest/AndroidManifest.xml').text
+        assertTrue(merged.contains('example.fixture.phone.sandbox.debug.PRIVATE'))
+        assertTrue(merged.contains('example.MainActivity'))
+
+        new File(root, 'app/build.gradle') << "\nandroid.productFlavors.paravoidAndroid.applicationIdSuffix = ''\n"
+        run(root, ':app:assemblePhoneParavoidAndroidDebug').build()
+        assertEquals('example.fixture.phone.debug', apkApplicationId(shell))
+
+        new File(root, 'app/build.gradle') << "\nandroid.productFlavors.paravoidAndroid.applicationId = 'custom.shell'\n"
+        run(root, ':app:assemblePhoneNormalDebug', ':app:assemblePhoneParavoidAndroidDebug').build()
+        assertEquals('custom.shell.phone.debug', apkApplicationId(shell))
+        assertEquals('example.fixture.phone.debug', apkApplicationId(normal))
     }
 
     @Test void packagesAdditionalActivityFromDependencyManifestAndAppliesHooks() {
@@ -289,6 +325,11 @@ class ApplicationPackagingTest {
         ''')
         write(root, 'app/src/main/java/example/MainActivity.java', 'package example; public class MainActivity extends android.app.Activity { int count = example.dependency.Logic.count(); }')
         return root
+    }
+
+    private static String apkApplicationId(File apk) {
+        assertTrue(apk.isFile())
+        new groovy.json.JsonSlurper().parse(new File(apk.parentFile, 'output-metadata.json')).applicationId
     }
 
     private static String dexText(ZipFile zip) {

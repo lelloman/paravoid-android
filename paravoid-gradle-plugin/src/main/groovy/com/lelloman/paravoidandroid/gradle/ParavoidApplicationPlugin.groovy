@@ -13,7 +13,10 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
         def android = project.extensions.getByName('android')
         android.flavorDimensions.add('paravoidPackaging')
         android.productFlavors.create('normal') { dimension = 'paravoidPackaging' }
-        android.productFlavors.create('paravoidAndroid') { dimension = 'paravoidPackaging' }
+        android.productFlavors.create('paravoidAndroid') {
+            dimension = 'paravoidPackaging'
+            applicationIdSuffix = '.paravoid'
+        }
         def components = project.extensions.getByName('androidComponents')
         components.onVariants(components.selector().withFlavor('paravoidPackaging', 'paravoidAndroid')) { variant ->
             if (variant.minSdk.apiLevel < 28) throw new GradleException('ParavoidAndroid application packaging requires minSdk >= 28 for AppComponentFactory.')

@@ -13,6 +13,14 @@ bootstrap code or downstream packaging script is required. The agreed rule is
 a fixed installed Activity contract, not one Activity; implementation still lags
 this decision as detailed below.
 
+The generated `paravoidAndroid` flavor defaults to `applicationIdSuffix '.paravoid'`;
+normal variants keep their existing identity. Downstream builds can override the
+suffix, clear it, or set a full `applicationId` and clear the suffix through the
+ordinary flavor DSL (see [integration configuration](README.md#plugin-integration-in-the-example)).
+The package identity belongs to the installed shell, not an updatable payload.
+Package-dependent external registrations and hardcoded manifest identifiers remain
+the downstream app's responsibility.
+
 **Complete packaging initially requires minSdk 30 in the shell variant.** Use the
 public ResourcesLoader/ResourcesProvider APIs, introduced in API 30; do not build
 a hidden-API fallback into this milestone. Normal packaging keeps its own minSdk.

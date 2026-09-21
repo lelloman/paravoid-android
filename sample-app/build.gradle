@@ -13,7 +13,6 @@ android {
     // Distinct identities let both packaging modes coexist for comparison.
     productFlavors {
         normal { applicationIdSuffix '.normal' }
-        paravoidAndroid { applicationIdSuffix '.paravoid' }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11

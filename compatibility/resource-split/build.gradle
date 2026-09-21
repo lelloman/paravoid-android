@@ -18,6 +18,8 @@ android {
         versionCode 1
         versionName '1.0'
     }
+    // This fixture deliberately reinstalls both modes under one stable resource-pack identity.
+    productFlavors.paravoidAndroid.applicationIdSuffix = ''
     sourceSets.main {
         res.srcDir 'packs/pinned/res'
         java.srcDir packOutput.map { it.dir('java') }
