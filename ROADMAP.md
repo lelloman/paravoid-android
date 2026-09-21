@@ -155,6 +155,12 @@ verification is mandatory in both modes; APK-carried keys are not copy-proof.
 Store catalogs, upload APIs and admin UI are outside Paravoid. Freeze the draft's
 wire/security profiles with conformance vectors before claiming interoperability.
 
+The [APK provisioning experiment](compatibility/provisioning/README.md) now
+exercises public/key discovery and harmless downloads, APK personalization without
+changing its signing identity, server revocation and APK-delivered replacement
+credentials. It is an isolated fixture, not production runtime/plugin support;
+signed VPKs, provisioning issuer validation and safe activation are still required.
+
 - Add plugin/server configuration and produce the complete uploadable package.
   Define signing and verification before accepting externally supplied content.
   Retain the existing signing direction: product-shell signing authority, explicit

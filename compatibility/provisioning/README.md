@@ -62,6 +62,18 @@ inspection and device class-loader assertions check this boundary. This does
 
 Random test credentials and personalized APKs are temporary, never checked in.
 Device reports and Gradle logs go under ignored `build/`. Do not use real keys.
+
+Verified on 2026-09-21: all 10 host tests and all 24 device stages passed on both
+API 30 and API 36.1 x86_64 emulators, normal and shell/debug; `lintDebug` passed.
+The repeatable fixture
+uses v3-signed APKs; an earlier API 30 run also passed all 24 stages with v2-only
+APKs. Personalized APKs verified under the same original signing certificates,
+and deliberately damaged signed content failed verification. Other signing
+profiles (including v3.1 rotation), release/R8 builds, split APKs and real
+distributor install paths are not covered.
+
+## Standalone server
+
 The standalone server accepts `--config /private/path/server.json --port 18765`:
 
 ```json
