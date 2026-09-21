@@ -282,10 +282,17 @@ android {
         versionName '1.0'
     }
 }
-dependencies { implementation project(':paravoid-runtime') }
+dependencies {
+    implementation project(':paravoid-api')
+    paravoidAndroidImplementation project(':paravoid-runtime')
+}
 ```
 
 The plugin applies `com.android.application` and generates the packaging flavors.
+The API library (including `ParavoidAndroidApplication`, whose class name is
+unchanged) supports minSdk 24. Only shell variants need the runtime dependency;
+this avoids imposing its minimum SDK on normal builds. Set a higher minSdk on
+the generated `paravoidAndroid` flavor when the normal app supports older devices.
 Declare the Application and Activity in the ordinary manifest; no entry-point
 configuration is needed. With no custom Application, user initialization is skipped.
 By default, `paravoidAndroid` adds `.paravoid` to the application ID; normal

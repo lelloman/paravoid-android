@@ -91,6 +91,20 @@ class ApplicationPackagingTest {
         assertEquals('example.fixture.phone.debug', apkApplicationId(normal))
     }
 
+    @Test void normalApi24ApplicationDoesNotNeedShellRuntime() {
+        File root = fixture()
+        File build = new File(root, 'app/build.gradle')
+        build.text = build.text.replace('minSdk 28', 'minSdk 24')
+            .replace("implementation project(':paravoid-runtime')",
+                "implementation project(':paravoid-api'); paravoidAndroidImplementation project(':paravoid-runtime')")
+        build << '\nandroid.productFlavors.paravoidAndroid.minSdk = 28\n'
+        run(root, ':app:assembleNormalDebug', ':app:assembleParavoidAndroidDebug').build()
+        new ZipFile(new File(root, 'app/build/outputs/apk/normal/debug/app-normal-debug.apk')).withCloseable { apk ->
+            assertTrue(dexText(apk).contains('Lcom/lelloman/paravoidandroid/runtime/ParavoidAndroidApplication;'))
+            assertFalse(dexText(apk).contains('Lcom/lelloman/paravoidandroid/runtime/ShellApplication;'))
+        }
+    }
+
     @Test void packagesAdditionalActivityFromDependencyManifestAndAppliesHooks() {
         File root = fixture()
         new File(root, 'settings.gradle') << "\ninclude ':extra'\n"
