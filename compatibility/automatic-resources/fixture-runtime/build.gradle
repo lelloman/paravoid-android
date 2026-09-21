@@ -1,0 +1,30 @@
+// Reuse the existing, explicitly fixture-only pre-Application resource hook.
+plugins { id 'com.android.library' }
+def production = file('../../../paravoid-runtime/src/main/java')
+def generated = layout.buildDirectory.dir('generated/runtime')
+def copyRuntime = tasks.register('prepareFixtureRuntime') {
+    inputs.dir(production)
+    outputs.dir(generated)
+    doLast {
+        copy { from production; into generated }
+        File shell = new File(generated.get().asFile, 'com/lelloman/paravoidandroid/runtime/ShellApplication.java')
+        String anchor = 'ModuleBundle bundle = ModuleBundle.read('
+        String original = shell.getText('UTF-8')
+        if (original.count(anchor) != 1) throw new GradleException('Production loader changed: review resource hook')
+        shell.setText(original.replace(anchor, 'SplitResources.install(this);\n            ' + anchor), 'UTF-8')
+    }
+}
+android {
+    namespace 'com.lelloman.paravoidandroid.runtime'
+    compileSdk 36
+    defaultConfig { minSdk 30 }
+    sourceSets.main.java.srcDir generated
+    sourceSets.main.java.srcDir rootProject.layout.buildDirectory.dir('packs/runtime-java')
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+tasks.named('preBuild').configure { dependsOn(copyRuntime, rootProject.tasks.named('resourcePacks')) }
+dependencies { api project(':paravoid-api') }
+android.sourceSets.main.java.srcDir('../../resource-split/fixture-runtime/src/main/java')

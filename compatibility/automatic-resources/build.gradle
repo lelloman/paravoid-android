@@ -1,0 +1,45 @@
+plugins { id 'com.lelloman.paravoid' }
+
+// The shared early-loader fixture expects this producer. Only Java trust constants
+// are generated here; all resource linking/splitting uses ordinary AGP + the plugin.
+def trusted = providers.fileContents(layout.projectDirectory.file('build/trusted.properties')).asText
+tasks.register('resourcePacks') {
+    inputs.property('trusted', trusted)
+    def generated = layout.buildDirectory.dir('packs/runtime-java')
+    outputs.dir(generated)
+    doLast {
+        Properties hashes = new Properties()
+        hashes.load(new StringReader(trusted.get()))
+        ['A', 'B'].each { if (!(hashes[it] ==~ /[0-9a-f]{64}/)) throw new GradleException('Invalid fixture hash') }
+        File target = generated.get().file('com/lelloman/paravoidandroid/runtime/SplitTrusted.java').asFile
+        target.parentFile.mkdirs()
+        target.text = 'package com.lelloman.paravoidandroid.runtime;\nfinal class SplitTrusted {\n' +
+            "static final String A = \"${hashes.A}\";\nstatic final String B = \"${hashes.B}\";\n}\n"
+    }
+}
+android {
+    namespace 'com.lelloman.paravoidcompat.automaticresources'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.lelloman.paravoidcompat.automaticresources'
+        minSdk 30
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+    }
+    flavorDimensions.add('content')
+    productFlavors {
+        paravoidAndroid { applicationIdSuffix '' }
+        a { dimension 'content' }
+        b { dimension 'content' }
+    }
+    signingConfigs {
+        fixture { storeFile file('build/fixture.jks'); storePassword 'android'; keyAlias 'fixture'; keyPassword 'android' }
+    }
+    buildTypes.debug.signingConfig = signingConfigs.fixture
+    compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
+}
+if (providers.gradleProperty('baseline').present) {
+    paravoid.baselineDirectory = layout.projectDirectory.dir(providers.gradleProperty('baseline').get())
+}
+dependencies { implementation project(':paravoid-runtime'); implementation project(':resource-library') }

@@ -1,0 +1,10 @@
+<resources>
+    <string name="shell_label" translatable="false">Automatic resource probe</string>
+    <color name="shell_accent">#774400</color>
+    <style name="ShellTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorAccent">@color/shell_accent</item>
+    </style>
+    <style name="PayloadTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorAccent">@color/payload_accent</item>
+    </style>
+</resources>
