@@ -377,10 +377,64 @@ Android-library and generated resources are included; styleable arrays are not
 separate resource IDs. Baseline-only edits invalidate linking, and clean/incremental
 builds are covered by integration tests. Split-APK ledger export is not supported.
 
-This does **not** yet split resources out of the installed APK, calculate pinned
-resource closure, or validate the complete shell contract. It is the stable-ID
-foundation for those next steps, not a complete VPK or update implementation.
+This does **not** yet split resources out of the installed APK or validate the
+complete shell contract. Pinned-resource analysis is now available separately below;
+neither feature is a complete VPK or update implementation.
 Do not also supply a manual `--stable-ids` option when configuring this baseline.
+
+### Pinned-resource analysis and boundary checks
+
+```groovy
+paravoid {
+    // Additional roots used outside the payload process; exact local type/name.
+    pinnedResources = ['drawable/notification_icon', 'layout/widget']
+}
+```
+
+```sh
+./gradlew :app:analyzeParavoidAndroidDebugParavoidResources
+```
+
+The analyzer follows typed references from the final installed manifest, including
+library contributions, plus the explicit roots. Style parents/keys, theme
+attributes, arrays/plurals and compiled XML dependencies are followed through every
+configuration. Framework references stay outside the app graph. Strings or integer
+values that happen to resemble resource IDs are not treated as references.
+
+It writes `baseline-candidate/resource-boundary.json` and
+`resource-boundary-report.txt` beside the ledger outputs. The report separates
+pinned/movable resources and explains inclusion chains. Fingerprints cover all
+values/configurations and the original bytes of referenced files; source metadata
+is excluded from protobuf value fingerprints. Compiled file changes are treated
+conservatively, even if a visual result happens to look identical.
+
+For an existing shell, review and copy the boundary JSON alongside its accepted
+ledger in `<baselineDirectory>/<variant>/`, then run:
+
+```sh
+./gradlew :app:checkParavoidAndroidDebugParavoidResourceBoundary
+```
+
+The check rejects changed installed manifests and added/removed/changed pinned
+resources, writes `resource-boundary-check.txt`, and never changes accepted files.
+APK versionCode alone is excluded; movable value changes are allowed. Keep the
+accepted boundary fixed until issuing a new shell; evolving the resource ID ledger
+does not authorize changing that boundary.
+
+These are **explicit analysis/check tasks**, not yet gates attached to ordinary
+assemble or complete-payload publication. They do not prune resources, approve
+runtime/trust/native compatibility, or produce the complete v1 shell contract ID.
+Current shell bootstrap uses no resource files of its own; future non-manifest
+bootstrap resources must become plugin-owned roots before resource splitting ships.
+Runtime-selected external resources still require explicit roots; reflection and
+dynamic theme choices cannot be inferred universally.
+
+The implementation is pinned to AGP 8.13.2/AAPT2 protobufs and standalone APKs.
+Missing roots/files, unresolved app references, dynamic resource packages,
+runtime-overlay tables and unsupported protobuf fields fail analysis rather than
+silently returning an incomplete pinned set. These analysis restrictions do not
+change existing normal or DEX-only APK assembly. The structured format is defined
+by [AAPT2's resource schema](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/tools/aapt2/Resources.proto).
 
 ## Verification
 

@@ -254,9 +254,10 @@ document requirements and limitations, and make small commits. Add focused probe
 when a concrete risk or real-app failure warrants one. Do not restart an open-ended
 compatibility exploration phase before finishing packaging.
 
-**Immediate next task:** build on the passing ordinary AGP resource-ledger/R
-integration to compute pinned-resource ownership and shell compatibility diffs,
-then wire resource splitting into automatic packaging. Finish the [remaining contract-gate scenarios](PACKAGING.md#7-first-implementation-gate)
+**Immediate next task:** use the resource ledger and computed pinned graph to
+build the installed resource subset and complete payload resource APK. Extend the
+resource-boundary diff into the full shell contract and automatic packaging gates.
+Finish the [remaining contract-gate scenarios](PACKAGING.md#7-first-implementation-gate)
 alongside that implementation before advertising complete packaging support.
 
 First production-plugin slice now implemented: exact resource-ledger export from
@@ -265,5 +266,10 @@ ID arguments for the shell linker. Integration coverage includes ordinary app an
 Android-library generated R/styleables, generated resources, dotted names,
 removal/restoration, baseline-only edits, clean/incremental builds and unaffected
 normal builds. This is not yet resource splitting or a complete shell contract.
-Next implement computed pinned-resource ownership/closure and compatibility diffs,
-then use that graph to build the installed subset and complete payload resource APK.
+Second slice now implements explicit pinned-resource analysis/check tasks using
+AAPT2 protobufs: manifest/library/declared roots, transitive typed/XML dependencies,
+all configurations, inclusion reports, file fingerprints and resource-boundary diffs.
+Integration tests reject pinned night-mode/file/manifest changes, allow movable
+changes, and verify clean/incremental results without modifying accepted snapshots.
+These are not yet resource pruning, a complete shell contract or mandatory assemble
+gates. Unknown/dynamic/overlay resource formats fail analysis explicitly.

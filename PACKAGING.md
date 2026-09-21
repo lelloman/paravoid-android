@@ -206,9 +206,12 @@ ledger digest for integrity and future builds separately.
 and `export<Variant>ParavoidResourceLedger` task now preserve exact linked names,
 entry/type ID reservations and tombstones using public AGP 8.13.2 hooks. See the
 [working baseline workflow](README.md#resource-id-baseline-first-complete-packaging-implementation-slice).
-This observes the currently installed resource table; pinned ownership/pruning and
-complete shell-contract checking are still unimplemented. A ledger alone is not a
-shell compatibility approval.
+This observes the currently installed resource table. The separate
+[pinned-resource analyzer/check](README.md#pinned-resource-analysis-and-boundary-checks)
+now computes manifest/explicit closure and detects installed-manifest/pinned-content
+changes against a reviewed snapshot. Pruning and complete shell-contract checking
+are still unimplemented; these explicit tasks are not automatic assemble gates.
+A ledger or resource-boundary check alone is not a complete shell approval.
 
 ## 5. Shell compatibility contract
 

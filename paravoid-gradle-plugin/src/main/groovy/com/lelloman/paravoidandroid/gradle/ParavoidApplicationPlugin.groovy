@@ -12,6 +12,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
     void apply(Project project) {
         project.pluginManager.apply('com.android.application')
         def extension = project.extensions.create('paravoid', ParavoidApplicationExtension)
+        extension.pinnedResources.convention([])
         def android = project.extensions.getByName('android')
         android.flavorDimensions.add('paravoidPackaging')
         android.productFlavors.create('normal') { dimension = 'paravoidPackaging' }
@@ -53,6 +54,23 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 aapt2.set(components.sdkComponents.sdkDirectory.map { it.file("build-tools/${android.buildToolsVersion}/aapt2") })
                 ledgerFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/baseline-candidate/resource-ledger.json"))
                 stableIds.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/baseline-candidate/stable-ids.txt"))
+            }
+            def analysis = project.tasks.register("analyze${cap}ParavoidResources", AnalyzeResourcesTask) {
+                group = 'paravoid'
+                description = 'Computes manifest/explicit pinned-resource closure without changing APK contents.'
+                apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
+                applicationId.set(variant.applicationId)
+                pinnedResources.set(extension.pinnedResources)
+                aapt2.set(components.sdkComponents.sdkDirectory.map { it.file("build-tools/${android.buildToolsVersion}/aapt2") })
+                boundaryFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/baseline-candidate/resource-boundary.json"))
+                reportFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/resource-boundary-report.txt"))
+            }
+            project.tasks.register("check${cap}ParavoidResourceBoundary", CheckResourceBoundaryTask) {
+                group = 'verification'
+                description = 'Checks the installed manifest and pinned-resource boundary, not the complete shell contract.'
+                baselineFile.set(extension.baselineDirectory.file("${variant.name}/resource-boundary.json"))
+                candidateFile.set(analysis.flatMap { it.boundaryFile })
+                reportFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/resource-boundary-check.txt"))
             }
             def nativeValidation = project.tasks.register("validate${cap}ParavoidNativeLibraries", ValidateNativeLibrariesTask) {
                 nativeLibraries.from(variant.artifacts.get(SingleArtifact.MERGED_NATIVE_LIBS.INSTANCE))

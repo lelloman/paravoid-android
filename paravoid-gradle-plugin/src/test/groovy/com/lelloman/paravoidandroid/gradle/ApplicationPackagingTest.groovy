@@ -16,6 +16,77 @@ import static org.junit.Assert.*
 class ApplicationPackagingTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder()
 
+    @Test void analyzesAndChecksPinnedManifestLibraryXmlAndAllConfigurations() {
+        File root = fixture()
+        new File(root, 'settings.gradle') << "\ninclude ':resource-library'\n"
+        write(root, 'resource-library/build.gradle', """
+            plugins { id 'com.android.library' }
+            android { namespace 'example.resources'; compileSdk 36; defaultConfig { minSdk 28 } }
+        """)
+        write(root, 'resource-library/src/main/AndroidManifest.xml', '''
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application>
+                <meta-data android:name="library-config" android:resource="@xml/library_config" />
+            </application></manifest>''')
+        write(root, 'resource-library/src/main/res/xml/library_config.xml', '<config label="@string/library_label" />')
+        write(root, 'resource-library/src/main/res/values/strings.xml', '<resources><string name="library_label">Library</string></resources>')
+        new File(root, 'app/build.gradle') << """
+            dependencies { implementation project(':resource-library') }
+            paravoid { pinnedResources = ['layout/widget', 'raw/external'] }
+        """
+        File manifest = new File(root, 'app/src/main/AndroidManifest.xml')
+        manifest.text = manifest.text.replace('<application ', '<application android:label="@string/app_label" android:theme="@style/AppTheme" ')
+        String values = '''<resources>
+            <string name="app_label">App</string><string name="widget_label">Widget</string>
+            <string name="movable">A</string><attr name="badge" format="string" />
+            <color name="background">#112233</color><color name="night_background">#000000</color>
+            <style name="BaseTheme" parent="android:style/Theme.Material"><item name="android:windowBackground">@drawable/background</item></style>
+            <style name="AppTheme" parent="BaseTheme" />
+        </resources>'''
+        write(root, 'app/src/main/res/values/values.xml', values)
+        write(root, 'app/src/main/res/values-night/colors.xml', '<resources><color name="background">@color/night_background</color></resources>')
+        write(root, 'app/src/main/res/drawable/background.xml', '<shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="@color/background" /></shape>')
+        write(root, 'app/src/main/res/layout/widget.xml', '''<TextView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+            android:layout_width="wrap_content" android:layout_height="wrap_content" app:badge="@string/widget_label" />''')
+        write(root, 'app/src/main/res/raw/external.txt', 'External bytes A')
+        String analyze = ':app:analyzeParavoidAndroidDebugParavoidResources'
+        String check = ':app:checkParavoidAndroidDebugParavoidResourceBoundary'
+        String outputs = 'app/build/outputs/paravoid/paravoidAndroidDebug/'
+        def parser = new groovy.json.JsonSlurper()
+        run(root, ':app:assembleNormalDebug', ':app:exportParavoidAndroidDebugParavoidResourceLedger', analyze).build()
+        String snapshot = new File(root, outputs + 'baseline-candidate/resource-boundary.json').text
+        def report = parser.parseText(snapshot)
+        ['style/AppTheme', 'style/BaseTheme', 'drawable/background', 'color/background', 'color/night_background',
+         'string/app_label', 'layout/widget', 'attr/badge', 'string/widget_label', 'xml/library_config', 'string/library_label', 'raw/external'].each { name ->
+            assertTrue("Not pinned: ${name}", report.pinned*.name.contains(name))
+        }
+        assertTrue(report.movable.contains('string/movable'))
+        assertEquals(2, report.pinned.find { it.name == 'color/background' }.configurations)
+        assertEquals(['xml/library_config', 'string/library_label'], report.pinned.find { it.name == 'string/library_label' }.chain)
+        assertEquals(TaskOutcome.UP_TO_DATE, run(root, analyze).build().task(analyze).outcome)
+        assertTrue(run(root, check).buildAndFail().output.contains('Configure paravoid.baselineDirectory'))
+        ['resource-ledger.json', 'resource-boundary.json'].each { name ->
+            write(root, 'app/paravoid/baseline/paravoidAndroidDebug/' + name, new File(root, outputs + 'baseline-candidate/' + name).text)
+        }
+        new File(root, 'app/build.gradle') << "\nparavoid { baselineDirectory = layout.projectDirectory.dir('paravoid/baseline') }\n"
+        run(root, check).build()
+        write(root, 'app/src/main/res/values/values.xml', values.replace('>A<', '>B<'))
+        run(root, check).build() // Movable values are not frozen.
+        run(root, ':app:clean', check).build()
+        assertEquals(snapshot, new File(root, outputs + 'baseline-candidate/resource-boundary.json').text)
+        write(root, 'app/src/main/res/values/values.xml', values.replace('#000000', '#ffffff'))
+        assertTrue(run(root, check).buildAndFail().output.contains('Pinned resource changed: color/night_background'))
+        write(root, 'app/src/main/res/values/values.xml', values)
+        write(root, 'app/src/main/res/raw/external.txt', 'External bytes B')
+        assertTrue(run(root, check).buildAndFail().output.contains('Pinned resource changed: raw/external'))
+        write(root, 'app/src/main/res/raw/external.txt', 'External bytes A')
+        manifest.text = manifest.text.replace('android:exported="true"', 'android:exported="false"')
+        assertTrue(run(root, check).buildAndFail().output.contains('Installed manifest changed'))
+        assertEquals(snapshot, new File(root, 'app/paravoid/baseline/paravoidAndroidDebug/resource-boundary.json').text)
+        new File(root, 'app/build.gradle') << "\nparavoid.pinnedResources.add('string/does_not_exist')\n"
+        assertTrue(run(root, analyze).buildAndFail().output.contains('Unknown explicit pinned resource'))
+        assertNull(run(root, ':app:assembleNormalDebug').build().task(analyze))
+    }
+
     @Test void exportsAndReusesExactResourceLedgerAcrossAppLibraryAndGeneratedResources() {
         File root = fixture()
         new File(root, 'settings.gradle') << "\ninclude ':resource-library'\n"
@@ -117,8 +188,12 @@ class ApplicationPackagingTest {
         File root = fixture()
         String task = ':app:exportParavoidAndroidDebugParavoidResourceLedger'
         String output = 'app/build/outputs/paravoid/paravoidAndroidDebug/baseline-candidate/resource-ledger.json'
-        run(root, task).build()
+        run(root, task, ':app:analyzeParavoidAndroidDebugParavoidResources').build()
         assertTrue(ResourceLedger.read(new File(root, output).text).entries.empty)
+        def boundary = new groovy.json.JsonSlurper().parse(new File(root,
+            'app/build/outputs/paravoid/paravoidAndroidDebug/baseline-candidate/resource-boundary.json'))
+        assertTrue(boundary.pinned.empty)
+        assertTrue(boundary.movable.empty)
         write(root, 'app/paravoid/baseline/paravoidAndroidDebug/resource-ledger.json',
             new ResourceLedger('example.fixture.paravoid', [[name: 'string/old', id: '0x7f010000', removed: false]]).toJson())
         new File(root, 'app/build.gradle') << "\nparavoid { baselineDirectory = layout.projectDirectory.dir('paravoid/baseline') }\n"

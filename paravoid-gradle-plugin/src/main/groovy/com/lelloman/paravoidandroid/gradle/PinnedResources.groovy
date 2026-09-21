@@ -16,11 +16,14 @@ final class PinnedResources {
                        Collection<String> extraRoots, Closure<byte[]> originalFile, Closure<byte[]> protoFile) {
         Map<String, Map> nodes = [:]
         Map<Integer, String> names = [:]
+        require(table.unknownFields.asMap().isEmpty(), 'Unknown AAPT2 resource table fields')
         require(table.dynamicRefTableCount == 0, 'Dynamic resource packages are not supported')
         require(table.overlayableCount == 0, 'Runtime resource overlays need a separate boundary policy')
         table.packageList.each { pkg ->
+            require(pkg.unknownFields.asMap().isEmpty(), 'Unknown AAPT2 resource package fields')
             require(pkg.packageName == applicationId && pkg.packageId.id == 0x7f, 'Expected only the linked application resource package')
             pkg.typeList.each { type ->
+                require(type.unknownFields.asMap().isEmpty(), 'Unknown AAPT2 resource type fields')
                 require(type.hasTypeId() && type.typeId.id in 1..255, 'Invalid linked resource type ID')
                 type.entryList.each { entry ->
                     require(entry.hasEntryId() && entry.entryId.id in 0..65535, 'Invalid linked resource entry ID')
@@ -130,7 +133,10 @@ final class PinnedResources {
         }
         if (value instanceof List) return value.collect { normalized(it) }
         if (value instanceof ByteString) return value.toByteArray().encodeBase64().toString()
-        if (value instanceof Descriptors.EnumValueDescriptor) return value.name
+        if (value instanceof Descriptors.EnumValueDescriptor) {
+            require(value.index >= 0, 'Unknown AAPT2 enum value')
+            return value.name
+        }
         value
     }
 
