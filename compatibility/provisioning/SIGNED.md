@@ -3,6 +3,10 @@
 This extends the original unsigned experiment; it does not freeze protocol v1 or
 produce VPKs. Artifacts are still harmless bytes, never dynamically executed.
 
+The optional [archive extension](ARCHIVE.md) adds a separately signed component
+manifest/inventory gate. The baseline signed-discovery tests below remain distinct
+from that restricted container profile and its device results.
+
 `signed_profile.py` uses Python `cryptography` (tested with 41.0.7) to sign exact
 ASCII payload bytes using RSA-2048 / PKCS#1 v1.5 / SHA-256. Android independently
 verifies with JCA `SHA256withRSA`. This is an experimental interoperability choice,

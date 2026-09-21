@@ -164,6 +164,11 @@ integrity using independent Python/Android implementations. These are isolated
 fixtures, not production runtime/plugin support; complete signed VPKs, finalized
 trust/provisioning policy and safe activation are still required.
 
+The [archive extension](compatibility/provisioning/ARCHIVE.md) adds a release key
+separate from discovery, signed inventory coverage, component hashes and strict
+stored-ZIP bounds/layout checks. It retains the last verified archive on rejection;
+its role-labelled marker bytes are not yet real loadable app components.
+
 - Add plugin/server configuration and produce the complete uploadable package.
   Define signing and verification before accepting externally supplied content.
   Retain the existing signing direction: product-shell signing authority, explicit

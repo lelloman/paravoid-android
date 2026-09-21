@@ -24,6 +24,10 @@ from this gate rather than claiming compressed ZIP-bomb coverage. The Android
 verifier checks local/central directory consistency, contiguous layout, CRCs,
 duplicates and bounds before inventory validation. ZIP record layouts follow the
 [PKWARE APPNOTE](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT).
+The profile accepts the fixture writer's Unix/version-20 headers, mode `100644`,
+zero flags and internal attributes only; it is not a permissive ZIP interchange
+format. The Python verifier checks the shared semantic vectors using `zipfile`;
+the strict raw-layout vectors specifically exercise Android's independent parser.
 
 Python provides a producer and a separate verifier using its ZIP library. Host
 tests cover valid inventory, tampered/missing/unexpected/duplicate files, identity,
@@ -43,6 +47,8 @@ The server does not hold any signing keys. All negative archives are bound by
 **valid signed discovery metadata**, so an outer digest failure cannot masquerade
 as an inner-verifier success. One vector signs the manifest with the trusted
 discovery key, which must not act as a trusted release key.
+APKs are snapshotted into the runner's private temporary directory after the
+build, so a later cleanup of shared Gradle outputs cannot remove its test inputs.
 
 The client verifies the downloaded archive in memory after its outer digest, then
 atomically replaces the retained archive file only after every inventory check
@@ -63,3 +69,19 @@ separate manifest-digest field or the draft's SDK/ABI/runtime/ledger requirement
 Components are role-labelled **opaque marker bytes**, not valid DEX/compiled
 resource/ELF test applications. No loading, native execution, extraction-race,
 cross-process selection or rollback safety is implied by acceptance here.
+
+## Verified results (2026-09-21)
+
+- All 22 host tests pass, including semantic vectors checked independently by
+  Python's verifier.
+- All 136 archive device stages pass on API 30 and API 36.1 x86_64, across normal/
+  shell and public/key variants. This includes 29 archive vectors plus a cold
+  restart per variant, and the keyed grant-validation controls.
+- Android `lintDebug` passes.
+- The earlier 114-stage signed-discovery suite passes again on API 36.1 without
+  archive mode enabled.
+
+The first API 36.1 attempt was interrupted when shared Gradle build outputs
+disappeared during the run. It is not counted as a pass. The runner now snapshots
+all four APKs into its own temporary directory; the full rerun passed. No personal
+device or downstream application was modified.

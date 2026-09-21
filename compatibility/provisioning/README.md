@@ -8,6 +8,8 @@ The original suite below remains the unsigned-record baseline. The separate
 [signed-profile extension](SIGNED.md) adds authenticated grants, independently
 verified signed discovery, durable replay checks and hostile-server tests in both
 public and key modes. Neither suite executes downloaded content.
+The [archive gate](ARCHIVE.md) extends it with a signed component inventory and
+hostile-container rejection before retaining the downloaded archive.
 
 - `apk_record.py` adds a fixture-only signing-block entry to a copy of an APK.
   Existing signature entries and ZIP contents are preserved, with aligned block

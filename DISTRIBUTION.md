@@ -27,6 +27,12 @@ VPKs or executes downloads. Their provisional records and HTTP routes are not th
 draft's frozen protocol or a production updater; complete format/trust policy,
 production integration and activation remain outstanding.
 
+The [component-inventory extension](compatibility/provisioning/ARCHIVE.md) now
+verifies a separately signed manifest, complete inventory coverage and component
+bytes within a bounded stored-ZIP fixture. It tests hostile archives beneath valid
+signed discovery, not a frozen VPK format, real component loading, SDK/ABI/runtime
+compatibility or executable activation.
+
 ## 1. Scope and ownership
 
 Paravoid specifies the payload artifact, discovery/download protocol, trust and
