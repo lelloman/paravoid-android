@@ -1,0 +1,35 @@
+plugins { id 'com.lelloman.paravoid' }
+android {
+    namespace 'com.lelloman.paravoidcompat.provisioning'
+    compileSdk 36
+    signingConfigs.debug {
+        enableV2Signing = true
+        enableV3Signing = true
+    }
+    defaultConfig {
+        applicationId 'com.lelloman.paravoidcompat.provisioning'
+        minSdk 30
+        targetSdk 36
+        versionCode providers.gradleProperty('probeVersion').getOrElse('1').toInteger()
+        versionName 'fixture'
+    }
+    flavorDimensions += 'access'
+    productFlavors {
+        normal { applicationIdSuffix '.normal' }
+        keyed {
+            dimension 'access'
+            applicationId 'com.lelloman.paravoidcompat.provisioning.key'
+            manifestPlaceholders = [probeMode: 'key']
+        }
+        publicAccess {
+            dimension 'access'
+            applicationId 'com.lelloman.paravoidcompat.provisioning.public'
+            manifestPlaceholders = [probeMode: 'public']
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+dependencies { implementation project(':paravoid-runtime') }

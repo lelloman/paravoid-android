@@ -1,0 +1,11 @@
+pluginManagement {
+    includeBuild('../../paravoid-gradle-plugin')
+    repositories { google(); mavenCentral(); gradlePluginPortal() }
+}
+dependencyResolutionManagement {
+    repositories { google(); mavenCentral() }
+}
+rootProject.name = 'provisioning'
+include ':paravoid-api', ':paravoid-runtime'
+project(':paravoid-api').projectDir = file('../../paravoid-api')
+project(':paravoid-runtime').projectDir = file('fixture-runtime')
