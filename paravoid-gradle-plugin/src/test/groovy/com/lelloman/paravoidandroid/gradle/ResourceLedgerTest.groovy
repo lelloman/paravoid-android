@@ -54,7 +54,7 @@ example.app:style/Theme.App = 0x7f020000
 
     @Test void rejectsWrongPackagesAndMalformedDumpInsteadOfExportingPartialLedger() {
         [
-            '', 'Binary APK\n', dump('resource nonsense'),
+            '', 'Binary APK\nunrecognized table', dump('resource nonsense'),
             dump('resource 0x80010000 string/title'),
             dump('resource 0x7f000000 string/title'),
             dump('resource 0x7f010000 string/title\nresource 0x7f010000 string/title'),
@@ -78,5 +78,7 @@ example.app:style/Theme.App = 0x7f020000
         assertEquals(ResourceLedger.fromDump(APP, dump('resource 0x7f010000 string/a\nresource 0x7f010001 string/b')).toJson(),
             ResourceLedger.fromDump(APP, dump('resource 0x7f010001 string/b\nresource 0x7f010000 string/a')).toJson())
         assertEquals('', ResourceLedger.fromDump(APP, dump('')).toStableIds())
+        assertEquals('', ResourceLedger.fromDump(APP, 'Binary APK\n').toStableIds())
+        assertTrue(ResourceLedger.fromDump(APP, 'Binary APK\n', first()).entries.every { it.removed })
     }
 }

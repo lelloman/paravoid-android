@@ -202,6 +202,14 @@ mappings, while allowing append-only allocations; requiring equality of the enti
 new ledger hash would incorrectly reject resource additions. Record the full new
 ledger digest for integrity and future builds separately.
 
+**Implemented first slice:** the plugin's optional `paravoid.baselineDirectory`
+and `export<Variant>ParavoidResourceLedger` task now preserve exact linked names,
+entry/type ID reservations and tombstones using public AGP 8.13.2 hooks. See the
+[working baseline workflow](README.md#resource-id-baseline-first-complete-packaging-implementation-slice).
+This observes the currently installed resource table; pinned ownership/pruning and
+complete shell-contract checking are still unimplemented. A ledger alone is not a
+shell compatibility approval.
+
 ## 5. Shell compatibility contract
 
 Generate a canonical descriptor of installed requirements: package identity,

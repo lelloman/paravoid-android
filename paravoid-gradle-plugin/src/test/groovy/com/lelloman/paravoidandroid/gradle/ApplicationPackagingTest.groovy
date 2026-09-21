@@ -16,6 +16,117 @@ import static org.junit.Assert.*
 class ApplicationPackagingTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder()
 
+    @Test void exportsAndReusesExactResourceLedgerAcrossAppLibraryAndGeneratedResources() {
+        File root = fixture()
+        new File(root, 'settings.gradle') << "\ninclude ':resource-library'\n"
+        write(root, 'resource-library/build.gradle', """
+            plugins { id 'com.android.library' }
+            android { namespace 'example.resources'; compileSdk 36; defaultConfig { minSdk 28 } }
+        """)
+        write(root, 'resource-library/src/main/res/values/values.xml', '''<resources>
+            <string name="library_title">Library</string>
+            <declare-styleable name="LibraryView"><attr name="libraryLabel" format="string" /></declare-styleable>
+        </resources>''')
+        write(root, 'resource-library/src/main/java/example/resources/Library.java', '''package example.resources;
+            public class Library { public static int[] attrs() { return R.styleable.LibraryView; }
+                public static int title() { return R.string.library_title; } }
+        ''')
+        new File(root, 'app/build.gradle') << '''
+            dependencies { implementation project(':resource-library') }
+            abstract class GeneratedResources extends DefaultTask {
+                @OutputDirectory abstract DirectoryProperty getOutputDirectory()
+                @TaskAction void generate() {
+                    def output = outputDirectory.file('values/generated.xml').get().asFile
+                    output.parentFile.mkdirs()
+                    output.text = '<resources><string name="generated_title">Generated</string></resources>'
+                }
+            }
+            def generated = tasks.register('generatedResources', GeneratedResources) {
+                outputDirectory.set(layout.buildDirectory.dir('generated/probe/res'))
+            }
+            androidComponents.onVariants(androidComponents.selector().all()) { variant ->
+                variant.sources.res.addGeneratedSourceDirectory(generated) { it.outputDirectory }
+            }
+        '''
+        String resourcesA = '''<resources><string name="title">A</string>
+            <string name="removed">Only A</string><style name="Theme.App" parent="android:style/Theme.Material" />
+        </resources>'''
+        write(root, 'app/src/main/res/values/values.xml', resourcesA)
+        write(root, 'app/src/main/java/example/ResourceProbe.java', '''package example;
+            public class ResourceProbe { int title = R.string.title; int generated = R.string.generated_title;
+                int[] attrs = example.resources.Library.attrs(); int theme = R.style.Theme_App; }
+        ''')
+        String task = ':app:exportParavoidAndroidDebugParavoidResourceLedger'
+        String candidatePath = 'app/build/outputs/paravoid/paravoidAndroidDebug/baseline-candidate/resource-ledger.json'
+        run(root, ':app:assembleNormalDebug', task).build()
+        def a = ResourceLedger.read(new File(root, candidatePath).text)
+        assertEquals('example.fixture.paravoid', a.applicationId)
+        ['string/title', 'string/library_title', 'string/generated_title', 'attr/libraryLabel', 'style/Theme.App'].each { name ->
+            assertNotNull("Missing ${name}", a.entries.find { it.name == name })
+        }
+        assertFalse(a.entries.any { it.name.startsWith('styleable/') })
+        String baselinePath = 'app/paravoid/baseline/paravoidAndroidDebug/resource-ledger.json'
+        write(root, baselinePath, a.toJson())
+        new File(root, 'app/build.gradle') << "\nparavoid { baselineDirectory = layout.projectDirectory.dir('paravoid/baseline') }\n"
+        String resourcesB = resourcesA.replace('<string name="removed">Only A</string>', '<string name="a_added">Only B</string>').replace('>A<', '>B<')
+        write(root, 'app/src/main/res/values/values.xml', resourcesB)
+        def updated = run(root, ':app:assembleNormalDebug', task).build()
+        assertNotNull(updated.task(':app:prepareParavoidAndroidDebugParavoidResourceIds'))
+        assertNull(updated.task(':app:prepareNormalDebugParavoidResourceIds'))
+        def b = ResourceLedger.read(new File(root, candidatePath).text)
+        a.entries.each { previous -> assertEquals(previous.id, b.entries.find { it.name == previous.name }.id) }
+        assertTrue(b.entries.find { it.name == 'string/removed' }.removed)
+        assertFalse(a.entries*.id.contains(b.entries.find { it.name == 'string/a_added' }.id))
+        assertEquals(a.toJson(), new File(root, baselinePath).text)
+        assertEquals(TaskOutcome.UP_TO_DATE, run(root, task).build().task(task).outcome)
+        // Another release branch reserved the next ID. Changing only the baseline
+        // must invalidate linking even though the --stable-ids option is a string.
+        String originallyAddedId = b.entries.find { it.name == 'string/a_added' }.id
+        def reconciled = new ResourceLedger(a.applicationId, a.entries +
+            [[name: 'string/branch_reservation', id: originallyAddedId, removed: true]])
+        write(root, baselinePath, reconciled.toJson())
+        def baselineOnly = run(root, task).build()
+        assertEquals(TaskOutcome.SUCCESS, baselineOnly.task(':app:processParavoidAndroidDebugResources').outcome)
+        b = ResourceLedger.read(new File(root, candidatePath).text)
+        assertNotEquals(originallyAddedId, b.entries.find { it.name == 'string/a_added' }.id)
+        assertTrue(b.entries.find { it.name == 'string/branch_reservation' }.removed)
+        assertEquals(reconciled.toJson(), new File(root, baselinePath).text)
+        run(root, ':app:clean', task).build()
+        assertEquals(b.toJson(), new File(root, candidatePath).text)
+        // Promote B explicitly, then restore A. B-only IDs must remain reserved.
+        write(root, baselinePath, b.toJson())
+        write(root, 'app/src/main/res/values/values.xml', resourcesA)
+        run(root, task).build()
+        def restored = ResourceLedger.read(new File(root, candidatePath).text)
+        assertTrue(restored.entries.find { it.name == 'string/a_added' }.removed)
+        assertFalse(restored.entries.find { it.name == 'string/removed' }.removed)
+        assertEquals(b.toJson(), new File(root, baselinePath).text)
+    }
+
+    @Test void rejectsWrongResourceBaselineWithoutAffectingNormalBuild() {
+        File root = fixture()
+        write(root, 'app/paravoid/baseline/paravoidAndroidDebug/resource-ledger.json',
+            new ResourceLedger('another.app', []).toJson())
+        new File(root, 'app/build.gradle') << "\nparavoid { baselineDirectory = layout.projectDirectory.dir('paravoid/baseline') }\n"
+        def normal = run(root, ':app:assembleNormalDebug').build()
+        assertNull(normal.task(':app:prepareParavoidAndroidDebugParavoidResourceIds'))
+        assertTrue(run(root, ':app:assembleParavoidAndroidDebug').buildAndFail().output.contains('baseline applicationId mismatch'))
+    }
+
+    @Test void exportsResourceFreeAppAndReservesItsEntireRemovedTable() {
+        File root = fixture()
+        String task = ':app:exportParavoidAndroidDebugParavoidResourceLedger'
+        String output = 'app/build/outputs/paravoid/paravoidAndroidDebug/baseline-candidate/resource-ledger.json'
+        run(root, task).build()
+        assertTrue(ResourceLedger.read(new File(root, output).text).entries.empty)
+        write(root, 'app/paravoid/baseline/paravoidAndroidDebug/resource-ledger.json',
+            new ResourceLedger('example.fixture.paravoid', [[name: 'string/old', id: '0x7f010000', removed: false]]).toJson())
+        new File(root, 'app/build.gradle') << "\nparavoid { baselineDirectory = layout.projectDirectory.dir('paravoid/baseline') }\n"
+        run(root, task).build()
+        def retired = ResourceLedger.read(new File(root, output).text)
+        assertEquals([[name: 'string/old', id: '0x7f010000', removed: true]], retired.entries)
+    }
+
     @Test void producesTwoModesAndTransformsOnlyPayloadApplication() {
         File root = fixture()
         run(root, ':app:assembleNormalDebug', ':app:assembleParavoidAndroidDebug', ':app:bundleNormalRelease', ':app:bundleParavoidAndroidRelease').build()

@@ -342,6 +342,46 @@ bundle through generated assets. Its manifest transformation installs the shell
 Application, launcher, and component factory. Normal variants retain ordinary
 Android packaging.
 
+### Resource ID baseline (first complete-packaging implementation slice)
+
+The plugin can now export exact linked resource IDs from a standalone shell APK
+and reuse a reviewed baseline through AGP 8.13.2's public per-variant AAPT2 options:
+
+```sh
+./gradlew :app:exportParavoidAndroidDebugParavoidResourceLedger
+```
+
+This builds the shell and writes `resource-ledger.json` and diagnostic
+`stable-ids.txt` under
+`app/build/outputs/paravoid/paravoidAndroidDebug/baseline-candidate/`.
+Without a baseline, this is a new allocation, not a claim of compatibility with
+an existing shell. Review and explicitly copy the JSON into
+`app/paravoid/baseline/paravoidAndroidDebug/resource-ledger.json`, then configure:
+
+```groovy
+paravoid {
+    baselineDirectory = layout.projectDirectory.dir('paravoid/baseline')
+}
+```
+
+Each shell variant reads `<baselineDirectory>/<variant>/resource-ledger.json`;
+when configured, a missing/invalid/wrong-application baseline is an error. Normal
+variants never consume it. Exporting another candidate does not overwrite the
+accepted file. Review/promote each published ledger, including added allocations,
+so later builds cannot reuse IDs allocated on another release branch.
+
+Removed names remain reserved tombstones; reintroducing the same name restores its
+original ID. Changed/reused entry or type IDs fail validation. Names come from the
+linked resource table, not Java R names: `style/Theme.App` stays dotted. App,
+Android-library and generated resources are included; styleable arrays are not
+separate resource IDs. Baseline-only edits invalidate linking, and clean/incremental
+builds are covered by integration tests. Split-APK ledger export is not supported.
+
+This does **not** yet split resources out of the installed APK, calculate pinned
+resource closure, or validate the complete shell contract. It is the stable-ID
+foundation for those next steps, not a complete VPK or update implementation.
+Do not also supply a manual `--stable-ids` option when configuring this baseline.
+
 ## Verification
 
 For a more involved DI scenario, see the separate [Hilt compatibility probe](compatibility/hilt/README.md).

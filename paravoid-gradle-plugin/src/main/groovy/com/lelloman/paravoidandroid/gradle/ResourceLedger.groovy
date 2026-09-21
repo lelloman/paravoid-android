@@ -45,7 +45,8 @@ final class ResourceLedger {
     }
 
     static ResourceLedger fromDump(String applicationId, String dump, ResourceLedger baseline = null) {
-        require(baseline == null || baseline.applicationId == applicationId, 'Resource baseline applicationId mismatch')
+        // AAPT2 also emits an empty resources.arsc (zero packages) for resource-free apps.
+        if (dump.trim() == 'Binary APK') return reconcile(applicationId, [], baseline)
         List<Map> current = []
         int packages = 0
         dump.eachLine { line ->
@@ -59,6 +60,12 @@ final class ResourceLedger {
             }
         }
         require(packages == 1, 'Expected one linked application resource package')
+        reconcile(applicationId, current, baseline)
+    }
+
+    static ResourceLedger reconcile(String applicationId, List<Map> entries, ResourceLedger baseline = null) {
+        require(baseline == null || baseline.applicationId == applicationId, 'Resource baseline applicationId mismatch')
+        List<Map> current = new ArrayList<>(entries)
         // Validate before merging, so duplicate table entries cannot disappear in a map.
         def linked = new ResourceLedger(applicationId, current)
         Map byName = linked.entries.collectEntries { [(it.name): it] }

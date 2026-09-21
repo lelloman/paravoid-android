@@ -254,7 +254,16 @@ document requirements and limitations, and make small commits. Add focused probe
 when a concrete risk or real-app failure warrants one. Do not restart an open-ended
 compatibility exploration phase before finishing packaging.
 
-**Immediate next task:** extend the passing same-package proof to ordinary AGP
-app/library R integration and computed pinned-resource ownership, then wire it into
-automatic packaging. Finish the [remaining contract-gate scenarios](PACKAGING.md#7-first-implementation-gate)
+**Immediate next task:** build on the passing ordinary AGP resource-ledger/R
+integration to compute pinned-resource ownership and shell compatibility diffs,
+then wire resource splitting into automatic packaging. Finish the [remaining contract-gate scenarios](PACKAGING.md#7-first-implementation-gate)
 alongside that implementation before advertising complete packaging support.
+
+First production-plugin slice now implemented: exact resource-ledger export from
+the shell APK, optional read-only per-variant baseline input, and automatic stable
+ID arguments for the shell linker. Integration coverage includes ordinary app and
+Android-library generated R/styleables, generated resources, dotted names,
+removal/restoration, baseline-only edits, clean/incremental builds and unaffected
+normal builds. This is not yet resource splitting or a complete shell contract.
+Next implement computed pinned-resource ownership/closure and compatibility diffs,
+then use that graph to build the installed subset and complete payload resource APK.

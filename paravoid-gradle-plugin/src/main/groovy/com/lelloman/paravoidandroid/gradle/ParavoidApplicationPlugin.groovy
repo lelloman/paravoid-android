@@ -6,10 +6,12 @@ import com.android.build.api.variant.ScopedArtifacts
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.GradleException
+import java.security.MessageDigest
 
 class ParavoidApplicationPlugin implements Plugin<Project> {
     void apply(Project project) {
         project.pluginManager.apply('com.android.application')
+        def extension = project.extensions.create('paravoid', ParavoidApplicationExtension)
         def android = project.extensions.getByName('android')
         android.flavorDimensions.add('paravoidPackaging')
         android.productFlavors.create('normal') { dimension = 'paravoidPackaging' }
@@ -23,6 +25,35 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             if (android.buildTypes.getByName(variant.buildType).minifyEnabled) throw new GradleException('ParavoidAndroid application packaging does not yet support shrinking.')
             if (android.compileOptions.coreLibraryDesugaringEnabled) throw new GradleException('ParavoidAndroid application packaging does not yet support core library desugaring.')
             String cap = variant.name.capitalize()
+            def baseline = extension.baselineDirectory.file("${variant.name}/resource-ledger.json")
+            if (extension.baselineDirectory.present) {
+                // AAPT's argument list tracks strings, not the bytes at a --stable-ids path.
+                // Content-address the path so baseline-only edits invalidate resource linking.
+                String variantName = variant.name
+                def baselineHash = project.providers.fileContents(baseline).asText.map { text ->
+                    MessageDigest.getInstance('SHA-256').digest(text.getBytes('UTF-8')).encodeHex().toString()
+                }
+                def stableIds = project.tasks.register("prepare${cap}ParavoidResourceIds", PrepareResourceIdsTask) {
+                    baselineFile.set(baseline)
+                    applicationId.set(variant.applicationId)
+                    it.stableIds.set(project.layout.buildDirectory.file(baselineHash.map {
+                        "intermediates/paravoid/${variantName}/resource-ids/${it}/stable-ids.txt"
+                    }))
+                }
+                variant.androidResources.aaptAdditionalParameters.addAll(stableIds.flatMap { it.stableIds }.map {
+                    ['--stable-ids', it.asFile.absolutePath]
+                })
+            }
+            project.tasks.register("export${cap}ParavoidResourceLedger", ExportResourceLedgerTask) {
+                group = 'paravoid'
+                description = 'Exports a reviewable resource ID ledger; does not modify the accepted baseline.'
+                apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
+                baselineFile.set(baseline)
+                applicationId.set(variant.applicationId)
+                aapt2.set(components.sdkComponents.sdkDirectory.map { it.file("build-tools/${android.buildToolsVersion}/aapt2") })
+                ledgerFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/baseline-candidate/resource-ledger.json"))
+                stableIds.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/baseline-candidate/stable-ids.txt"))
+            }
             def nativeValidation = project.tasks.register("validate${cap}ParavoidNativeLibraries", ValidateNativeLibrariesTask) {
                 nativeLibraries.from(variant.artifacts.get(SingleArtifact.MERGED_NATIVE_LIBS.INSTANCE))
                 minSdk.set(variant.minSdk.apiLevel)
