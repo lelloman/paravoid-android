@@ -114,8 +114,8 @@ abstract class PackageApplicationTask extends DefaultTask {
         new ZipFile(dexZip).withCloseable { dex ->
             def entries = dex.entries().findAll { it.name ==~ /classes(?:[2-9]|[1-9][0-9]+)?\.dex/ }
                 .sort { it.name == 'classes.dex' ? 1 : Integer.parseInt(it.name.substring(7, it.name.length() - 4)) }
-            if (entries.isEmpty() || entries.size() > 16 || entries.any { it.size > 16 * 1024 * 1024 } ||
-                entries.sum { it.size } > 64 * 1024 * 1024) throw new GradleException('Payload exceeds bundle DEX limits (16 files, 16 MiB each, 64 MiB total).')
+            if (entries.isEmpty() || entries.size() > 16 || entries.any { it.size > 32 * 1024 * 1024 } ||
+                entries.sum { it.size } > 128 * 1024 * 1024) throw new GradleException('Payload exceeds bundle DEX limits (16 files, 32 MiB each, 128 MiB total).')
             int format = entries.size() == 1 ? 1 : 2
             new ZipOutputStream(new FileOutputStream(bundle)).withCloseable { zip ->
                 String metadata = "format=${format}\napi=1\nminSdk=${minSdk.get()}\nentryPoint=${info.getProperty('activity')}\n"

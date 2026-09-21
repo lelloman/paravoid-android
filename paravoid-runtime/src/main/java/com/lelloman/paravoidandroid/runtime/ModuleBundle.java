@@ -51,7 +51,7 @@ final class ModuleBundle {
                 if (name.equals("module.properties")) {
                     metadata = readLimited(zip, 4096);
                 } else if (name.matches("classes(?:[2-9]|1[0-6])?\\.dex")) {
-                    byte[] dex = readLimited(zip, Math.min(16 * 1024 * 1024, 64 * 1024 * 1024 - total));
+                    byte[] dex = readLimited(zip, Math.min(32 * 1024 * 1024, 128 * 1024 * 1024 - total));
                     total += dex.length;
                     files.put(name, dex);
                 } else {

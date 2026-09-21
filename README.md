@@ -454,8 +454,12 @@ classes.dex        # application and dependency classes, excluding host runtime
 ```
 
 Multi-DEX bundles use `format=2` and `dexCount=N`, with contiguous entries
-`classes.dex`, `classes2.dex`, …, `classesN.dex`. Limits are 16 DEX files, 16 MiB
-per file and 64 MiB total uncompressed DEX, plus 4 KiB metadata. The reader rejects
+`classes.dex`, `classes2.dex`, …, `classesN.dex`. Limits are 16 DEX files, 32 MiB
+per file and 128 MiB total uncompressed DEX, plus 4 KiB metadata. These limits were
+raised for the unshrunk Pezzottify integration (about 67.5 MiB across five DEX files).
+Larger payloads require the updated runtime; older installed shells still enforce
+the old 16 MiB/file and 64 MiB total limits. Loading holds DEX bytes in memory, so
+passing these bounds is not a low-memory device guarantee. The reader rejects
 missing, duplicate, unexpected or noncontiguous entries and invalid counts/headers.
 All DEX buffers load together through one `InMemoryDexClassLoader`. Format 2 needs
 API 27+; code-only application packaging requires API 28+ (native-bearing apps need

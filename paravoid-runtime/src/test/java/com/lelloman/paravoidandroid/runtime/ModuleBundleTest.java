@@ -71,14 +71,23 @@ public class ModuleBundleTest {
         assertThrows(IOException.class, () -> ModuleBundle.read(multiple(valid, new String[] {"classes.dex", "classes2.dex"}, new byte[8]), 36));
     }
 
+    @Test public void acceptsLargerUnshrunkApplicationPayload() throws Exception {
+        byte[] dex = java.util.Arrays.copyOf(DEX, 30 * 1024 * 1024);
+        ModuleBundle module = ModuleBundle.read(multiple(
+            "format=2\napi=1\nminSdk=30\nentryPoint=example.Entry\ndexCount=3\n",
+            new String[] {"classes.dex", "classes2.dex", "classes3.dex"}, dex), 36);
+        assertEquals(3, module.dexFiles.length);
+        for (byte[] file : module.dexFiles) assertEquals(dex.length, file.length);
+    }
+
     @Test public void rejectsOversizedDexAndExcessTotalSize() throws Exception {
         String metadata = "format=2\napi=1\nminSdk=28\nentryPoint=example.Entry\ndexCount=5\n";
         IOException oversized = assertThrows(IOException.class, () -> ModuleBundle.read(multiple(metadata,
-            new String[] {"classes.dex"}, new byte[16 * 1024 * 1024 + 1]), 36));
+            new String[] {"classes.dex"}, new byte[32 * 1024 * 1024 + 1]), 36));
         assertTrue(oversized.getMessage().contains("exceeds size limit"));
         IOException aggregate = assertThrows(IOException.class, () -> ModuleBundle.read(multiple(metadata,
             new String[] {"classes.dex", "classes2.dex", "classes3.dex", "classes4.dex", "classes5.dex"},
-            new byte[16 * 1024 * 1024]), 36));
+            new byte[32 * 1024 * 1024]), 36));
         assertTrue(aggregate.getMessage().contains("exceeds size limit"));
         assertThrows(IOException.class, () -> ModuleBundle.read(multiple(metadata,
             new String[] {"classes17.dex"}, DEX), 36));
