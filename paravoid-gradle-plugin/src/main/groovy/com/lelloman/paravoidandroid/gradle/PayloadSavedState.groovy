@@ -8,7 +8,7 @@ class PayloadSavedState {
     static final String HELPER = 'com/lelloman/paravoidandroid/runtime/PayloadSavedState'
     static final String CREATE = '(Landroid/os/Bundle;)V'
 
-    static void adapt(Map<String, byte[]> classes, String activity) {
+    static void adapt(Map<String, byte[]> classes, String activity, Set<String> patched = new HashSet<>()) {
         Set<String> remaining = [CREATE, '(Landroid/os/Bundle;Landroid/os/PersistableBundle;)V'] as Set
         Set<String> visited = [] as Set
         String parent = activity
@@ -19,6 +19,7 @@ class PayloadSavedState {
                 @Override MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
                     MethodVisitor target = super.visitMethod(access, name, desc, signature, exceptions)
                     if (name != 'onCreate' || !remaining.remove(desc)) return target
+                    if (!patched.add(reader.className + '#' + name + desc)) return target
                     return new MethodVisitor(ASM9, target) {
                         @Override void visitCode() {
                             super.visitCode()
@@ -31,6 +32,7 @@ class PayloadSavedState {
             parent = reader.superName
         }
         if (remaining.contains(CREATE)) {
+            patched.add(activity + '#onCreate' + CREATE)
             ClassReader reader = new ClassReader(classes[activity + '.class'])
             ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS)
             reader.accept(new ClassVisitor(ASM9, writer) {

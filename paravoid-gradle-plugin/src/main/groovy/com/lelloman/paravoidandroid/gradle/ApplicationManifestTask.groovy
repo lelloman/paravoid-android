@@ -24,16 +24,23 @@ abstract class ApplicationManifestTask extends DefaultTask {
         def document = factory.newDocumentBuilder().parse(inputManifest.get().asFile)
         def app = (Element) document.getElementsByTagName('application').item(0)
         def activities = app.getElementsByTagName('activity')
-        if (activities.length != 1 || app.getElementsByTagName('activity-alias').length != 0) {
-            throw new GradleException('ParavoidAndroid requires exactly one user Activity and no Activity aliases in the merged manifest (including dependencies).')
+        if (activities.length == 0 || app.getElementsByTagName('activity-alias').length != 0) {
+            throw new GradleException('ParavoidAndroid requires at least one Activity and does not yet support Activity aliases.')
         }
         String componentFactory = app.getAttributeNS(ANDROID, 'appComponentFactory')
         if (componentFactory && !(componentFactory in ['android.app.AppComponentFactory', 'androidx.core.app.CoreComponentFactory'])) {
             throw new GradleException('ParavoidAndroid supports the default or AndroidX CoreComponentFactory only; custom Application/classloader factory hooks are not supported.')
         }
-        def activity = (Element) activities.item(0)
         String pkg = document.documentElement.getAttribute('package')
-        String activityName = qualify(pkg, activity.getAttributeNS(ANDROID, 'name'))
+        def activityNames = (0..<activities.length).collect { index ->
+            def activity = (Element) activities.item(index)
+            String name = ApplicationManifestTask.qualify(pkg, activity.getAttributeNS(ANDROID, 'name'))
+            activity.setAttributeNS(ANDROID, 'android:name', name)
+            name
+        }
+        if (activityNames.contains('com.lelloman.paravoidandroid.runtime.LauncherActivity')) {
+            throw new GradleException('The Paravoid bootstrap Activity name is reserved.')
+        }
         def serviceNodes = app.getElementsByTagName('service')
         def services = (0..<serviceNodes.length).collect { index ->
             ApplicationManifestTask.qualify(pkg, ((Element) serviceNodes.item(index)).getAttributeNS(ANDROID, 'name'))
@@ -41,21 +48,21 @@ abstract class ApplicationManifestTask extends DefaultTask {
         String applicationName = app.getAttributeNS(ANDROID, 'name')
         if (applicationName) applicationName = qualify(pkg, applicationName)
         if (applicationName == 'android.app.Application' || applicationName == 'com.lelloman.paravoidandroid.runtime.ParavoidAndroidApplication') applicationName = ''
-        activity.setAttributeNS(ANDROID, 'android:name', activityName)
         def launcher = document.createElement('activity')
         launcher.setAttributeNS(ANDROID, 'android:name', 'com.lelloman.paravoidandroid.runtime.LauncherActivity')
         launcher.setAttributeNS(ANDROID, 'android:exported', 'true')
-        def filters = activity.getElementsByTagName('intent-filter')
         def launcherFilters = []
+        def filters = app.getElementsByTagName('intent-filter')
         for (int i = 0; i < filters.length; i++) {
             def filter = (Element) filters.item(i)
             def actions = filter.getElementsByTagName('action')
             def categories = filter.getElementsByTagName('category')
             boolean main = (0..<actions.length).any { ((Element) actions.item(it)).getAttributeNS(ANDROID, 'name') == 'android.intent.action.MAIN' }
             boolean launch = (0..<categories.length).any { ((Element) categories.item(it)).getAttributeNS(ANDROID, 'name') == 'android.intent.category.LAUNCHER' }
-            if (main && launch) launcherFilters.add(filter)
+            if (main && launch && filter.parentNode.nodeName == 'activity') launcherFilters.add(filter)
         }
         if (launcherFilters.size() != 1) throw new GradleException('ParavoidAndroid requires exactly one MAIN/LAUNCHER intent filter.')
+        String activityName = ((Element) launcherFilters[0].parentNode).getAttributeNS(ANDROID, 'name')
         launcherFilters.each { launcher.appendChild(it) }
         app.appendChild(launcher)
         app.setAttributeNS(ANDROID, 'android:name', 'com.lelloman.paravoidandroid.runtime.ShellApplication')
@@ -74,7 +81,7 @@ abstract class ApplicationManifestTask extends DefaultTask {
         TransformerFactory.newInstance().newTransformer().transform(new DOMSource(document), new StreamResult(output))
         def metadata = payloadMetadata.get().asFile
         metadata.parentFile.mkdirs()
-        metadata.text = "activity=${activityName}\napplication=${applicationName}\nservices=${services.join(';')}\n"
+        metadata.text = "activity=${activityName}\nactivities=${activityNames.join(';')}\napplication=${applicationName}\nservices=${services.join(';')}\n"
     }
 
     private static String qualify(String pkg, String name) {

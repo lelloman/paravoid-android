@@ -67,15 +67,24 @@ abstract class PackageApplicationTask extends DefaultTask {
             throw new GradleException('The manifest Activity is missing from the application classes.')
         }
         payloadTransformers.get().each { it.transform(classes) }
-        PayloadComponentLoader.adapt(classes, info.getProperty('activity').replace('.', '/'))
+        Set<String> preparedCallbacks = new HashSet<>()
+        Set<String> protectedCallbacks = new HashSet<>()
+        info.getProperty('activities', info.getProperty('activity')).tokenize(';').each { activity ->
+            String name = activity.replace('.', '/')
+            if (!classes.containsKey(name + '.class')) {
+                if (activity.startsWith('android.')) return // Framework-owned Activity, not payload code.
+                throw new GradleException("Manifest Activity ${activity} is missing from the application classes.")
+            }
+            PayloadComponentLoader.adapt(classes, name)
+            PayloadConfigurationContext.adapt(classes, name)
+            PayloadSavedState.adapt(classes, name, preparedCallbacks)
+            PayloadStateEnvelope.adapt(classes, name, protectedCallbacks)
+        }
         info.getProperty('services', '').tokenize(';').each { service ->
             String name = service.replace('.', '/')
             // Platform-owned services have no payload class to adapt.
             if (classes.containsKey(name + '.class')) PayloadComponentLoader.adapt(classes, name)
         }
-        PayloadConfigurationContext.adapt(classes, info.getProperty('activity').replace('.', '/'))
-        PayloadSavedState.adapt(classes, info.getProperty('activity').replace('.', '/'))
-        PayloadStateEnvelope.adapt(classes, info.getProperty('activity').replace('.', '/'))
         File shell = shellClasses.get().asFile
         shell.parentFile.mkdirs()
         File payload = new File(temporaryDir, 'payload.jar')

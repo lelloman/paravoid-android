@@ -55,13 +55,27 @@ class ApplicationPackagingTest {
         assertEquals(TaskOutcome.UP_TO_DATE, second.task(':app:packageParavoidAndroidDebugParavoidApplication').outcome)
     }
 
-    @Test void rejectsAdditionalActivityFromDependencyManifest() {
+    @Test void packagesAdditionalActivityFromDependencyManifestAndAppliesHooks() {
         File root = fixture()
         new File(root, 'settings.gradle') << "\ninclude ':extra'\n"
         write(root, 'extra/build.gradle', "plugins { id 'com.android.library' }; android { namespace 'example.extra'; compileSdk 36; defaultConfig { minSdk 28 } }")
         write(root, 'extra/src/main/AndroidManifest.xml', '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application><activity android:name="example.Other" /></application></manifest>')
+        write(root, 'extra/src/main/java/example/Other.java', 'package example; public class Other extends android.app.Activity {}')
         new File(root, 'app/build.gradle') << "\ndependencies { implementation project(':extra') }\n"
-        assertTrue(run(root, ':app:assembleParavoidAndroidDebug').buildAndFail().output.contains('exactly one user Activity'))
+        run(root, ':app:assembleNormalDebug', ':app:assembleParavoidAndroidDebug').build()
+        new ZipFile(new File(root, 'app/build/outputs/apk/paravoidAndroid/debug/app-paravoidAndroid-debug.apk')).withCloseable { apk ->
+            assertFalse(dexText(apk).contains('Lexample/Other;'))
+        }
+        new ZipFile(new File(root, 'app/build/outputs/paravoid/paravoidAndroidDebug/module.zip')).withCloseable { zip ->
+            assertTrue(dexText(zip).contains('Lexample/Other;'))
+        }
+        new ZipFile(new File(root, 'app/build/tmp/packageParavoidAndroidDebugParavoidApplication/payload.jar')).withCloseable { zip ->
+            String bytes = new String(zip.getInputStream(zip.getEntry('example/Other.class')).readAllBytes(), 'ISO-8859-1')
+            ['getClassLoader', 'createConfigurationContext', 'onCreate', 'onSaveInstanceState', 'prepare', 'protect'].each {
+                assertTrue(it, bytes.contains(it))
+            }
+        }
+        assertTrue(new File(root, 'app/build/intermediates/merged_manifest/paravoidAndroidDebug/prepareParavoidAndroidDebugParavoidManifest/AndroidManifest.xml').text.contains('example.Other'))
     }
 
     @Test void optionalTransformerRunsBeforeRemappingAndTracksItsInputs() {

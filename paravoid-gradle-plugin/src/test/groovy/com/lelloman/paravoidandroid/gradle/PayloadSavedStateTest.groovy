@@ -6,6 +6,14 @@ import static org.junit.Assert.*
 import static org.objectweb.asm.Opcodes.*
 
 class PayloadSavedStateTest {
+    @Test void sharedBaseCallbackIsPatchedOnceAcrossActivities() {
+        def classes = ['example/First.class': fixture('example/First', 'example/Base', -1),
+                       'example/Second.class': fixture('example/Second', 'example/Base', -1),
+                       'example/Base.class': fixture('example/Base', 'android/app/Activity', ACC_PROTECTED | ACC_FINAL)]
+        Set<String> patched = new HashSet<>()
+        ['example/First', 'example/Second', 'example/Base'].each { PayloadSavedState.adapt(classes, it, patched) }
+        assertEquals(1, calls(classes['example/Base.class']).count { it == PayloadSavedState.HELPER + '.prepare' })
+    }
     @Test void preparesStateBeforeExistingOnCreateCode() {
         def classes = ['example/Main.class': fixture('example/Main', 'android/app/Activity', ACC_PROTECTED)]
         PayloadSavedState.adapt(classes, 'example/Main')
