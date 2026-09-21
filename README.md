@@ -419,24 +419,20 @@ payload signature or external-file loading API. This must not be treated as
 verification of code fetched from an untrusted source. Payload code runs with
 the host application's privileges; this is not an isolation boundary.
 
-## Next experiments
+## Roadmap
 
-1. Expand transformation compatibility and test cold process restoration, callback
-   behavior, and supported Android versions beyond the current sample.
-2. Turn the independent-resource experiment into automatic app/library resource
-   packaging with stable-ID and installed-manifest contracts. Test broader library
-   cases: broader WorkManager DAGs/constraints and foreground work, interrupted/complex Room migrations, OS integration
-   and third-party native SDKs.
-3. Define independently signed payloads and negative signature tests before accepting
-   code from outside the APK. Sign with the product shell's signing key and verify
-   against the installed shell certificate's public key; matching certificates
-   alone is not signature verification. Define certificate rotation explicitly.
-4. Add server/authentication configuration and staged external updates. Authenticate
-   code, assets, and metadata together; keep private keys in release infrastructure.
-5. Define first-launch payload availability, offline caching, version/replay policy,
-   startup health signals, last-known-good fallback, and bounded rollback. Activate
-   updates on cold launches rather than replacing running classes. Account for
-   database migrations: reverting code does not undo a schema change.
+The [packaging-first roadmap](ROADMAP.md) defines milestones and acceptance checks:
+
+1. Complete automatic plugin packaging of code, app/library resources, assets,
+   Java resources and native libraries; validate with an embedded complete payload.
+2. Integrate a real downstream app and turn its failures into focused regressions.
+3. Add authenticated delivery, offline availability and safe cold-start activation.
+4. Add shell-owned update controls, retained-version management and recovery UI.
+5. Later, upload a full package and deliver configuration-targeted resources/ABIs.
+
+The immediate task is defining the shell/payload resource boundary, stable IDs
+and supported Android versions. The existing compatibility suite is regression
+coverage, not a reason to defer packaging until every Android scenario is tested.
 
 Downloaded code must use app-private storage with the required read-only protection
 and no modification between verification and loading. New manifest capabilities or

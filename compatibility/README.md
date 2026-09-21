@@ -1,5 +1,9 @@
 # Compatibility exploration matrix
 
+Implementation priority is now the [packaging-first roadmap](../ROADMAP.md).
+This matrix supplies regression coverage and tracks known gaps; exhausting its
+backlog is not a prerequisite for complete packaging or real-app integration.
+
 Passing means the pinned fixture and scenario passed, not that every API in that
 library works. Device evidence so far is API 36.1/debug unless a fixture says
 otherwise. Normal packaging is the control; production shell APKs are tested
