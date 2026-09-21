@@ -254,9 +254,10 @@ document requirements and limitations, and make small commits. Add focused probe
 when a concrete risk or real-app failure warrants one. Do not restart an open-ended
 compatibility exploration phase before finishing packaging.
 
-**Immediate next task:** use the resource ledger and computed pinned graph to
-build the installed resource subset and complete payload resource APK. Extend the
-resource-boundary diff into the full shell contract and automatic packaging gates.
+**Immediate next task:** attach the automatically generated resource payload early
+and assemble a runnable shell using the pinned-only table, then prove the generated
+pair on API 30/36.1. Extend the resource-boundary diff into the full shell contract
+and automatic packaging gates.
 Finish the [remaining contract-gate scenarios](PACKAGING.md#7-first-implementation-gate)
 alongside that implementation before advertising complete packaging support.
 
@@ -273,3 +274,13 @@ Integration tests reject pinned night-mode/file/manifest changes, allow movable
 changes, and verify clean/incremental results without modifying accepted snapshots.
 These are not yet resource pruning, a complete shell contract or mandatory assemble
 gates. Unknown/dynamic/overlay resource formats fail analysis explicitly.
+
+Third slice now produces `shell-resources.apk` and `payload-resources.apk` through
+an explicit Gradle task, without manual resource folders. It prunes the linked
+protobuf table, preserves numeric IDs/configurations and original compiled files,
+copies app/library assets only into the payload, aligns both containers and verifies
+binary round trips. A configured resource-boundary baseline gates this task.
+Host/integration tests cover clean/incremental reproducibility, unchanged pinned
+output across movable updates, resource removals, empty tables and APK non-mutation.
+The two unsigned resource archives are not installable shells or full VPKs; runtime
+attachment and replacing the actual installed resource table remain unimplemented.

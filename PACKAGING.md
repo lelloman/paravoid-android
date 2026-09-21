@@ -209,8 +209,13 @@ entry/type ID reservations and tombstones using public AGP 8.13.2 hooks. See the
 This observes the currently installed resource table. The separate
 [pinned-resource analyzer/check](README.md#pinned-resource-analysis-and-boundary-checks)
 now computes manifest/explicit closure and detects installed-manifest/pinned-content
-changes against a reviewed snapshot. Pruning and complete shell-contract checking
-are still unimplemented; these explicit tasks are not automatic assemble gates.
+changes against a reviewed snapshot. The
+[resource-container task](README.md#generate-the-two-resource-containers) now prunes
+a linked table into a pinned-only archive and exports the complete resource/assets
+archive, validating binary round trips without renumbering IDs. It does not yet
+replace the installed table or attach the payload resources at runtime. Complete
+shell-contract checking remains unfinished; the explicit analysis tasks are not
+automatic assemble gates.
 A ledger or resource-boundary check alone is not a complete shell approval.
 
 ## 5. Shell compatibility contract

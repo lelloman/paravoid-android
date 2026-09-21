@@ -72,6 +72,19 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 candidateFile.set(analysis.flatMap { it.boundaryFile })
                 reportFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/resource-boundary-check.txt"))
             }
+            project.tasks.register("split${cap}ParavoidResources", SplitResourcesTask) {
+                group = 'paravoid'
+                description = 'Builds validated shell-only and complete payload resource containers without modifying the installed APK.'
+                apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
+                applicationId.set(variant.applicationId)
+                pinnedResources.set(extension.pinnedResources)
+                baselineFile.set(extension.baselineDirectory.file("${variant.name}/resource-boundary.json"))
+                aapt2.set(components.sdkComponents.sdkDirectory.map { it.file("build-tools/${android.buildToolsVersion}/aapt2") })
+                zipalign.set(components.sdkComponents.sdkDirectory.map { it.file("build-tools/${android.buildToolsVersion}/zipalign") })
+                shellResources.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/resources/shell-resources.apk"))
+                payloadResources.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/resources/payload-resources.apk"))
+                reportFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/resources/split-report.json"))
+            }
             def nativeValidation = project.tasks.register("validate${cap}ParavoidNativeLibraries", ValidateNativeLibrariesTask) {
                 nativeLibraries.from(variant.artifacts.get(SingleArtifact.MERGED_NATIVE_LIBS.INSTANCE))
                 minSdk.set(variant.minSdk.apiLevel)

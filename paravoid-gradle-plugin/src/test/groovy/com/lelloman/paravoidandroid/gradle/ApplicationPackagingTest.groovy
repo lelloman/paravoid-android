@@ -38,6 +38,7 @@ class ApplicationPackagingTest {
         String values = '''<resources>
             <string name="app_label">App</string><string name="widget_label">Widget</string>
             <string name="movable">A</string><attr name="badge" format="string" />
+            <dimen name="payload_spacing">12dp</dimen>
             <color name="background">#112233</color><color name="night_background">#000000</color>
             <style name="BaseTheme" parent="android:style/Theme.Material"><item name="android:windowBackground">@drawable/background</item></style>
             <style name="AppTheme" parent="BaseTheme" />
@@ -48,8 +49,12 @@ class ApplicationPackagingTest {
         write(root, 'app/src/main/res/layout/widget.xml', '''<TextView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
             android:layout_width="wrap_content" android:layout_height="wrap_content" app:badge="@string/widget_label" />''')
         write(root, 'app/src/main/res/raw/external.txt', 'External bytes A')
+        write(root, 'app/src/main/res/xml/payload_only.xml', '<config value="@string/movable" />')
+        write(root, 'app/src/main/assets/data/hello.txt', 'App asset')
+        write(root, 'resource-library/src/main/assets/library.txt', 'Library asset')
         String analyze = ':app:analyzeParavoidAndroidDebugParavoidResources'
         String check = ':app:checkParavoidAndroidDebugParavoidResourceBoundary'
+        String split = ':app:splitParavoidAndroidDebugParavoidResources'
         String outputs = 'app/build/outputs/paravoid/paravoidAndroidDebug/'
         def parser = new groovy.json.JsonSlurper()
         run(root, ':app:assembleNormalDebug', ':app:exportParavoidAndroidDebugParavoidResourceLedger', analyze).build()
@@ -63,6 +68,41 @@ class ApplicationPackagingTest {
         assertEquals(2, report.pinned.find { it.name == 'color/background' }.configurations)
         assertEquals(['xml/library_config', 'string/library_label'], report.pinned.find { it.name == 'string/library_label' }.chain)
         assertEquals(TaskOutcome.UP_TO_DATE, run(root, analyze).build().task(analyze).outcome)
+        File installed = new File(root, 'app/build/outputs/apk/paravoidAndroid/debug/app-paravoidAndroid-debug.apk')
+        byte[] installedBefore = installed.bytes
+        run(root, split).build()
+        assertArrayEquals(installedBefore, installed.bytes)
+        File shellResources = new File(root, outputs + 'resources/shell-resources.apk')
+        File payloadResources = new File(root, outputs + 'resources/payload-resources.apk')
+        byte[] shellA = shellResources.bytes, payloadA = payloadResources.bytes
+        def shellIds = ResourceLedger.fromDump('example.fixture.paravoid', dumpResources(root, shellResources))
+        def payloadIds = ResourceLedger.fromDump('example.fixture.paravoid', dumpResources(root, payloadResources))
+        assertEquals(report.pinned*.name.sort(), shellIds.entries*.name.sort())
+        assertEquals((report.pinned*.name + report.movable).sort(), payloadIds.entries*.name.sort())
+        shellIds.entries.each { entry -> assertEquals(entry.id, payloadIds.entries.find { it.name == entry.name }.id) }
+        new ZipFile(shellResources).withCloseable { shell ->
+            new ZipFile(payloadResources).withCloseable { payload ->
+                new ZipFile(installed).withCloseable { original ->
+                    shell.entries().each { entry ->
+                        assertTrue(entry.name in ['AndroidManifest.xml', 'resources.arsc'] || entry.name.startsWith('res/'))
+                        if (entry.name != 'resources.arsc') assertArrayEquals(ResourceArchive.read(original, entry.name), ResourceArchive.read(shell, entry.name))
+                    }
+                    payload.entries().each { entry ->
+                        assertArrayEquals(ResourceArchive.read(original, entry.name), ResourceArchive.read(payload, entry.name))
+                    }
+                }
+                assertNull(shell.getEntry('res/xml/payload_only.xml'))
+                assertNotNull(payload.getEntry('res/xml/payload_only.xml'))
+                ['assets/data/hello.txt', 'assets/library.txt'].each { name ->
+                    assertNull(shell.getEntry(name))
+                    assertNotNull(payload.getEntry(name))
+                }
+                assertNull(payload.getEntry('classes.dex'))
+                assertNull(payload.getEntry('assets/paravoid/module.zip'))
+                assertFalse(payload.entries().any { it.name.startsWith('META-INF/') || it.name.startsWith('lib/') })
+            }
+        }
+        assertEquals(TaskOutcome.UP_TO_DATE, run(root, split).build().task(split).outcome)
         assertTrue(run(root, check).buildAndFail().output.contains('Configure paravoid.baselineDirectory'))
         ['resource-ledger.json', 'resource-boundary.json'].each { name ->
             write(root, 'app/paravoid/baseline/paravoidAndroidDebug/' + name, new File(root, outputs + 'baseline-candidate/' + name).text)
@@ -70,11 +110,17 @@ class ApplicationPackagingTest {
         new File(root, 'app/build.gradle') << "\nparavoid { baselineDirectory = layout.projectDirectory.dir('paravoid/baseline') }\n"
         run(root, check).build()
         write(root, 'app/src/main/res/values/values.xml', values.replace('>A<', '>B<'))
-        run(root, check).build() // Movable values are not frozen.
-        run(root, ':app:clean', check).build()
+        run(root, check, split).build() // Movable values are not frozen.
+        assertArrayEquals(shellA, shellResources.bytes)
+        assertFalse(Arrays.equals(payloadA, payloadResources.bytes))
+        byte[] payloadB = payloadResources.bytes
+        run(root, ':app:clean', check, split).build()
+        assertArrayEquals(shellA, shellResources.bytes)
+        assertArrayEquals(payloadB, payloadResources.bytes)
         assertEquals(snapshot, new File(root, outputs + 'baseline-candidate/resource-boundary.json').text)
         write(root, 'app/src/main/res/values/values.xml', values.replace('#000000', '#ffffff'))
         assertTrue(run(root, check).buildAndFail().output.contains('Pinned resource changed: color/night_background'))
+        assertTrue(run(root, split).buildAndFail().output.contains('Pinned resource changed: color/night_background'))
         write(root, 'app/src/main/res/values/values.xml', values)
         write(root, 'app/src/main/res/raw/external.txt', 'External bytes B')
         assertTrue(run(root, check).buildAndFail().output.contains('Pinned resource changed: raw/external'))
@@ -128,8 +174,12 @@ class ApplicationPackagingTest {
                 int[] attrs = example.resources.Library.attrs(); int theme = R.style.Theme_App; }
         ''')
         String task = ':app:exportParavoidAndroidDebugParavoidResourceLedger'
+        String split = ':app:splitParavoidAndroidDebugParavoidResources'
+        String analyze = ':app:analyzeParavoidAndroidDebugParavoidResources'
         String candidatePath = 'app/build/outputs/paravoid/paravoidAndroidDebug/baseline-candidate/resource-ledger.json'
-        run(root, ':app:assembleNormalDebug', task).build()
+        run(root, ':app:assembleNormalDebug', task, analyze, split).build()
+        File payloadResources = new File(root, 'app/build/outputs/paravoid/paravoidAndroidDebug/resources/payload-resources.apk')
+        assertTrue(dumpResources(root, payloadResources).contains('string/removed'))
         def a = ResourceLedger.read(new File(root, candidatePath).text)
         assertEquals('example.fixture.paravoid', a.applicationId)
         ['string/title', 'string/library_title', 'string/generated_title', 'attr/libraryLabel', 'style/Theme.App'].each { name ->
@@ -138,10 +188,15 @@ class ApplicationPackagingTest {
         assertFalse(a.entries.any { it.name.startsWith('styleable/') })
         String baselinePath = 'app/paravoid/baseline/paravoidAndroidDebug/resource-ledger.json'
         write(root, baselinePath, a.toJson())
+        write(root, 'app/paravoid/baseline/paravoidAndroidDebug/resource-boundary.json', new File(root,
+            'app/build/outputs/paravoid/paravoidAndroidDebug/baseline-candidate/resource-boundary.json').text)
         new File(root, 'app/build.gradle') << "\nparavoid { baselineDirectory = layout.projectDirectory.dir('paravoid/baseline') }\n"
         String resourcesB = resourcesA.replace('<string name="removed">Only A</string>', '<string name="a_added">Only B</string>').replace('>A<', '>B<')
         write(root, 'app/src/main/res/values/values.xml', resourcesB)
-        def updated = run(root, ':app:assembleNormalDebug', task).build()
+        def updated = run(root, ':app:assembleNormalDebug', task, split).build()
+        String payloadDump = dumpResources(root, payloadResources)
+        assertFalse(payloadDump.contains('string/removed'))
+        assertTrue(payloadDump.contains('string/a_added'))
         assertNotNull(updated.task(':app:prepareParavoidAndroidDebugParavoidResourceIds'))
         assertNull(updated.task(':app:prepareNormalDebugParavoidResourceIds'))
         def b = ResourceLedger.read(new File(root, candidatePath).text)
@@ -174,6 +229,13 @@ class ApplicationPackagingTest {
         assertEquals(b.toJson(), new File(root, baselinePath).text)
     }
 
+    @Test void resourceSplitRejectsUnknownReservedAssets() {
+        File root = fixture()
+        write(root, 'app/src/main/assets/paravoid/unowned.txt', 'Must not silently disappear')
+        assertTrue(run(root, ':app:splitParavoidAndroidDebugParavoidResources').buildAndFail().output
+            .contains('Unknown reserved Paravoid assets'))
+    }
+
     @Test void rejectsWrongResourceBaselineWithoutAffectingNormalBuild() {
         File root = fixture()
         write(root, 'app/paravoid/baseline/paravoidAndroidDebug/resource-ledger.json',
@@ -188,7 +250,7 @@ class ApplicationPackagingTest {
         File root = fixture()
         String task = ':app:exportParavoidAndroidDebugParavoidResourceLedger'
         String output = 'app/build/outputs/paravoid/paravoidAndroidDebug/baseline-candidate/resource-ledger.json'
-        run(root, task, ':app:analyzeParavoidAndroidDebugParavoidResources').build()
+        run(root, task, ':app:analyzeParavoidAndroidDebugParavoidResources', ':app:splitParavoidAndroidDebugParavoidResources').build()
         assertTrue(ResourceLedger.read(new File(root, output).text).entries.empty)
         def boundary = new groovy.json.JsonSlurper().parse(new File(root,
             'app/build/outputs/paravoid/paravoidAndroidDebug/baseline-candidate/resource-boundary.json'))
@@ -530,6 +592,16 @@ class ApplicationPackagingTest {
     private static String apkApplicationId(File apk) {
         assertTrue(apk.isFile())
         new groovy.json.JsonSlurper().parse(new File(apk.parentFile, 'output-metadata.json')).applicationId
+    }
+
+    private static String dumpResources(File root, File apk) {
+        Properties local = new Properties()
+        new File(root, 'local.properties').withInputStream { local.load(it) }
+        def process = new ProcessBuilder(new File(local.getProperty('sdk.dir'), 'build-tools/35.0.0/aapt2').absolutePath,
+            'dump', 'resources', apk.absolutePath).redirectErrorStream(true).start()
+        String output = process.inputStream.getText('UTF-8')
+        assertEquals(output, 0, process.waitFor())
+        output
     }
 
     private static String dexText(ZipFile zip) {

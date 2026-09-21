@@ -436,6 +436,54 @@ silently returning an incomplete pinned set. These analysis restrictions do not
 change existing normal or DEX-only APK assembly. The structured format is defined
 by [AAPT2's resource schema](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/tools/aapt2/Resources.proto).
 
+### Generate the two resource containers
+
+```sh
+./gradlew :app:splitParavoidAndroidDebugParavoidResources
+```
+
+This explicit task consumes the ordinary linked shell-variant APK and automatically
+produces these files under `build/outputs/paravoid/<variant>/resources/`:
+
+- `shell-resources.apk`: the compiled manifest, pinned-only resource table and
+  pinned files, including every configuration and transitive dependency.
+- `payload-resources.apk`: the complete original resource table, referenced resource
+  files and app/library assets. Identical pinned resources remain in this full set.
+- `split-report.json`: resource/file ownership, asset paths and baseline-check status.
+
+These are **unsigned resource containers, not installable apps or complete VPKs**.
+The existing installable APK is neither rewritten nor stripped yet. No runtime
+loading change or new device-compatibility claim is implied by producing them.
+Early resource attachment and replacing the installed table remain the next gate.
+
+No downstream resource module or manually selected resource folders are needed.
+The existing `pinnedResources` declarations and computed graph drive the subset.
+When `baselineDirectory` is configured, splitting also requires and checks that
+variant's accepted `resource-boundary.json`; incompatible changes fail before new
+outputs are published. Without a baseline this prepares a new shell generation.
+
+The shell table is filtered without renumbering IDs. Original compiled XML/images
+are copied byte-for-byte, and the payload's entire table is copied unchanged.
+Both containers are aligned and round-tripped through AAPT2: IDs, all configuration
+values, file fingerprints and manifest identity must survive, and the shell must
+contain no extra resource entries. App/library assets are payload-only; their bytes
+and compression modes are preserved. Neither container includes installed DEX,
+native libraries, Java-resource entries, APK signatures or the embedded
+`assets/paravoid/module.zip`. Those belong to other packaging stages.
+
+Tests cover app/library resources, XML dependencies, whole-type removal, unchanged
+shell output across movable-value updates, removed payload resources, stable IDs,
+assets, empty tables and reproducible clean/incremental output. This is build-time
+artifact validation; the automatically generated pair still needs API 30/36.1
+device loading tests. The normal APK build remains the control.
+
+Current limits: standalone APKs and the analyzer's supported resource profile.
+Unknown reserved `assets/paravoid/` entries or unclassified `res/` files fail rather
+than silently disappear. Java resources/native payload splitting, signing the full
+VPK, full shell-contract validation and automatic installable-shell assembly are
+still unfinished. See [AAPT2](https://developer.android.com/tools/aapt2) and
+[zipalign](https://developer.android.com/tools/zipalign) for the underlying tools.
+
 ## Verification
 
 For a more involved DI scenario, see the separate [Hilt compatibility probe](compatibility/hilt/README.md).
