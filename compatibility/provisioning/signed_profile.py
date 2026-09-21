@@ -9,6 +9,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 FIELDS = {
+    "manifest": ("applicationId", "contract", "releaseId", "payloadVersion", "format",
+                 "inventorySize", "inventorySha256"),
     "grant": ("applicationId", "audience", "keyId", "key", "issued", "expires"),
     "head": ("applicationId", "contract", "channel", "revision", "releaseId",
              "payloadVersion", "issued", "expires", "size", "sha256"),
