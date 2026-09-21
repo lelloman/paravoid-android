@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -96,6 +97,15 @@ def main():
             (trust / "release.der").write_bytes(public_der(release_key))
         (trust / "policy.json").write_text(json.dumps(policy))
         build(3, trust.parent)
+        # Long device runs must not keep reading mutable/shared Gradle output paths.
+        apks = {}
+        for mode in ("normal", "paravoidAndroid"):
+            for access in ("keyed", "publicAccess"):
+                output = ROOT / f"build/outputs/apk/{mode}{access[0].upper() + access[1:]}/debug"
+                metadata = json.loads((output / "output-metadata.json").read_text())
+                snapshot = temp / f"{mode}-{access}.apk"
+                shutil.copyfile(output / metadata["elements"][0]["outputFile"], snapshot)
+                apks[(mode, access)] = (metadata["applicationId"], snapshot)
         artifact = temp / "artifact.bin"
         artifact.write_bytes(b"Signed harmless fixture data. Never execute these bytes.\n")
         digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
@@ -124,9 +134,7 @@ def main():
                 ports.append(port)
             for mode in ("normal", "paravoidAndroid"):
                 for access in ("keyed", "publicAccess"):
-                    output = ROOT / f"build/outputs/apk/{mode}{access[0].upper() + access[1:]}/debug"
-                    metadata = json.loads((output / "output-metadata.json").read_text())
-                    app, original = metadata["applicationId"], output / metadata["elements"][0]["outputFile"]
+                    app, original = apks[(mode, access)]
                     assert app.startswith("com.lelloman.paravoidcompat.provisioning.")
                     packages.append(app)
                     certificate = [line for line in command(signer, "verify", "--verbose", "--print-certs", original).splitlines()
@@ -290,8 +298,9 @@ def main():
                         run("revoked key cannot use cache", "http-error", http=401, preserve=True)
             profile = "archive" if args.archive else "signed"
             report = ROOT / f"build/{profile}-api{api}.json"
+            report.parent.mkdir(parents=True, exist_ok=True)
             report.write_text(json.dumps(stages, indent=2))
-            print(f"PASS: {len(stages)} signed stages; report {report}", flush=True)
+            print(f"PASS: {len(stages)} {profile} stages; report {report}", flush=True)
         finally:
             for app in packages:
                 adb("shell", "am", "force-stop", app, check=False)
