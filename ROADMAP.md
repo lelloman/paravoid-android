@@ -120,6 +120,17 @@ them without implementing those systems.
 
 ## 2. Integrate a real downstream app
 
+An early **DEX-only** Pezzottify integration now builds normal and shell phone/debug
+APKs on its dedicated `codex/paravoid-integration` branch (AGP 9.0.0, Gradle 9.1.0,
+Hilt 2.57.2). Its logged-out API-30 and API-36.1/x86_64 smoke gates pass startup/restart,
+Compose login UI, rotation, callback routing and Room database integrity; Androidoscopy
+initializes. The worktree's `android/PARAVOID.md`, `check-paravoid.py` and
+`smoke-paravoid.py` record/reproduce the checks. This is not this milestone's exit:
+complete packaging, authenticated workflows, library Activity screens, background
+sync, playback and performance measurements remain pending. Normal builds retain
+minSdk 24 through the API-only Application base; shell builds use minSdk 30 and
+the default `.paravoid` identity with a separate OIDC callback registration.
+
 - Select one representative existing app and integrate through the plugin's public
   contract, using an embedded complete payload initially.
 - Compare normal and shell behavior in the app's real startup, navigation, storage,
