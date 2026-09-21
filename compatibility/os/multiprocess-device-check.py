@@ -47,7 +47,7 @@ def check_mode(mode, origin):
         # Android 15+ can send BOOT_COMPLETED when a package leaves stopped state.
         # This unrelated fixture receiver otherwise starts the main process while
         # the named-worker-only case is running (also in normal packaging).
-        adb('shell', 'pm', 'disable', boot_receiver)
+        adb('shell', 'run-as', app, 'pm', 'disable', '--user', '0', boot_receiver)
         assert not adb('shell', 'pidof', app, check=False), 'Main must start cold'
         assert not adb('shell', 'pidof', app + ':worker', check=False), 'Worker must start cold'
         extras = ('--es', 'target', app, '--es', 'run', token, '--ez', 'remoteWorker', 'true')
@@ -109,12 +109,14 @@ def check_mode(mode, origin):
         try:
             cleanup(app)
         finally:
-            adb('shell', 'pm', 'default-state', boot_receiver)
+            adb('shell', 'run-as', app, 'pm', 'default-state', '--user', '0', boot_receiver)
 
 
 if __name__ == '__main__':
     if not os.environ.get('ANDROID_SERIAL', '').startswith('emulator-'):
         raise SystemExit('Set ANDROID_SERIAL to a dedicated unlocked emulator')
+    if adb('shell', 'am', 'get-current-user') != '0':
+        raise SystemExit('Use the primary emulator user (0)')
     prepare()
     for packaging in ('normal', 'paravoidAndroid'):
         for caller in ('peer', 'main'):

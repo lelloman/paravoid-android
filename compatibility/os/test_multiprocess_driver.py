@@ -65,8 +65,9 @@ class MultiprocessAssertions(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'cleanup failed' if cleanup_failure else 'connection failed'):
                 check('normal', 'peer')
         receiver = 'test.app/com.lelloman.paravoidcompat.os.AlarmLifecycleReceiver'
-        command.assert_any_call('shell', 'pm', 'disable', receiver)
-        self.assertEqual(command.call_args.args, ('shell', 'pm', 'default-state', receiver))
+        command.assert_any_call('shell', 'run-as', 'test.app', 'pm', 'disable', '--user', '0', receiver)
+        self.assertEqual(command.call_args.args,
+                         ('shell', 'run-as', 'test.app', 'pm', 'default-state', '--user', '0', receiver))
         cleanup.assert_called_once_with('test.app')
 
     def test_receiver_restored_after_test_failure(self):
