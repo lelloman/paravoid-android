@@ -29,3 +29,37 @@ Python provides a producer and a separate verifier using its ZIP library. Host
 tests cover valid inventory, tampered/missing/unexpected/duplicate files, identity,
 signer, path/role and size failures. This is not semantic DEX/resource/native
 validation, a generated shell-contract check, or a general-purpose ZIP reader.
+
+## Running the Android gate
+
+```sh
+ANDROID_HOME=/path/to/sdk python3 compatibility/provisioning/check_signed.py --serial emulator-5584 --archive
+```
+
+The signed runner's prerequisites, emulator-only restriction and four fixture
+package scope apply. A third ephemeral signing key is generated on the host;
+only its public key enters the APK. Trusted APK policy selects archive validation.
+The server does not hold any signing keys. All negative archives are bound by
+**valid signed discovery metadata**, so an outer digest failure cannot masquerade
+as an inner-verifier success. One vector signs the manifest with the trusted
+discovery key, which must not act as a trusted release key.
+
+The client verifies the downloaded archive in memory after its outer digest, then
+atomically replaces the retained archive file only after every inventory check
+passes. It never writes an archive entry to a component path. Tests hash the
+previous retained archive after each rejection, and exercise a valid recovery
+release followed by process restart/304 reuse. Each negative release gets a new
+identity/revision; the verified discovery high-water mark may advance even when
+inner verification fails, but the retained archive does not change.
+
+Vectors cover five roles, signature/identity/format failures, inventory/component
+tampering, missing/extra/duplicate components, unsafe paths, symlinks, unsupported
+method fields, per-entry/aggregate/count bounds, unknown/mismatched roles,
+duplicate inventory paths, local/central name mismatch, bad CRC, trailing bytes
+and truncation. Reports go to ignored `build/archive-api{SDK}.json`.
+
+The signed head binds the entire archive; this experiment does not yet add a
+separate manifest-digest field or the draft's SDK/ABI/runtime/ledger requirements.
+Components are role-labelled **opaque marker bytes**, not valid DEX/compiled
+resource/ELF test applications. No loading, native execution, extraction-race,
+cross-process selection or rollback safety is implied by acceptance here.

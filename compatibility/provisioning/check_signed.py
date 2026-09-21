@@ -61,6 +61,7 @@ class Trap(BaseHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--serial", required=True)
+    parser.add_argument("--archive", action="store_true", help="Run signed component-inventory vectors instead")
     args = parser.parse_args()
     import re
     assert re.fullmatch(r"emulator-\d+", args.serial), "Explicit emulator serial required"
@@ -84,11 +85,15 @@ def main():
     with tempfile.TemporaryDirectory(prefix="paravoid-signed-") as directory:
         temp = Path(directory)
         issuer, publisher, rogue = new_key(), new_key(), new_key()
+        release_key = new_key()
         trust = temp / "assets/probe-trust"
         trust.mkdir(parents=True)
         (trust / "issuer.der").write_bytes(public_der(issuer))
         (trust / "publisher.der").write_bytes(public_der(publisher))
         policy = dict(audience="fixture-store", contract=secrets.token_hex(32), channel="test")
+        if args.archive:
+            policy["artifactProfile"] = "stored-inventory-1"
+            (trust / "release.der").write_bytes(public_der(release_key))
         (trust / "policy.json").write_text(json.dumps(policy))
         build(3, trust.parent)
         artifact = temp / "artifact.bin"
@@ -187,8 +192,15 @@ def main():
                             assert server.requests == before, "Credential sent before grant validation"
                         if status == "verified":
                             assert result["sha256"] == digest, result
+                            if args.archive:
+                                assert result["components"] == 5, result
                         if preserve:
-                            assert adb("shell", "run-as", app, "cat", "files/signed-artifact.bin") == artifact.read_text().strip()
+                            if args.archive:
+                                kept = subprocess.run(["adb", "-s", args.serial, "exec-out", "run-as", app,
+                                    "cat", "files/signed-artifact.bin"], check=True, capture_output=True, timeout=30).stdout
+                                assert hashlib.sha256(kept).hexdigest() == preserved_digest, "Verified archive was replaced on failure"
+                            else:
+                                assert adb("shell", "run-as", app, "cat", "files/signed-artifact.bin") == artifact.read_text().strip()
                         stages.append(dict(packagingMode=mode, access=access, label=label, **result))
                         print(f"PASS {mode}/{access}: {label}", flush=True)
 
@@ -209,6 +221,22 @@ def main():
                             install(sign("grant", fields, signer_key))
                             run(label, "rejected", reason, no_request=True)
                         install(sign("grant", grant, issuer))
+                    if args.archive:
+                        from archive_cases import vectors
+                        preserved_digest = None
+                        for label, identity, blob, reason in vectors(app, policy["contract"], release_key, publisher):
+                            artifact.write_bytes(blob)
+                            digest = hashlib.sha256(blob).hexdigest()
+                            state["apps"][app]["release"] = identity["releaseId"]
+                            save()
+                            descriptor = dict(base_head, releaseId=identity["releaseId"], payloadVersion=identity["payloadVersion"],
+                                revision=identity["payloadVersion"], size=len(blob), sha256=digest)
+                            publish(descriptor)
+                            run(label, "rejected" if reason else "verified", reason, preserve=reason is not None)
+                            if reason is None:
+                                preserved_digest = digest
+                        run("verified archive survives cold restart", "verified", http=304, preserve=True)
+                        continue
                     server.fault = "unsolicited304"
                     run("304 without cached descriptor", "rejected", "cache")
                     server.fault = None
@@ -260,7 +288,8 @@ def main():
                         state["apps"][app]["keys"] = {}
                         save()
                         run("revoked key cannot use cache", "http-error", http=401, preserve=True)
-            report = ROOT / f"build/signed-api{api}.json"
+            profile = "archive" if args.archive else "signed"
+            report = ROOT / f"build/{profile}-api{api}.json"
             report.write_text(json.dumps(stages, indent=2))
             print(f"PASS: {len(stages)} signed stages; report {report}", flush=True)
         finally:

@@ -57,6 +57,20 @@ class ArchiveTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             pack(self.identity, {f"assets/{i}": ("asset", b"x" * MAX_ENTRY) for i in range(MAX_TOTAL // MAX_ENTRY + 1)}, self.key)
 
+    def test_shared_semantic_vectors(self):
+        from archive_cases import vectors
+        from cryptography.exceptions import InvalidSignature
+        for label, identity, blob, reason in vectors("example.app", "test", self.key, new_key()):
+            # Strict raw-ZIP framing is specifically the independent Android parser's gate.
+            if label in ("trailing bytes", "truncated archive", "local central name mismatch", "bad CRC"):
+                continue
+            with self.subTest(label=label):
+                if reason is None:
+                    self.assertEqual(verify_archive(blob, identity, self.key.public_key()), 5)
+                else:
+                    with self.assertRaises((ValueError, KeyError, InvalidSignature, zipfile.BadZipFile)):
+                        verify_archive(blob, identity, self.key.public_key())
+
 
 if __name__ == "__main__":
     unittest.main()

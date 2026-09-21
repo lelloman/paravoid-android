@@ -19,11 +19,11 @@ public final class SignedDeliveryProbe {
     private static final String[] HEAD = {"applicationId", "contract", "channel", "revision", "releaseId",
         "payloadVersion", "issued", "expires", "size", "sha256"};
 
-    private static final class Rejected extends Exception {
+    static final class Rejected extends Exception {
         final String reason;
         Rejected(String reason) { super(reason); this.reason = reason; }
     }
-    private static void require(boolean value, String reason) throws Rejected {
+    static void require(boolean value, String reason) throws Rejected {
         if (!value) throw new Rejected(reason);
     }
     public static boolean configured(Context context) throws IOException {
@@ -49,7 +49,7 @@ public final class SignedDeliveryProbe {
         require(Base64.encodeToString(result, Base64.NO_WRAP).equals(encoded), "encoding");
         return result;
     }
-    private static Map<String, String> verify(byte[] bytes, String kind, byte[] root) throws Exception {
+    static Map<String, String> verify(byte[] bytes, String kind, byte[] root) throws Exception {
         require(bytes.length <= 4096, "bounds");
         for (byte b : bytes) require(b >= 0, "encoding");
         String[] lines = new String(bytes, StandardCharsets.US_ASCII).split("\n", -1);
@@ -64,7 +64,12 @@ public final class SignedDeliveryProbe {
         verifier.update(body);
         require(verifier.verify(signature), "signature");
         for (byte b : body) require(b >= 0, "encoding");
-        String[] fields = kind.equals("grant") ? GRANT : HEAD;
+        String[] fields;
+        if (kind.equals("grant")) fields = GRANT;
+        else if (kind.equals("head")) fields = HEAD;
+        else if (kind.equals("manifest")) fields = new String[] {"applicationId", "contract", "releaseId",
+            "payloadVersion", "format", "inventorySize", "inventorySha256"};
+        else throw new Rejected("envelope");
         String[] rows = new String(body, StandardCharsets.US_ASCII).split("\n", -1);
         require(rows.length == fields.length + 1 && rows[fields.length].isEmpty(), "fields");
         Map<String, String> values = new HashMap<>();
@@ -94,7 +99,7 @@ public final class SignedDeliveryProbe {
         try { out.write(bytes); file.finishWrite(out); }
         catch (Exception e) { file.failWrite(out); throw e; }
     }
-    private static String hash(byte[] bytes) throws Exception {
+    static String hash(byte[] bytes) throws Exception {
         StringBuilder out = new StringBuilder();
         for (byte b : MessageDigest.getInstance("SHA-256").digest(bytes)) out.append(String.format("%02x", b & 255));
         return out.toString();
@@ -201,6 +206,10 @@ public final class SignedDeliveryProbe {
             }
         }
         require(artifact.length == size && hash(artifact).equals(head.get("sha256")), "artifact-integrity");
+        if (policy.optString("artifactProfile").equals("stored-inventory-1")) {
+            int count = ArchiveProbe.verify(artifact, head, asset(c, "release.der"));
+            result.put("components", count);
+        }
         // Atomic replacement of harmless data, NOT executable-payload selection or activation.
         write(new AtomicFile(new File(c.getFilesDir(), "signed-artifact.bin")), artifact);
         result.put("status", "verified"); result.put("revision", revision); result.put("sha256", hash(artifact));
