@@ -2,6 +2,7 @@
 """Build two real code versions and one immutable, dual-bundle fixture shell."""
 from pathlib import Path
 import hashlib
+import json
 import shutil
 import subprocess
 import zipfile
@@ -22,6 +23,9 @@ def main():
     for version in (1, 2):
         build(version, 'assembleNormalDebug', 'assembleParavoidAndroidDebug',
               'lintNormalDebug', 'lintParavoidAndroidDebug')
+        schema = Path('com.lelloman.paravoidcompat.migrations.ProbeDatabase') / f'{version}.json'
+        assert json.loads((ROOT / f'build/schemas/v{version}' / schema).read_text()) == json.loads(
+            (ROOT / 'schemas' / schema).read_text()), f'Exported v{version} schema changed'
         normal = ROOT / 'build/outputs/apk/normal/debug/migration-compatibility-normal-debug.apk'
         shell = ROOT / 'build/outputs/apk/paravoidAndroid/debug/migration-compatibility-paravoidAndroid-debug.apk'
         shutil.copyfile(normal, OUT / f'normal-v{version}.apk')
