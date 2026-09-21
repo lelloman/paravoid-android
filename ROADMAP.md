@@ -4,6 +4,10 @@ Agreed direction, 2026-09-21. This is planned work, not a list of implemented
 capabilities. The [compatibility matrix](compatibility/README.md) records tested
 behavior and limitations.
 
+[V1.md](V1.md) closes the outstanding design choices and defines the finish line.
+This roadmap supplies implementation order and evidence; V1.md supplies selected
+scope, API/protocol/runtime rules and explicit deferrals. Definition is not delivery.
+
 ## Direction
 
 The compatibility suite is broad enough to move from isolated exploration to
@@ -18,7 +22,8 @@ dimension, a fixed installed set of app/library Activity declarations, and an op
 manual resource split, or downstream bootstrap/packaging scripts.
 The one-Activity design rule is superseded. Non-launcher app/library Activities
 are now preserved and transformed, with real-library packaging checks. The single
-launcher/alias restrictions and broader multi-Activity device coverage remain open.
+launcher/alias restrictions remain the initial v1 boundary; broader multi-Activity
+device coverage is still required.
 
 ## 1. Complete automatic packaging — next milestone
 
@@ -38,12 +43,15 @@ Implement in small, independently verified steps:
 - Implement the [revised Activity contract](PACKAGING.md#activity-declarations-and-library-components):
   preserve app/library declarations in the shell while keeping implementations in
   the payload; generalize validation, single-destination metadata and launcher
-  routing. Test multiple launchers, external entry, Activity results and restoration.
+  routing. Test external entry, Activity results and restoration.
   Reject incompatible manifest/pinned-resource changes against an existing shell
   baseline instead of rejecting apps merely for having multiple Activities.
+  Multiple-launcher/alias support is deferred beyond v1; test the supported single
+  launcher and multiple non-launcher Activities in this milestone.
   First slice complete: multiple declarations and per-Activity hooks, verified
   with [AppAuth/Androidoscopy build artifacts](compatibility/library-activities/README.md).
-  Broader launcher routing, contract diffs and device-flow verification remain.
+  Contract diffs and supported device-flow verification remain; broader launcher
+  routing is a later extension.
 
 The design baseline is now [defined in PACKAGING.md](PACKAGING.md): API 30+
 complete packaging, pinned shell resources, a shared stable-ID namespace, and a
@@ -72,8 +80,7 @@ scenarios are still pending.
 - Version the package format and identify its logical components: code, compiled
   resources, assets/Java resources, native libraries and metadata. Bind them to one
   coherent payload version and record shell/runtime compatibility. Concrete format
-  choices follow investigation; this does not commit us to a server API or split
-  algorithm yet.
+  choices are selected in V1.md and need executable format vectors and validation.
 
 **Exit:** a reviewed contract, explicit supported API range, and fixture assertions
 for the intended contents of shell and payload.
@@ -200,14 +207,14 @@ state. Shell-incompatible changes require a shell update.
 
 ## 4. Add shell-owned control surfaces
 
-Design these after packaging is working and delivery/activation contracts are
-clear. Candidate controls, not yet finalized API/UI commitments:
+Implement after packaging and delivery/activation. V1.md now selects the minimum
+controls and their defaults; visual design may follow during implementation:
 
 - Update availability, checks, progress and update preferences.
 - Current payload identity and compatibility/diagnostic information.
 - Older-package retention, storage limits and cleanup.
-- Selection/recovery actions for compatible retained versions, with explicit
-  limitations when persistent data prevents rollback.
+- Forward repair, explicit retry and actionable recovery status. Retained versions
+  are not a generic rollback feature; v1 never infers persistent-data compatibility.
 
 **Exit:** users can understand and control package management without downstream
 apps implementing the shell's management UI. Cleanup cannot remove versions still
@@ -235,9 +242,10 @@ then, packaging includes the full resource set.
 
 ## Release hardening and working discipline
 
-Broader API/ABI and real-device coverage, release toolchains/shrinking, third-party
-SDK compatibility, performance and distribution constraints remain release gates
-to define for the supported product—not prerequisites for starting milestone 1.
+V1.md selects API 30/36.1, physical ARM64 and signed unshrunk release gates;
+third-party SDK coverage and performance measurements are required in the real app.
+Shrinking and wider toolchain support are separately gated follow-up work, not
+prerequisites for starting milestone 1.
 Unsupported build modes must remain explicit rather than silently producing
 incorrect artifacts.
 

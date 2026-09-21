@@ -49,8 +49,11 @@ login or installed store app. No particular store or identity provider is requir
 APK-carried keys are copyable; this is not copy-proof licensing.
 The distributor can revoke a key; restoring update access requires a new key
 provisioned through a shell APK update, not Paravoid-managed key rotation.
-The wire/security profiles still need review;
-these are not implemented plugin/runtime features.
+The [v1 implementation contract](V1.md) now selects the build API, complete VPK
+format, signing/authentication, cold activation, empty-shell behavior, recovery
+and minimum controls, with an ordered completion checklist. These are implementation
+requirements, not shipped plugin/runtime features; wire freeze still requires
+cross-implementation vectors and security review.
 
 ### Application behavior
 

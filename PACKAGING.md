@@ -4,6 +4,10 @@ Design baseline, 2026-09-21. This specifies the next implementation; it does not
 describe capabilities already shipped. The resource linking strategy below must
 pass its implementation gate before complete packaging is advertised as supported.
 
+[V1.md](V1.md) selects the build API, archive/signing profile, initial support
+boundaries, activation/recovery policy and completion gates. Read it alongside this
+resource/ownership design; selected API names are not yet implemented features.
+
 ## 1. Downstream contract and Android support
 
 Keep the existing plugin-generated `normal` / `paravoidAndroid` flavors, ordinary
@@ -28,7 +32,8 @@ Existing DEX-only packaging remains available under its current API 28 minimum
 (29 when installed native libraries are present). These are distinct capabilities:
 the plugin must expose an explicit packaging selection during migration and reject
 complete packaging below 30 rather than silently raising minSdk or falling back.
-Exact DSL names will be finalized with implementation, not invented as working API.
+The target DSL is defined in [V1.md](V1.md#2-build-api-and-reproducible-outputs),
+explicitly separate from today's working API.
 
 API 30 and the current API 36.1 emulator are required device gates for complete
 resource packaging. The bounded same-package fixture now passes on both, but the
@@ -238,18 +243,18 @@ The embedded-first packaging milestone below remains unchanged. Empty-shell outp
 is a later explicit option gated on safe startup without any payload.
 
 Use a new versioned **outer complete-payload format**, distinct from the existing
-DEX-only `module.zip` formats 1/2. Initially it contains one code bundle, one
+DEX-only `module.zip` formats 1/2. Initially it contains a contiguous DEX set, one
 resource APK (including ordinary assets), Java-resource content, native libraries
-grouped by ABI, and metadata. Exact archive paths/serialization are implementation
-details to freeze with the validated format, not part of today's public API.
+grouped by ABI, and metadata. [V1.md](V1.md#3-complete-package-format) selects exact
+paths, serialization and limits, subject to executable conformance before release.
 
 Metadata identifies format and payload version, shell contract, SDK/ABI requirements,
 ledger identity, and an inventory of component paths, sizes and digests. Reject
 duplicate/unsafe paths, missing/unexpected components, conflicting reserved shell
 names, unsupported versions and resource/ABI mismatches. Establish explicit archive
 and expansion limits in the reader before accepting complete containers. Hashes
-under the installed APK's signature suffice for the embedded experiment, but do not
-authenticate future downloads: external delivery must sign metadata and all parts.
+under the installed APK's signature suffice for the existing embedded experiment,
+but v1 requires a signed release manifest for embedded and downloaded VPKs alike.
 
 Load in this order, independently in each app process:
 
@@ -281,7 +286,8 @@ Before production automatic splitting, build one bounded normal/shell fixture:
   installed table. Demonstrate a real system-consumed pinned notification resource.
 - Cold-start payload A → B → A against an unchanged shell; B changes a value, adds
   a resource and removes another. Existing IDs stay fixed; removed values cannot
-  fall back to A or the installed APK. Do not claim database rollback coverage.
+  fall back to A or the installed APK. This is a controlled resource experiment,
+  not permission for production updater downgrades or database rollback.
 - Prove early Application/provider access, configuration contexts, recreation,
   process death and a named worker on API 30 and API 36.1.
 - Reject pinned-content/manifest changes, ID reuse, a wrong shell contract and

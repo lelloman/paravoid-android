@@ -1,16 +1,19 @@
 # Paravoid distribution specification
 
-Protocol v1, draft 0.3 — 2026-09-21.
+Protocol v1, draft 0.4 — 2026-09-21.
 
 Draft 0.2 replaces the generic credential-provider/OIDC proposal with two modes:
 public access or a distributor-provisioned key inside the shell APK.
 Draft 0.3 makes key replacement exclusively distributor-managed through a new
 shell APK installation/update; Paravoid does not rotate or renew update keys.
+Draft 0.4 selects the implementation profile in [V1.md](V1.md): concrete formats,
+trust/authentication, freshness, activation, empty-shell behavior and build API.
 
 **Design only; not an implemented or frozen wire protocol.** This document defines
 the store-independent contract and a proposed HTTP binding. MUST/MUST NOT denote
-requirements of this draft, not current capabilities. The unresolved items in
-section 9 block a v1 interoperability or secure-delivery claim.
+requirements of this draft, not current capabilities. V1.md resolves the design
+choices below; section 9 lists the remaining freeze/verification gates, which
+still block a v1 interoperability or secure-delivery claim.
 
 Current production packaging embeds a DEX-only `module.zip`. It does not produce
 signed VPKs, support empty shells, download updates or atomically activate them.
@@ -88,10 +91,12 @@ store-account credentials MUST NOT be included in the APK or payload.
 
 `.vpk` names the new outer complete-payload container described in PACKAGING.md:
 code, compiled resources/assets, Java resources, native libraries, and metadata
-form one coherent release. Archive layout and serialization are not frozen here.
+form one coherent release. V1.md selects the archive layout and serialization;
+executable conformance and review are still required before wire freeze.
 
 The signed release manifest MUST bind all identities/requirements above and an
-inventory of every loadable component: role, path, byte length and digest. Sign
+inventory of every loadable component: path, byte length and digest, with role
+determined unambiguously by the format's reserved paths. Sign
 the manifest using an unambiguous encoding and domain separation; the signed
 inventory authenticates component bytes. No executable/resource component may
 sit outside that inventory. The final VPK's byte length and digest are bound by
@@ -101,15 +106,16 @@ The verifier MUST reject altered/missing/unexpected components, duplicate or
 unsafe paths, links escaping extraction roots, unsupported critical fields or
 formats, conflicting identities, and invalid/untrusted signatures. Enforce bounds
 on metadata, entry count, individual/aggregate expanded sizes and nested archives
-before loading or extracting content. Numerical bounds are a format-profile
-release blocker, not an unlimited default. Existing DEX-reader limits still apply
+before loading or extracting content. Numerical bounds are selected in V1.md;
+their enforcement is a release blocker. Existing DEX-reader limits still apply
 to code components until a separately tested change supersedes them.
 
 Signing authority originates in the product shell's trusted release policy. A
 server response MUST NOT establish a new trust root by presenting its own key.
 Publisher signing private keys stay in release infrastructure, not the shell or payload. Publisher
-signing and online head-publication signing may use separately delegated keys,
-but scopes, rotation, expiry and revocation must be defined before release.
+signing and online head-publication signing use separate APK-pinned key sets in
+v1, with no online delegation. Trust changes require a shell APK update; V1.md
+defines scopes, credential expiry and the limitations of this policy.
 This draft does not require exporting or reusing an APK private key online.
 
 Public downloads MUST receive the same signature/compatibility checks as private
@@ -127,15 +133,17 @@ GET v1/apps/{applicationId}/releases/{releaseId}/payload.vpk
 ```
 
 The head request additionally supplies device SDK, ordered supported ABIs and
-supported runtime/payload-format versions. Their wire encoding is a section 9
-blocker. They describe capabilities, not an authenticated device identity.
+supported runtime/payload-format versions. V1.md defines the additional query
+parameters and signed request scope. They describe capabilities, not an
+authenticated device identity.
 
 The server selects a permitted, compatible release for that stream, not simply
 the largest APK versionCode or newest VPK for any shell. A head response describes
 one of these signed outcomes:
 
-- `available`: release identity/version, format/requirements, manifest digest,
-  VPK byte length/digest and download locator.
+- `available`: release identity/version, manifest digest and VPK byte length/digest;
+  request capabilities are signed and the download route is derived from releaseId.
+  The signed release manifest supplies the full requirements checked before loading.
 - `no-compatible-release`: no offered payload fits this request. This is not a
   command to erase or disable a previously verified local payload.
 - `shell-update-required`: an explicit publication-policy outcome, not something
@@ -184,19 +192,18 @@ checks; resumability cannot mix bytes from releases or authorization sessions.
 
 Only configured HTTPS origins may receive requests. Update credentials are scoped
 to an origin/audience; credentials MUST NOT automatically follow
-cross-origin redirects. CDN delegation needs explicit configuration. V1's baseline
-does not put reusable bearer credentials in URLs or logs. Exact redirect and
-optional short-lived download-ticket rules need conformance tests.
+cross-origin redirects. The selected v1 profile rejects all redirects and has no
+CDN delegation/download tickets. It never puts bearer credentials in URLs or logs.
 
 Metadata revision/freshness checks must prevent accepting previously superseded
 heads as new updates. Clients persist verified high-water marks, scoped to their
 publication stream, and do not reset them on logout or channel switching. Ordinary
 updates cannot silently downgrade payload versions. Authorized recovery is a
 separate action with persistent-data checks, not an exception inferred from a
-valid old signature. Fresh installation/data loss and hostile device clocks need
-an explicit security model: this draft does not claim local counters alone solve
-replay or freeze attacks. Review against [TUF's update threat model](https://theupdateframework.github.io/specification/latest/)
-before choosing the final signing/freshness profile; TUF is not yet a dependency.
+valid old signature. V1.md selects forward-only recovery, APK floors and explicit
+fresh-install/data-loss/hostile-clock limitations. Its threat review draws on
+[TUF's update threat model](https://theupdateframework.github.io/specification/latest/)
+without claiming TUF compliance or making it a runtime dependency.
 
 ## 6. Public or distributor-provisioned key authentication
 
@@ -218,7 +225,7 @@ The payload application's own authentication is unrelated and remains unchanged.
 In key mode the delivered shell APK MUST contain the initial update credential in
 a versioned, bounded provisioning record that the shell can read before loading
 any VPK. The record identifies its application, credential ID/issuer and key
-material. The exact fields, representation and transport are section 9 blockers.
+material. V1.md defines the signed grant fields and APK carrier.
 There is no required first-launch login, store-app service handshake or separate
 configuration-file import. An empty shell must be able to authenticate using only
 its installed contents and the configured distribution service.
@@ -230,11 +237,9 @@ application secret. APK copying means this alone does not prove a unique device
 or installation; do not label the key a hardware-bound identity.
 
 The distributor personalizes the APK; Paravoid defines the provisioning contract,
-not which store performs it. Candidate insertion mechanisms are a custom APK
-signing-block entry preserving developer signatures, or content added before
-signing by the product's chosen APK signing authority. Neither mechanism is
-implemented or selected as the v1 encoding yet. Store-managed APK signing is not
-mandatory. A signing-block implementation needs signature-preservation, installed
+not which store performs it. V1 selects a custom APK signing-block entry preserving
+developer signatures; store-managed APK signing is not mandatory. The production
+implementation still needs signature-preservation, installed
 readback, v4/checksum and update-path tests before adoption.
 
 The shell MUST NOT infer authenticity of an unprotected provisioning entry from
@@ -248,8 +253,8 @@ policy and the provisioning format remain part of that contract.
 ### Requests, store-managed key replacement and failures
 
 The shell uses the APK-provisioned key for app-scoped discovery/download
-authorization over HTTPS. The exact request encoding remains a wire-profile
-decision. V1 has no key-renewal endpoint, refresh-token exchange or Paravoid-managed
+authorization over HTTPS using the Bearer profile in V1.md.
+V1 has no key-renewal endpoint, refresh-token exchange or Paravoid-managed
 key rotation; a VPK or head response cannot install a replacement credential.
 No distribution browser login, OAuth redirect Activity or installed store app is
 required by either Paravoid mode. The distributor may itself use OIDC or any other
@@ -287,7 +292,7 @@ Redact keys from logs, URLs, analytics and packaging reports. Any future one-tim
 exchange/device-key binding must specify copied-APK redemption races and recovery;
 it cannot silently be assumed to solve them.
 
-V1's proposed offline policy is to retain/run an already verified compatible
+V1's selected offline policy is to retain/run an already verified compatible
 payload when the server is unavailable or a download credential expires/is
 revoked. Revocation stops authorized future downloads; it is not remote deletion
 or DRM for code already delivered. Different execution-licensing requirements
@@ -295,7 +300,8 @@ would need a separate explicit specification. Never erase user data on auth fail
 
 ## 7. Embedded and empty bootstrap; activation
 
-The target plugin offers two explicit options (DSL names still to be defined):
+The target plugin offers `bootstrap = 'embedded'` or `'empty'`, as defined in V1.md
+(not implemented DSL yet):
 
 | Mode | Without network on first launch | After a verified payload is retained |
 | --- | --- | --- |
@@ -319,8 +325,9 @@ Empty-shell startup MUST be safe for providers, receivers, services, direct
 Activities/deep links and additional processes, not just the launcher. Do not
 instantiate missing payload classes, block startup on a network fetch, fake
 successful work, or replay arbitrary privileged Intents after provisioning. Component
-unavailability/defer/error semantics and safe intent preservation require a proven
-design before this mode ships; disabling every component is not an assumed solution.
+unavailability/error semantics are selected in V1.md and require device proof
+before this mode ships. Arbitrary intents are not preserved for replay; disabling
+every component is not an assumed solution.
 
 Activation proceeds through downloaded -> verified -> staged -> selected at a
 coordinated cold start -> healthy. Keep the previous usable version while staging;
@@ -359,22 +366,21 @@ Use API 30 and 36.1 as the initial complete-packaging device gates, with physica
 ARM64 coverage before claiming release readiness. Existing DEX-only fixture results
 do not count as passing these distribution gates.
 
-## 9. Decisions required before freezing v1
+## 9. Gates before freezing v1
 
-1. Exact archive layout, manifest/head schemas, encodings, integer/time rules,
-   extension rules, media types, numeric limits and HTTP capability parameters.
-2. Reviewed signature algorithms/envelopes, canonical bytes, delegated authority,
-   trust-root rotation/revocation, signed freshness, clock/first-install behavior
-   and recovery authorization. Supply cross-implementation security test vectors.
-3. APK provisioning-record format/insertion and issuer validation, key-authenticated
-   request profile, APK-based replacement, revocation timing, credential caching and
-   recovery across shell replacement/reinstall/data-clear; include redirect tests.
-4. Payload-absent Android component behavior, cross-process activation mechanism,
-   startup health and persistent-data recovery policy, proven in focused fixtures.
-5. Plugin DSL, packaging/trust reports and build-baseline workflow, aligned with
-   the completed automatic packaging implementation.
+The choices previously listed here are selected in [V1.md](V1.md), not left to a
+store integration to invent. Remaining work is executable specification and proof:
 
-Review these as small specification/implementation slices. Do not implement a
-store-specific upload model to fill protocol gaps or present this draft as a
-finished secure updater. Backend integrations can follow once the relevant wire
-and security profiles are frozen and executable conformance tests exist.
+1. Encode the selected field/layout rules as machine-readable schemas and shared
+   positive/negative vectors; prove independent Python/Android agreement.
+2. Review the cryptographic/trust/freshness implementation and documented threat
+   limits; check the candidate APK block ID for collisions before wire freeze.
+3. Prove production grant provisioning/readback/replacement, request authorization,
+   cache/range behavior, credential revocation and corrupted-state repair.
+4. Prove whole-app early loading, absent-component adapters, interprocess leases,
+   interrupted activation and forward-only data-safe recovery on devices.
+5. Implement the selected plugin API, baseline workflow, reports and automatic
+   full packaging without downstream manual splitting.
+
+Use small verified commits. The selected design is not a finished secure updater;
+backend interoperability claims require frozen vectors and passing implementations.
