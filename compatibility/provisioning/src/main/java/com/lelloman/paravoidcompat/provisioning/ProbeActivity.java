@@ -45,6 +45,11 @@ public final class ProbeActivity extends Activity {
                 result.put("mode", mode);
                 result.put("version", getPackageManager().getPackageInfo(app, 0).getLongVersionCode());
                 result.put("shellReader", ApkProvisioningProbe.class.getClassLoader() != getClass().getClassLoader());
+                if (com.lelloman.paravoidandroid.runtime.SignedDeliveryProbe.configured(this)) {
+                    com.lelloman.paravoidandroid.runtime.SignedDeliveryProbe.run(this, result, mode, endpoint);
+                    finishResult(result, status);
+                    return;
+                }
                 if (mode.equals("key")) {
                     byte[] bytes = ApkProvisioningProbe.read(new File(getApplicationInfo().sourceDir));
                     if (bytes == null) {

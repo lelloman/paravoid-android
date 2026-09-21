@@ -1,5 +1,8 @@
 plugins { id 'com.lelloman.paravoid' }
 android {
+    if (providers.gradleProperty('probeTrustDir').isPresent()) {
+        sourceSets.main.assets.srcDir providers.gradleProperty('probeTrustDir').get()
+    }
     namespace 'com.lelloman.paravoidcompat.provisioning'
     compileSdk 36
     signingConfigs.debug {

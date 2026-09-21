@@ -32,12 +32,13 @@ def command(*args, check=True):
                           stderr=subprocess.STDOUT, text=True, timeout=180).stdout
 
 
-def build(version):
+def build(version, trust_dir=None):
     report = ROOT / f"build/provisioning-v{version}.log"
     report.parent.mkdir(parents=True, exist_ok=True)
     with report.open("w") as output:
+        extra = [] if trust_dir is None else [f"-PprobeTrustDir={trust_dir}"]
         result = subprocess.run([str(REPO / "gradlew"), "-p", str(ROOT), "assembleDebug",
-                                 "--console=plain", "--max-workers=4", f"-PprobeVersion={version}"],
+                                 "--console=plain", "--max-workers=4", f"-PprobeVersion={version}"] + extra,
                                 cwd=REPO, stdout=output, stderr=subprocess.STDOUT, timeout=240)
     assert result.returncode == 0, f"Build failed: {report}"
 

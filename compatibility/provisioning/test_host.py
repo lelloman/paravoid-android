@@ -136,6 +136,27 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(self.request("releases/absent/artifact", self.auth)[0], 404)
         self.assertEqual(self.request(app="unknown")[0], 404)
 
+    def test_presigned_head_is_opaque_but_still_authorized(self):
+        head = Path(self.directory.name) / "head.sig"
+        head.write_bytes(b"deliberately invalid: the client must verify this")
+        self.state["apps"]["example.private"]["signedHead"] = str(head)
+        self.save()
+        self.assertEqual(self.request()[0], 401)
+        status, headers, body = self.request(headers=self.auth)
+        self.assertEqual((status, body), (200, head.read_bytes()))
+        conditional = dict(self.auth, **{"If-None-Match": headers["ETag"]})
+        self.assertEqual(self.request(headers=conditional)[0], 304)
+        self.state["apps"]["example.private"]["keys"] = {}
+        self.save()
+        self.assertEqual(self.request(headers=conditional)[0], 401)
+
+    def test_presigned_head_bounds(self):
+        head = Path(self.directory.name) / "head.sig"
+        head.write_bytes(b"x" * 4097)
+        self.state["apps"]["example.private"]["signedHead"] = str(head)
+        self.save()
+        self.assertEqual(self.request(headers=self.auth)[0], 503)
+
 
 if __name__ == "__main__":
     unittest.main()
