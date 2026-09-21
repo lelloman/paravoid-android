@@ -177,8 +177,14 @@ The original probe only proves separate-package loading. The new
 [same-package fixture](compatibility/resource-split/README.md) now proves a bounded
 `0x7f` split, static-library R/styleable linking and early resource access on
 API 30 and 36.1. Its inputs are hand-selected and its loading hook is fixture-only; it
-does not prove automatic dependency splitting or the entire gate below. Complete
-that gate before locking the strategy into a released format. If it fails, revise
+does not itself prove automatic dependency splitting or the entire gate below.
+The follow-up [generated-pair gate](compatibility/automatic-resources/README.md)
+uses ordinary AGP app/library resources and the production split-task outputs.
+It passes 19 stages on each API, including named-process access, recreation,
+day/night changes, assets and absent/removed resources. Its APK assembly and early
+loader remain fixture-only, and code stays fixed while resources change. Compose,
+system-consumed pinned resources and full contract checks remain outstanding.
+Complete the gate before locking the strategy into a released format. If it fails, revise
 this document explicitly; do not quietly substitute unsupported APIs or require
 a manual downstream split.
 

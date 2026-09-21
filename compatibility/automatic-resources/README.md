@@ -43,6 +43,8 @@ Detailed reports, including device fingerprint/API and per-stage observations, a
 written to `build/validated/evidence-<serial>.json`. Host tests mutate probe evidence
 to ensure assertions reject stale/wrong values and verify fixture ZIP assembly.
 
+Recorded results: [VALIDATION.md](VALIDATION.md).
+
 ## Test-only scaffolding and remaining limits
 
 `build-fixture.py` builds normal and shell variants, exports A's accepted baseline,

@@ -59,8 +59,10 @@ versioned shell compatibility contract. The same-package linking/early-loading
 strategy still requires its focused implementation proof; fixture assertions are
 not yet complete. The first [same-package fixture](compatibility/resource-split/README.md)
 now verifies stable linking, a pinned-only installed table and early runtime
-resource access; automatic resource ownership/pruning and the remaining gate
-scenarios are still pending.
+resource access. The plugin now implements explicit ownership/pruning tasks, and
+the [generated-pair gate](compatibility/automatic-resources/README.md) verifies
+their outputs on API 30/36.1, including named-process access. Production assembly,
+early-loader integration and the remaining contract-gate scenarios are pending.
 
 - Inventory app and dependency outputs from AGP; define which artifacts belong to
   the shell and which belong to the payload. Preserve ordinary normal packaging.
@@ -254,10 +256,12 @@ document requirements and limitations, and make small commits. Add focused probe
 when a concrete risk or real-app failure warrants one. Do not restart an open-ended
 compatibility exploration phase before finishing packaging.
 
-**Immediate next task:** attach the automatically generated resource payload early
-and assemble a runnable shell using the pinned-only table, then prove the generated
-pair on API 30/36.1. Extend the resource-boundary diff into the full shell contract
-and automatic packaging gates.
+**Immediate next task:** integrate the proven generated-resource assembly and early
+attachment into production packaging/runtime, bound to coherent payload metadata
+and validation. Extend the resource-boundary diff into the full shell contract and
+automatic packaging gates. The generated pair now passes the bounded API 30/36.1
+device gate with fixture-only assembly/loading; do not treat that as shipped
+full-VPK support.
 Finish the [remaining contract-gate scenarios](PACKAGING.md#7-first-implementation-gate)
 alongside that implementation before advertising complete packaging support.
 
@@ -282,5 +286,14 @@ copies app/library assets only into the payload, aligns both containers and veri
 binary round trips. A configured resource-boundary baseline gates this task.
 Host/integration tests cover clean/incremental reproducibility, unchanged pinned
 output across movable updates, resource removals, empty tables and APK non-mutation.
-The two unsigned resource archives are not installable shells or full VPKs; runtime
-attachment and replacing the actual installed resource table remain unimplemented.
+The two unsigned resource archives are not installable shells or full VPKs; production
+runtime attachment and installed-table replacement remain unimplemented.
+
+The generated-pair device fixture now consumes those exact outputs and passes 19
+stages on each of API 30 and 36.1: normal control, pinned-only shell without movable
+fallbacks, A/B/A resource/asset selection with stable IDs, constructor/provider/
+Application access, named worker, recreation and day/night changes, plus corrupt/
+writable archive rejection. APK bytes and app data remain fixed through selection.
+Assembly and the early loader are test scaffolding; code stays at A, so coherent
+code/resource updates, Compose/system-resource cases and full contract validation
+remain separate gates.

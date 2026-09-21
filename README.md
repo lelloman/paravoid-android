@@ -452,9 +452,9 @@ produces these files under `build/outputs/paravoid/<variant>/resources/`:
 - `split-report.json`: resource/file ownership, asset paths and baseline-check status.
 
 These are **unsigned resource containers, not installable apps or complete VPKs**.
-The existing installable APK is neither rewritten nor stripped yet. No runtime
-loading change or new device-compatibility claim is implied by producing them.
-Early resource attachment and replacing the installed table remain the next gate.
+The production installable APK is neither rewritten nor stripped yet. A dedicated
+[device gate](compatibility/automatic-resources/README.md) assembles a test-only
+shell and attaches the generated resources early; production integration remains.
 
 No downstream resource module or manually selected resource folders are needed.
 The existing `pinnedResources` declarations and computed graph drive the subset.
@@ -473,9 +473,11 @@ native libraries, Java-resource entries, APK signatures or the embedded
 
 Tests cover app/library resources, XML dependencies, whole-type removal, unchanged
 shell output across movable-value updates, removed payload resources, stable IDs,
-assets, empty tables and reproducible clean/incremental output. This is build-time
-artifact validation; the automatically generated pair still needs API 30/36.1
-device loading tests. The normal APK build remains the control.
+assets, empty tables and reproducible clean/incremental output. The generated pair
+also passes 19 device stages each on API 30 and 36.1: normal control, pinned-only
+shell, A/B/A resources/assets, early Application/provider and named-process access,
+recreation, day/night changes and rejected corrupt/writable archives. Installed
+code stays fixed in this fixture; this is not yet full-VPK update validation.
 
 Current limits: standalone APKs and the analyzer's supported resource profile.
 Unknown reserved `assets/paravoid/` entries or unclassified `res/` files fail rather

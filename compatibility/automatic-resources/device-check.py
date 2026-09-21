@@ -131,7 +131,7 @@ if __name__ == '__main__':
         adb('shell', 'wm', 'dismiss-keyguard')
         checks = check_mode('normal') + check_mode('shell')
         evidence = {'serial': serial, 'sdk': adb('shell', 'getprop', 'ro.build.version.sdk'),
-                    'sdkMinor': adb('shell', 'getprop', 'ro.build.version.sdk_minor'),
+                    'sdkFull': adb('shell', 'getprop', 'ro.build.version.sdk_full'),
                     'fingerprint': adb('shell', 'getprop', 'ro.build.fingerprint'), 'checks': checks}
         (OUT / f'evidence-{serial}.json').write_text(json.dumps(evidence, indent=2) + '\n')
         print(f'PASS {len(checks)} automatic-resource device stages on {serial}', flush=True)
