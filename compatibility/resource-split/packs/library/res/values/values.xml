@@ -1,0 +1,5 @@
+<resources>
+    <string name="library_message">Library resource</string>
+    <attr name="probeLabel" format="string" />
+    <declare-styleable name="ProbePanel"><attr name="probeLabel" /></declare-styleable>
+</resources>

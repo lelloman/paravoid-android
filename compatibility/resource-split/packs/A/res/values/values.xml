@@ -1,0 +1,5 @@
+<resources>
+    <string name="title">Payload A</string>
+    <string name="removed">Removed after A</string>
+    <color name="payload_accent">#006600</color>
+</resources>
