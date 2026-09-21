@@ -6,9 +6,12 @@ pass its implementation gate before complete packaging is advertised as supporte
 
 ## 1. Downstream contract and Android support
 
-Keep the existing plugin-generated `normal` / `paravoidAndroid` flavors, one user
-Activity, and optional `ParavoidAndroidApplication` subclass. No new annotation,
-resource module, bootstrap code or downstream packaging script is required.
+Keep the existing plugin-generated `normal` / `paravoidAndroid` flavors, ordinary
+app/library Activities discovered from the merged manifest, and an optional
+`ParavoidAndroidApplication` subclass. No new annotation, resource module,
+bootstrap code or downstream packaging script is required. The agreed rule is
+a fixed installed Activity contract, not one Activity; implementation still lags
+this decision as detailed below.
 
 **Complete packaging initially requires minSdk 30 in the shell variant.** Use the
 public ResourcesLoader/ResourcesProvider APIs, introduced in API 30; do not build
@@ -39,6 +42,62 @@ that container, app implementation files must not also remain installed as loose
 fallback copies. Inspect the final artifact to enforce this, not just task inputs.
 Normal APK/AAB packaging continues through conventional AGP paths and does not
 inherit shell resource pruning or the shell's resource-ID ledger.
+
+### Activity declarations and library components
+
+This decision supersedes the original one-Activity restriction. The plugin must
+preserve every supported Activity declaration from the **merged manifest**, whether
+owned by the app or contributed by an AAR. Their classes, including generated
+superclasses and dependencies, belong in the payload unless they are Paravoid
+bootstrap infrastructure. Android creates the real Activities through the payload
+component factory; the shell is not an Activity lifecycle proxy.
+
+Examples include AppAuth's `AuthorizationManagementActivity` and Androidoscopy's
+dashboard/session Activities found during the Pezzottify audit. Their presence
+alone should not require modifying the libraries or moving their code into shell
+DEX. This is the intended integration contract, not a claim that those libraries
+have passed a Paravoid device integration test.
+
+| Change | Required artifact under the intended contract |
+| --- | --- |
+| Activity implementation, compatible dependency code or internal behavior | New payload; declaration and all other shell requirements must stay compatible |
+| Unpinned layout/string/drawable used inside the payload process | New payload once complete resource packaging is implemented |
+| Add, remove or rename an Activity, including a library-contributed one | New shell and matching payload |
+| Change exported/enabled defaults, permissions, process, launch mode, task affinity, configuration flags, intent filters, deep links or manifest metadata | New shell and matching payload |
+| Change manifest-referenced theme/icon/label or any other pinned resource/dependency | New shell and matching payload |
+
+Requirements:
+
+- Compare each payload's required declarations against the chosen shell baseline.
+  A library upgrade is not inherently payload-safe: inspect its merged-manifest
+  and pinned-resource changes as well as its code. Report differences explicitly.
+- Keep every declared payload Activity implementation available and compatible
+  with its installed declaration. Removing the class while leaving its declaration
+  is not a valid payload-only way to remove an Activity.
+- Preserve entry-point behavior: launcher destinations, external Intents, deep
+  links, Activity results and task/back-stack semantics. Do not route every entry
+  indiscriminately to a single main Activity or make a launcher visit a prerequisite
+  for direct component creation. Resources/classes must be ready on cold entry.
+- Manifest-defined capabilities remain immutable until reinstall/update of the
+  shell. Ordinary Android runtime state (for example temporarily enabling an
+  already declared component) is distinct from changing that installed contract;
+  it cannot add a missing declaration and needs its own coverage.
+
+**Current limitations:** `ApplicationManifestTask` still rejects more than one
+Activity, Activity aliases, and anything other than one MAIN/LAUNCHER filter.
+The launcher and payload metadata currently represent one destination. Generalized
+manifest preservation, launcher routing and compatibility-diff validation are not
+implemented yet. Before advertising support, add tests for multiple app/library
+Activities, multiple launchers, result round trips, external cold entry and process
+restoration. TV/LEANBACK routing and alias support need explicit implementation
+and tests; they are not established by allowing multiple Activity classes. Custom
+component-factory restrictions and Application integration requirements also remain.
+Do not strip library Activities merely to make an integration appear to pass.
+
+Independent resource packaging and external payload activation are still under
+development. Today's embedded-payload build still requires APK replacement to
+change its payload; the table defines compatibility boundaries for the target
+architecture, not an already available update mechanism.
 
 ## 3. Resource boundary: pinned versus movable
 

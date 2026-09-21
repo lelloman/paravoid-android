@@ -99,7 +99,8 @@ Still untested: real AAB/split installation, ARM devices, 32-bit/native-bridge
 execution, 16 KiB page-size devices, multiple app classloaders loading the same
 library, third-party native SDKs, and R8. CMake enables flexible-page-size support,
 but compilation alone does not prove device compatibility. NativeActivity remains
-outside this fixture and the existing one-Activity application contract.
+outside this fixture. The revised fixed-manifest Activity contract does not by
+itself establish NativeActivity loading or lifecycle compatibility.
 
 References: [in-memory loader constructors](https://developer.android.com/reference/dalvik/system/InMemoryDexClassLoader),
 [Android JNI guidance](https://developer.android.com/ndk/guides/jni-tips).

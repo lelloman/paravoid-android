@@ -112,7 +112,10 @@ features, not Hilt-specific hooks.
 
 ## Limits
 
-- Exactly one user Activity remains required. Declared providers, services and
+- The current plugin still rejects multiple Activities, including library Activities.
+  This is an implementation limitation; the [revised architecture](../../PACKAGING.md#activity-declarations-and-library-components)
+  permits a fixed installed set with payload implementations. This fixture only
+  verifies a single Activity. Declared providers, services and
   receivers are accepted; arbitrary factories other than the platform default or
   AndroidX `CoreComponentFactory` are rejected. Multiprocess, isolated-process and
   direct-boot components are not validated.

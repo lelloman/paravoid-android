@@ -15,9 +15,11 @@ intended integration contract is:
 
 - Apply the Paravoid Android Gradle plugin and configure the update server address,
   authentication if needed, and packaging settings.
-- Use one user Activity with a stable class name. It can be an ordinary Activity
-  or ComponentActivity with its normal Compose `setContent` setup; no Paravoid Android
-  Activity superclass, annotation, or special Compose entry function is required.
+- Keep ordinary app and library Activities declared in the merged manifest. Their
+  installed declarations are fixed for a shell generation; their implementations
+  belong in the payload. No Paravoid Android Activity superclass, annotation, or
+  special Compose entry function is required. This supersedes the one-Activity
+  design rule; the current validator has not yet been updated.
 - When custom Application behavior is needed, extend `ParavoidAndroidApplication`.
   The plugin discovers this class from the merged manifest; no Application
   annotation or separately configured initializer is required.
@@ -75,7 +77,20 @@ Application. Arbitrary Application behavior is not yet guaranteed to work.
 
 ### Activity startup and installed manifest
 
-The generated shell declares two Activities: Paravoid Android's `LauncherActivity`
+**Agreed architecture:** preserve all app- and dependency-contributed Activity
+declarations in the generated shell. Load their implementation classes from the
+payload through Android component creation. A library Activity does not need its
+implementation copied into the shell merely because its declaration is installed.
+The constraint is a **fixed installed manifest contract**, not a single Activity.
+
+Adding, removing or renaming an Activity, changing its manifest attributes,
+intent filters or metadata, or changing its pinned resources requires a new shell.
+Compatible code and movable resource changes may belong to a new payload instead.
+See [the Activity compatibility contract](PACKAGING.md#activity-declarations-and-library-components)
+for examples, requirements and implementation gaps. Resource updates and external
+payload delivery are still planned features, not current production capabilities.
+
+**Current implementation:** the generated shell declares two Activities: Paravoid Android's `LauncherActivity`
 and the user's Activity. The plugin assigns the launcher intent filter to the
 bootstrap Activity and preserves the user Activity's component identity and
 required manifest configuration. During `attachBaseContext`, the shell prepares
@@ -89,11 +104,12 @@ the user Activity through Android and finishes itself. Android manages the real
 user Activity's lifecycle; Activity
 method extraction and lifecycle forwarding are not part of this design.
 
-The one-user-Activity rule applies to the merged manifest, including Activities
-contributed by dependencies. Unsupported additional Activities should produce a
-clear build error. Screens and navigation live within the one user Activity.
-Its class name and installed manifest configuration remain stable across payload
-updates; changing that contract requires a shell update.
+The current validator still requires exactly one Activity and one MAIN/LAUNCHER
+filter in the merged manifest, including dependency contributions, and rejects
+Activity aliases. This is a remaining implementation limitation, not the agreed
+downstream architecture. Multiple launchers, library Activities and additional
+external entry points need manifest/metadata/routing changes and regression tests;
+existing single-Activity tests do not establish their compatibility.
 
 Loading a DEX class is not sufficient to make Android instantiate an Activity.
 The runtime must integrate payload class loading with Android component creation;
@@ -123,8 +139,9 @@ dynamically add installed component declarations or permissions. Declared servic
 receivers and providers are preserved and instantiated through the payload loader.
 The factory delegates to AndroidX `CoreComponentFactory` when present, including
 its component wrapping. Arbitrary custom factories remain unsupported because
-their Application/classloader hooks need a separate contract. Multiprocess,
-isolated-process and direct-boot components are not validated. The integration contract above
+their Application/classloader hooks need a separate contract. Bounded named-worker
+and Direct Boot probes are recorded in the compatibility matrix; isolated-process
+components and arbitrary combinations remain unvalidated. The integration contract above
 does not imply support for every existing Android app or library.
 
 ## Current example and limits
@@ -202,6 +219,9 @@ This remains an entry-point and code-packaging experiment:
   fixture verifies Kotlin UI and process-death state restoration.
 - Extra Activities, Activity aliases, and component factories other than the
   platform default or AndroidX `CoreComponentFactory` are rejected in Paravoid mode.
+  The extra-Activity rejection is implementation debt under the new fixed-manifest
+  contract, not a requirement to remove library functionality. Alias support and
+  arbitrary custom component factories are not implied by the revised design.
 - Unsupported Application inheritance, shrinking and core library desugaring are
   rejected. Multi-DEX payloads are supported within the bundle limits below.
   Runtime/API package names are reserved for
