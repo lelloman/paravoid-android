@@ -16,9 +16,9 @@ Downstream integration remains an ordinary app with the generated packaging flav
 dimension, a fixed installed set of app/library Activity declarations, and an optional custom Application extending
 `ParavoidAndroidApplication`. No Activity annotation, special Compose entry point,
 manual resource split, or downstream bootstrap/packaging scripts.
-The one-Activity design rule is superseded. The current validator/launcher still
-enforce it; removing that implementation restriction is part of the work below,
-not evidence that multiple Activities are already supported.
+The one-Activity design rule is superseded. Non-launcher app/library Activities
+are now preserved and transformed, with real-library packaging checks. The single
+launcher/alias restrictions and broader multi-Activity device coverage remain open.
 
 ## 1. Complete automatic packaging — next milestone
 
@@ -41,6 +41,9 @@ Implement in small, independently verified steps:
   routing. Test multiple launchers, external entry, Activity results and restoration.
   Reject incompatible manifest/pinned-resource changes against an existing shell
   baseline instead of rejecting apps merely for having multiple Activities.
+  First slice complete: multiple declarations and per-Activity hooks, verified
+  with [AppAuth/Androidoscopy build artifacts](compatibility/library-activities/README.md).
+  Broader launcher routing, contract diffs and device-flow verification remain.
 
 The design baseline is now [defined in PACKAGING.md](PACKAGING.md): API 30+
 complete packaging, pinned shell resources, a shared stable-ID namespace, and a

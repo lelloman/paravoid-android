@@ -4,9 +4,9 @@ Pinned AndroidX Core 1.15.0 and Activity 1.10.1, compile/target SDK 36, min SDK 
 Java 11. The target has one ordinary ComponentActivity and a manifest FileProvider.
 The peer is a separate conventional APK/UID, with no Paravoid dependency or
 storage permissions. Its Activity is declared in a different APK; the target
-fixture still has one Activity, satisfying the current validator. The intended
-architecture now permits a fixed set of app/library Activities, but this fixture
-does not verify that pending implementation. No instrumentation moves payload
+fixture still has one Activity. The plugin now accepts additional non-launcher
+app/library Activities, but this fixture does not verify multi-Activity flows.
+No instrumentation moves payload
 dependencies into the shell loader.
 
 ## Run

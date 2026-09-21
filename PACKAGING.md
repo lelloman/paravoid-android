@@ -83,13 +83,18 @@ Requirements:
   already declared component) is distinct from changing that installed contract;
   it cannot add a missing declaration and needs its own coverage.
 
-**Current limitations:** `ApplicationManifestTask` still rejects more than one
-Activity, Activity aliases, and anything other than one MAIN/LAUNCHER filter.
-The launcher and payload metadata currently represent one destination. Generalized
-manifest preservation, launcher routing and compatibility-diff validation are not
-implemented yet. Before advertising support, add tests for multiple app/library
-Activities, multiple launchers, result round trips, external cold entry and process
-restoration. TV/LEANBACK routing and alias support need explicit implementation
+**Current implementation:** the plugin preserves multiple Activity declarations
+and transforms every declared payload Activity; shared inherited callbacks are
+patched once. The [real library fixture](compatibility/library-activities/README.md)
+passes normal/shell builds, lint and manifest/DEX placement checks for AppAuth and
+Androidoscopy. It does not yet verify those SDK flows on a device.
+
+**Remaining limitations:** aliases and anything other than one MAIN/LAUNCHER filter
+are still rejected. The launcher metadata represents one default destination,
+alongside a build-time inventory of all Activity classes. Multiple-launcher routing
+and shell-baseline compatibility-diff validation are not implemented. Add device
+coverage for multiple app/library Activities, result round trips, external cold
+entry and process restoration. TV/LEANBACK routing and alias support need explicit implementation
 and tests; they are not established by allowing multiple Activity classes. Custom
 component-factory restrictions and Application integration requirements also remain.
 Do not strip library Activities merely to make an integration appear to pass.

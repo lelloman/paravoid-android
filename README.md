@@ -19,7 +19,8 @@ intended integration contract is:
   installed declarations are fixed for a shell generation; their implementations
   belong in the payload. No Paravoid Android Activity superclass, annotation, or
   special Compose entry function is required. This supersedes the one-Activity
-  design rule; the current validator has not yet been updated.
+  design rule; non-launcher library Activities are now accepted, with remaining
+  routing limits described below.
 - When custom Application behavior is needed, extend `ParavoidAndroidApplication`.
   The plugin discovers this class from the merged manifest; no Application
   annotation or separately configured initializer is required.
@@ -90,8 +91,9 @@ See [the Activity compatibility contract](PACKAGING.md#activity-declarations-and
 for examples, requirements and implementation gaps. Resource updates and external
 payload delivery are still planned features, not current production capabilities.
 
-**Current implementation:** the generated shell declares two Activities: Paravoid Android's `LauncherActivity`
-and the user's Activity. The plugin assigns the launcher intent filter to the
+**Current implementation:** the generated shell preserves all declared app/library
+Activities and adds Paravoid Android's `LauncherActivity`. It requires exactly one
+MAIN/LAUNCHER filter, discovers its target, and assigns that filter to the
 bootstrap Activity and preserves the user Activity's component identity and
 required manifest configuration. During `attachBaseContext`, the shell prepares
 the embedded payload and constructs the transformed Application. Android then
@@ -104,12 +106,13 @@ the user Activity through Android and finishes itself. Android manages the real
 user Activity's lifecycle; Activity
 method extraction and lifecycle forwarding are not part of this design.
 
-The current validator still requires exactly one Activity and one MAIN/LAUNCHER
-filter in the merged manifest, including dependency contributions, and rejects
-Activity aliases. This is a remaining implementation limitation, not the agreed
-downstream architecture. Multiple launchers, library Activities and additional
-external entry points need manifest/metadata/routing changes and regression tests;
-existing single-Activity tests do not establish their compatibility.
+The current validator accepts multiple declared Activities, including dependency
+contributions, but still requires one MAIN/LAUNCHER filter and rejects aliases.
+All declared payload Activities receive loader and saved-state hooks. The
+[library fixture](compatibility/library-activities/README.md) verifies real AppAuth
+and Androidoscopy manifest preservation and payload class placement. This is not
+device verification of their flows. Multiple launchers, aliases, TV entry and
+multi-Activity restoration/results still need implementation or runtime coverage.
 
 Loading a DEX class is not sufficient to make Android instantiate an Activity.
 The runtime must integrate payload class loading with Android component creation;
@@ -217,10 +220,9 @@ This remains an entry-point and code-packaging experiment:
   guard remains as defense in depth.
 - The main sample uses Java and Android Views; a separate Compose/Hilt/Navigation
   fixture verifies Kotlin UI and process-death state restoration.
-- Extra Activities, Activity aliases, and component factories other than the
+- Multiple launcher filters, Activity aliases, and component factories other than the
   platform default or AndroidX `CoreComponentFactory` are rejected in Paravoid mode.
-  The extra-Activity rejection is implementation debt under the new fixed-manifest
-  contract, not a requirement to remove library functionality. Alias support and
+  Additional non-launcher app/library Activities are accepted. Alias support and
   arbitrary custom component factories are not implied by the revised design.
 - Unsupported Application inheritance, shrinking and core library desugaring are
   rejected. Multi-DEX payloads are supported within the bundle limits below.
