@@ -158,8 +158,11 @@ wire/security profiles with conformance vectors before claiming interoperability
 The [APK provisioning experiment](compatibility/provisioning/README.md) now
 exercises public/key discovery and harmless downloads, APK personalization without
 changing its signing identity, server revocation and APK-delivered replacement
-credentials. It is an isolated fixture, not production runtime/plugin support;
-signed VPKs, provisioning issuer validation and safe activation are still required.
+credentials. Its [signed extension](compatibility/provisioning/SIGNED.md) checks
+issuer-authenticated grants, signed discovery, replay/freshness and transfer
+integrity using independent Python/Android implementations. These are isolated
+fixtures, not production runtime/plugin support; complete signed VPKs, finalized
+trust/provisioning policy and safe activation are still required.
 
 - Add plugin/server configuration and produce the complete uploadable package.
   Define signing and verification before accepting externally supplied content.

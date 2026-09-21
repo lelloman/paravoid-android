@@ -144,6 +144,7 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(self.request()[0], 401)
         status, headers, body = self.request(headers=self.auth)
         self.assertEqual((status, body), (200, head.read_bytes()))
+        self.assertEqual(headers["Content-Type"], "application/octet-stream")
         conditional = dict(self.auth, **{"If-None-Match": headers["ETag"]})
         self.assertEqual(self.request(headers=conditional)[0], 304)
         self.state["apps"]["example.private"]["keys"] = {}

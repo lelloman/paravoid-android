@@ -4,11 +4,17 @@ This is a bounded fixture, **not the production updater or a conforming VPK
 server**. It tests the distribution draft's public/key authorization and APK-based
 credential replacement. No LelloStore, real account or publisher key is involved.
 
+The original suite below remains the unsigned-record baseline. The separate
+[signed-profile extension](SIGNED.md) adds authenticated grants, independently
+verified signed discovery, durable replay checks and hostile-server tests in both
+public and key modes. Neither suite executes downloaded content.
+
 - `apk_record.py` adds a fixture-only signing-block entry to a copy of an APK.
   Existing signature entries and ZIP contents are preserved, with aligned block
   resizing. It refuses already-personalized input and never overwrites output.
 - `server.py` is a Python-standard-library loopback server. Its `/probe/v1` routes
-  serve unsigned metadata and a harmless artifact (maximum 1 MiB), not executable
+  serve unsigned metadata by default (or an optional pre-signed fixture envelope)
+  and a harmless artifact (maximum 1 MiB), not executable
   updates. Public and key access, conditional GET, HEAD and simple byte ranges
   share authorization. Configuration reload makes revocation testable without an
   exposed administration endpoint. Release immutability is enforced in memory for

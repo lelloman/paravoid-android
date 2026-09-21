@@ -20,9 +20,12 @@ remain incomplete. See [PACKAGING.md](PACKAGING.md) and [ROADMAP.md](ROADMAP.md)
 The isolated [APK provisioning experiment](compatibility/provisioning/README.md)
 provides a Python test server and normal/shell emulator fixtures for public/key
 access, signature-preserving APK personalization, revocation and APK-delivered
-replacement keys. It transfers harmless unsigned bytes, not VPKs. Its provisional
-record and HTTP routes are not this draft's frozen protocol or a production
-updater; issuer validation, signed delivery and activation remain outstanding.
+replacement keys. A [signed-profile extension](compatibility/provisioning/SIGNED.md)
+additionally checks issuer-signed grants, publisher-signed discovery, scoped
+persisted replay protection and verified harmless transfers. Neither suite serves
+VPKs or executes downloads. Their provisional records and HTTP routes are not this
+draft's frozen protocol or a production updater; complete format/trust policy,
+production integration and activation remain outstanding.
 
 ## 1. Scope and ownership
 

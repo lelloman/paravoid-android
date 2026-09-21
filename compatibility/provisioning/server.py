@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Loopback-only UNSIGNED test artifact server. Not a VPK/update implementation.
+"""Loopback-only test artifact server. Not a VPK/update implementation.
 
 Config: {"apps": {"package": {"mode": "public"|"key", "keys": {"id": "sha256"},
 "artifact": "/absolute/file", "release": "fixture-a"}}}. Reloaded on each request
-for revocation tests. No admin HTTP API, no logging of headers/keys/query strings.
+for revocation tests. Optional signedHead points to an opaque pre-signed envelope;
+otherwise metadata is unsigned. No admin API or logging of headers/keys/query strings.
 """
 import argparse
 import hashlib
@@ -93,7 +94,8 @@ class Handler(BaseHTTPRequestHandler):
                 if self.headers.get("If-None-Match") == etag:
                     self.reply(304, ETag=etag)
                 else:
-                    self.reply(200, body, ETag=etag, Content_Type="application/json")
+                    media = "application/octet-stream" if "signedHead" in settings else "application/json"
+                    self.reply(200, body, ETag=etag, Content_Type=media)
                 return
             if release != settings["release"]:
                 self.reply(404)
@@ -124,5 +126,5 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=18765)
     args = parser.parse_args()
     with Server(("127.0.0.1", args.port), args.config) as server:
-        print(f"UNSIGNED fixture server listening on loopback port {server.server_port}", flush=True)
+        print(f"Fixture server (not a VPK server) listening on loopback port {server.server_port}", flush=True)
         server.serve_forever()

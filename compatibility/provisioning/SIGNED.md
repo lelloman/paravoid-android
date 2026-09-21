@@ -89,6 +89,21 @@ Time-sensitive vectors use the emulator's clock, which can lag the host, and the
 expiry test waits for that clock to cross the deadline. This makes the assertion
 deterministic; it does not solve hostile or incorrect clocks in production.
 
+## Verified results (2026-09-21)
+
+- 16 host tests pass (12 server/APK tests plus four signing-profile tests).
+- All 114 signed-profile stages pass on API 30 and API 36.1 x86_64, across normal/
+  shell and public/key variants. Personalized APKs retain valid v3 signatures and
+  their original signing certificates.
+- The original 24-stage key-replacement suite passes again on API 30.
+- `lintDebug` passes. No phone or downstream app was modified.
+
+The first API 36.1 attempt exposed a harness assumption: emulator time lagged host
+time by about 15 seconds. It passed after expiry vectors/waits were based on the
+device clock. An API 30 baseline regression attempt was interrupted by an emulator
+`surfaceflinger`/`libEGL_emulation.so` crash; the complete rerun passed. Neither
+interrupted/failed attempt is counted as passing evidence.
+
 ## Still not proven
 
 These are `/probe/v1` routes and only the `available` outcome. There is no complete
