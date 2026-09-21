@@ -42,9 +42,12 @@ flavors `normal` and `paravoidAndroid`. Server/authentication configuration and 
 delivery remain future work; this experiment uses an embedded payload.
 
 The [distribution specification draft](DISTRIBUTION.md) defines the store-agnostic
-direction: signed VPKs, compatible-release discovery/download, optional pluggable
-authentication, and embedded or empty-shell bootstrap. No particular store or
-identity provider is required. The wire/security profiles still need review;
+direction: signed VPKs, compatible-release discovery/download, public access or
+key-based authentication provisioned by the distributor inside the shell APK,
+and embedded or empty-shell bootstrap. Updates require no separate distribution
+login or installed store app. No particular store or identity provider is required.
+APK-carried keys are copyable; this is not copy-proof licensing.
+The wire/security profiles still need review;
 these are not implemented plugin/runtime features.
 
 ### Application behavior

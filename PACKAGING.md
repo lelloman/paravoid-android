@@ -211,6 +211,11 @@ Its digest is the **shell contract ID**. It excludes embedded payload bytes and
 payload version, avoiding a circular hash and allowing the same contract to host
 multiple payload releases. It is not the APK hash, an APK versionCode, or proof of
 authenticity. Signing identity and authorized signing policy are validated separately.
+For future key-authenticated distribution, per-grant credential bytes provisioned
+inside the APK are also excluded from this digest; authentication mode, provisioning
+format and trusted issuer/service policy remain installed requirements. Personalized
+credentials cannot change code, resources or payload trust roots without a new
+contract. See [distribution authentication](DISTRIBUTION.md#6-public-or-distributor-provisioned-key-authentication).
 
 Every payload names its required shell contract ID. Initially require an exact
 match plus supported runtime/format and device requirements. Do not infer safety

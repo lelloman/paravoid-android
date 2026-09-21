@@ -147,14 +147,17 @@ remaining restrictions documented. This proves the integration, not every app.
 
 The [store-agnostic distribution draft](DISTRIBUTION.md) now defines the design
 boundary and a proposed v1 HTTP binding. Public delivery is supported in the target
-contract; access authentication is optional/pluggable, payload verification is not.
+contract; the other mode uses an app-scoped key provisioned by the distributor
+inside the shell APK, with silent renewal/rotation and distributor revocation.
+There is no Paravoid OIDC login or required store-app handshake. VPK signature
+verification is mandatory in both modes; APK-carried keys are not copy-proof.
 Store catalogs, upload APIs and admin UI are outside Paravoid. Freeze the draft's
 wire/security profiles with conformance vectors before claiming interoperability.
 
 - Add plugin/server configuration and produce the complete uploadable package.
   Define signing and verification before accepting externally supplied content.
   Retain the existing signing direction: product-shell signing authority, explicit
-  certificate-rotation policy, and private keys kept in release infrastructure.
+  certificate-rotation policy, and publisher signing private keys kept in release infrastructure.
 - Authenticate metadata and every code/resource/asset/native component as one
   version. Verify size/format/compatibility and protect against tampering, replay,
   partial downloads and verification/loading races.
