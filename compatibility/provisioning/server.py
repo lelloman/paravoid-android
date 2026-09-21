@@ -82,6 +82,13 @@ class Handler(BaseHTTPRequestHandler):
                     "releaseId": settings["release"], "size": len(artifact), "sha256": digest,
                     "path": f'/probe/v1/apps/{app}/releases/{settings["release"]}/artifact'},
                     sort_keys=True, separators=(",", ":")).encode()
+                # Optional pre-signed fixture envelope. This server never holds signing keys.
+                # Intentionally does not verify it: tests must model an untrusted server.
+                if "signedHead" in settings:
+                    with Path(settings["signedHead"]).open("rb") as file:
+                        body = file.read(4097)
+                    if len(body) > 4096:
+                        raise ValueError("Head exceeds fixture limit")
                 etag = '"' + hashlib.sha256(body).hexdigest() + '"'
                 if self.headers.get("If-None-Match") == etag:
                     self.reply(304, ETag=etag)

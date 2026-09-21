@@ -66,13 +66,20 @@ def record_bytes(record):
 
 
 def personalize(apk, record):
+    return personalize_bytes(apk, record_bytes(record))
+
+
+def personalize_bytes(apk, encoded):
+    """Insert an opaque, bounded experimental record; caller owns its validation."""
+    if not isinstance(encoded, bytes) or not 0 < len(encoded) <= MAX_RECORD:
+        raise ValueError("Invalid record size")
     block_start, directory, end, pairs = inspect(apk)
     if RECORD_ID in pairs:
         raise ValueError("Already provisioned; personalize the original signed APK")
     if not ({0x7109871A, 0xF05368C0} & pairs.keys()):
         raise ValueError("Expected a v2 or v3 signature block")
     pairs.pop(PADDING_ID, None)
-    pairs[RECORD_ID] = record_bytes(record)
+    pairs[RECORD_ID] = encoded
     body = b"".join(struct.pack("<QI", 4 + len(value), key) + value for key, value in pairs.items())
     # Keep the directory shift a multiple of 4096, preserving existing alignment.
     target = directory - block_start
