@@ -7,6 +7,8 @@ version = '0.1.0-dev'
 repositories { google(); mavenCentral() }
 dependencies {
     implementation 'com.android.tools.build:gradle:8.13.2'
+    implementation 'com.android.tools.build:aapt2-proto:8.13.2-14304508'
+    implementation 'com.google.protobuf:protobuf-java:3.25.5'
     implementation 'org.ow2.asm:asm-commons:9.7'
     testImplementation gradleTestKit()
     testImplementation 'junit:junit:4.13.2'
