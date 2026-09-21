@@ -1,0 +1,26 @@
+plugins { id 'com.lelloman.paravoid' }
+android {
+    namespace 'com.lelloman.paravoidcompat.libraryactivities'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.lelloman.paravoidcompat.libraryactivities'
+        minSdk 30
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+        manifestPlaceholders = [appAuthRedirectScheme: 'paravoid-library-probe']
+    }
+    productFlavors {
+        normal { applicationIdSuffix '.normal' }
+        paravoidAndroid { applicationIdSuffix '.paravoid' }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+dependencies {
+    implementation project(':paravoid-runtime')
+    implementation 'net.openid:appauth:0.11.1'
+    implementation 'com.github.lelloman.androidoscopy:sdk-ui:2.0.2'
+}
