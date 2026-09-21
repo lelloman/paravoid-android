@@ -83,7 +83,11 @@ payload failure.
 
 ## Remaining limits
 
-Arbitrary Bundle graphs and Serializable values, target `android:process`,
+The separate [named-worker probe](MULTIPROCESS.md) now verifies target
+`android:process=":worker"`, external and same-app clients, independent Application
+initialization, and worker death/reconnection on API 36.1 in both modes.
+
+Arbitrary Bundle graphs and Serializable values,
 isolated services, client death, large transactions,
 file descriptors, concurrent load/backpressure, version-skewed contracts, release
 shrinking and other Android versions remain unvalidated. No remote payload update

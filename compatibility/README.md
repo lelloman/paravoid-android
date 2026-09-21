@@ -24,7 +24,8 @@ implicitly verified on API 29.
 | Area | Evidence / status | Important remaining cases |
 | --- | --- | --- |
 | Java dependencies, annotations, generics, lambdas, ServiceLoader | Sample + `language` explicit/default discovery pass | Existing threads, shared pools, custom loaders |
-| Application, provider, receiver, service startup | Sample + `hilt`; [Binder/AIDL](os/BINDER.md) binding Intents, explicit-loader Bundles and death recovery; [foreground dataSync](os/FOREGROUND.md) cold start, Intent redelivery and stop/restart pass | Direct boot, multiprocess, isolated services, other foreground types/timeouts, client death and wire-version changes |
+| Application, provider, receiver, service startup | Sample + `hilt`; [Binder/AIDL](os/BINDER.md) binding Intents, explicit-loader Bundles and death recovery; [foreground dataSync](os/FOREGROUND.md) cold start, Intent redelivery and stop/restart pass; Direct Boot and named workers tracked below | Isolated services, other foreground types/timeouts, client death and wire-version changes |
+| Named worker process | [Multiprocess probe](os/MULTIPROCESS.md): all 12 external/same-app Binder connection stages pass on API 36.1, with independent Application/loader initialization and worker death/recovery | Same UID, installed manifest declaration; no isolated services, multiprocess libraries/storage, remote providers/receivers, startup races or other OS/ABI coverage |
 | Hilt plugin + Java annotation processing | `hilt`, pinned 2.57.2; Hilt Workers with optional `paravoid-work` below | Fragments/Views, other versions |
 | Kotlin, kapt, KSP, Compose compiler, navigation | `compose` + `network` Moshi KSP-generated ordinary models pass | Moshi 1.15.2 generated qualifiers fail with pinned KSP2 in both modes; other processors/versions, deep links |
 | Saved state and real process death | `compose` navigation counters + `language` generated Parcelable/Serializable pass | Other object graphs, payload-version changes |

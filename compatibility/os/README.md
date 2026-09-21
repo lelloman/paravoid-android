@@ -22,6 +22,12 @@ permission prompt. Only the named fixture packages are changed.
 
 ## Evidence and requirements
 
+The [named-worker process probe](MULTIPROCESS.md) passes all 12 connection stages
+on API 36.1: external cold binding without the main process, same-app IPC,
+per-process Application/loader initialization, unbind/rebind and worker-death
+recovery without restarting the client. It is included in the full device runner;
+its evidence does not extend to isolated services or other Android versions.
+
 The separate [AlarmManager probe](ALARMS.md) covers exact-alarm access denial,
 cold receiver delivery with payload Parcelables, same-token replacement and
 cancellation. Run its standalone driver on API 31+; it is not part of the older

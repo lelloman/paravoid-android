@@ -10,9 +10,35 @@ python3 -m unittest discover -s compatibility/os -p 'test_multiprocess_driver.py
 ANDROID_SERIAL=emulator-5584 python3 compatibility/os/multiprocess-device-check.py
 ```
 
-Use a dedicated unlocked emulator, Python 3.8+ and adb. The driver installs and
-clears only the OS fixture targets and peer. Device results are pending until
-recorded below; a successful build alone is not compatibility evidence.
+Use a dedicated unlocked emulator on primary user 0, Python 3.8+ and adb. The driver installs and
+clears only the OS fixture targets and peer. The full OS `check.sh --device` suite
+also includes this driver.
+
+## Verification evidence
+
+API 36.1 x86_64/debug: all **12 connection stages pass** (two packaging modes ×
+two clients × three connections), including destruction after final unbind and
+dead-token/disconnection checks. Normal, shell and peer builds/lint pass; seven
+host tests exercise the multiprocess driver's assertions and receiver restoration
+after failures.
+No production runtime or plugin fix was required. Other Android versions and
+ABIs have not been run for this new scenario.
+
+The final combined OS device suite also passes: 40 sharing/provider assertions,
+both notification modes, eight Activity-result scenarios, existing default-process
+Binder recovery, all 12 worker connections, and both foreground-service modes.
+All 12 OS host tests pass (seven worker-driver tests plus five alarm-driver tests).
+
+The first combined-suite run exposed a fixture interaction in **normal** packaging:
+ActivityManager started `AlarmLifecycleReceiver` in the main process while the
+worker-only case was running. Android 15+ can deliver `BOOT_COMPLETED` when an app
+leaves stopped state, not only at physical boot ([platform behavior](https://developer.android.com/about/versions/15/behavior-changes-all#stopped-state)).
+The driver therefore temporarily disables this unrelated alarm-test receiver and
+restores its manifest-default state after stopping the fixture. These operations
+use `run-as` with the debuggable fixture's own UID; direct shell component-state
+changes are rejected on the tested image. The no-main-process
+assertion remains strict; this does not require downstream apps to disable their
+receivers, nor imply that a remote Service prevents other components from starting.
 
 ## Scenarios
 

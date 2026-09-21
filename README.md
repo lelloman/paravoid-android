@@ -306,6 +306,10 @@ Further independent probes exercise larger downstream stacks:
   persistent data; migration, generated DAOs, transaction/index checks and rejected
   downgrade pass on API 36.1. A fixture-only selector switches prebundled payloads
   without replacing the shell APK; this is not a production updater.
+- [Named worker processes](compatibility/os/MULTIPROCESS.md): cold remote Service
+  entry and same-app Binder calls pass in both modes on API 36.1, including
+  independent Application initialization and worker-death recovery. Regular
+  `:worker` processes are tested, not isolated services or multiprocess storage.
 - [Hilt + WorkManager](compatibility/hilt-work/README.md): generated assisted
   factories and cold injected workers pass with lazy Application initialization
   using optional `paravoid-work`; opt-out retains the original shell failure.
