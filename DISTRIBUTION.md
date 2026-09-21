@@ -1,9 +1,11 @@
 # Paravoid distribution specification
 
-Protocol v1, draft 0.2 — 2026-09-21.
+Protocol v1, draft 0.3 — 2026-09-21.
 
 Draft 0.2 replaces the generic credential-provider/OIDC proposal with two modes:
 public access or a distributor-provisioned key inside the shell APK.
+Draft 0.3 makes key replacement exclusively distributor-managed through a new
+shell APK installation/update; Paravoid does not rotate or renew update keys.
 
 **Design only; not an implemented or frozen wire protocol.** This document defines
 the store-independent contract and a proposed HTTP binding. MUST/MUST NOT denote
@@ -154,7 +156,7 @@ Range and validator behavior follows [RFC 9110](https://www.rfc-editor.org/rfc/r
 
 Enforce signed sizes and local download/storage limits. Stage into private files,
 never activate partial bytes, and defend verification/loading against file
-replacement races. Retrying or refreshing credentials must preserve identity
+replacement races. Retrying after an APK-provisioned key replacement must preserve identity
 checks; resumability cannot mix bytes from releases or authorization sessions.
 
 Only configured HTTPS origins may receive requests. Update credentials are scoped
@@ -180,7 +182,7 @@ Paravoid defines exactly two configurable distribution-authentication modes:
 | Mode | Shell behavior | Distributor responsibility |
 | --- | --- | --- |
 | Public | Check/download without credentials | Serve publicly accessible signed releases |
-| Key | Read the provisioned update key from the shell APK and authorize requests without user interaction | Authorize the original acquisition, issue/provision the key, enforce its scope, rotate/revoke it |
+| Key | Read the provisioned update key from the shell APK and authorize requests without user interaction | Authorize acquisition, provision/revoke the key, deliver replacements through shell APK updates |
 
 Authorization established when acquiring the shell carries forward to subsequent
 updates until the distributor expires or revokes that entitlement. The distributor
@@ -220,31 +222,37 @@ to arbitrary endpoints or change the installed shell contract. Per-grant credent
 bytes are excluded from the shell contract ID; authentication mode, trusted issuer
 policy and the provisioning format remain part of that contract.
 
-### Requests, renewal and failures
+### Requests, store-managed key replacement and failures
 
-The shell uses the key for app-scoped discovery/download authorization. Whether
-it is sent as a credential over HTTPS or silently exchanged for short-lived request
-credentials is a wire-profile decision, not a reason to require interactive OIDC.
+The shell uses the APK-provisioned key for app-scoped discovery/download
+authorization over HTTPS. The exact request encoding remains a wire-profile
+decision. V1 has no key-renewal endpoint, refresh-token exchange or Paravoid-managed
+key rotation; a VPK or head response cannot install a replacement credential.
 No distribution browser login, OAuth redirect Activity or installed store app is
 required by either Paravoid mode. The distributor may itself use OIDC or any other
 authentication mechanism when authorizing the original acquisition.
 
-Rotation MUST be silent and crash-safe: authenticate the replacement, persist it
-privately and coordinate concurrent processes before retiring the previous key.
-The original bytes remain in the APK, so the shell must prefer the current stored
-credential and the server must reject retired/revoked credentials. Restarting the
-app MUST NOT revert to the original key. Server-side revocation must be enforced
-on subsequent protected requests; cached or derived credentials must not create
-an undocumented revocation delay. The exact rotation/retry/revocation protocol
-and handling of a newly provisioned shell APK are still to be specified.
+The distributor revokes an old key server-side and provisions its replacement
+inside a new shell APK delivered through its ordinary installation/update mechanism.
+After that APK update, the shell reads and uses the new key. Revoked-key requests
+remain denied until a newly authorized APK is installed; Paravoid does not try to
+recover by exchanging the revoked key for another one. This may temporarily stop
+VPK downloads and does not promise a silent Android APK installation.
+
+The installed APK is the credential source of truth. Any cached key must be
+invalidated on APK replacement; app data/backup must not override it with an old
+credential. Server authorization, including conditional/range requests and any
+download delegation, must enforce revocation with explicitly defined timing.
+Credential replacement does not itself require a new shell contract ID, but the
+APK must still satisfy Android signing/update rules. Changed code, manifest or
+pinned resources retain their normal compatibility requirements.
 
 A missing, malformed, expired or revoked key MUST NOT silently downgrade to public
 mode, reset trust or trigger a new login flow. Keep a usable verified local payload
 and report update access as unavailable; without one, show shell-owned provisioning
 or recovery status. Recovery may require obtaining a newly authorized shell from
-the distributor. Reinstall/data-clear/backup-restore behavior must be tested,
-particularly after the original embedded key has been retired. Do not back up
-rotated secrets as freely transferable application data.
+the distributor. Reinstall/data-clear/backup-restore behavior must be tested:
+clearing data or reinstalling an old APK cannot restore a revoked entitlement.
 
 ### Explicit security limitation
 
@@ -312,9 +320,9 @@ Before shipping, exercise at least:
   vectors; unknown versions/critical fields and malformed inputs fail explicitly.
 - Public and key-protected delivery with identical integrity checks; unauthorized
   metadata/range/download/304 access, missing/wrong-app/revoked keys and redirects.
-- Personalized APK signature verification and installed credential readback; silent
-  rotation, crash/restart/concurrent-process races, copied APKs, credential stripping,
-  shell replacement and data-clear/restore after the embedded key is retired.
+- Personalized APK signature verification and installed credential readback; old-key
+  revocation followed by APK-provisioned replacement, stale caches/processes, copied
+  APKs, credential stripping and data-clear/restore with a revoked embedded key.
 - Modified manifests/components, wrong application/contract/key, expired/replayed
   heads, unsupported device, malicious archives and bounded resource exhaustion.
 - Interrupted/resumed download, changed range validator, lost connectivity, low
@@ -336,7 +344,7 @@ do not count as passing these distribution gates.
    trust-root rotation/revocation, signed freshness, clock/first-install behavior
    and recovery authorization. Supply cross-implementation security test vectors.
 3. APK provisioning-record format/insertion and issuer validation, key-authenticated
-   request profile, silent rotation, revocation timing, credential storage and
+   request profile, APK-based replacement, revocation timing, credential caching and
    recovery across shell replacement/reinstall/data-clear; include redirect tests.
 4. Payload-absent Android component behavior, cross-process activation mechanism,
    startup health and persistent-data recovery policy, proven in focused fixtures.

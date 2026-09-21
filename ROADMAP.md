@@ -148,7 +148,8 @@ remaining restrictions documented. This proves the integration, not every app.
 The [store-agnostic distribution draft](DISTRIBUTION.md) now defines the design
 boundary and a proposed v1 HTTP binding. Public delivery is supported in the target
 contract; the other mode uses an app-scoped key provisioned by the distributor
-inside the shell APK, with silent renewal/rotation and distributor revocation.
+inside the shell APK. The distributor revokes keys and delivers replacements
+through shell APK updates; Paravoid does not renew or rotate keys itself.
 There is no Paravoid OIDC login or required store-app handshake. VPK signature
 verification is mandatory in both modes; APK-carried keys are not copy-proof.
 Store catalogs, upload APIs and admin UI are outside Paravoid. Freeze the draft's

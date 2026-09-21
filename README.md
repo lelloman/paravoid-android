@@ -47,6 +47,8 @@ key-based authentication provisioned by the distributor inside the shell APK,
 and embedded or empty-shell bootstrap. Updates require no separate distribution
 login or installed store app. No particular store or identity provider is required.
 APK-carried keys are copyable; this is not copy-proof licensing.
+The distributor can revoke a key; restoring update access requires a new key
+provisioned through a shell APK update, not Paravoid-managed key rotation.
 The wire/security profiles still need review;
 these are not implemented plugin/runtime features.
 
