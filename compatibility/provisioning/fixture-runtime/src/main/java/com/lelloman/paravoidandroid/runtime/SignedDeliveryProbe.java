@@ -29,10 +29,10 @@ public final class SignedDeliveryProbe {
     public static boolean configured(Context context) throws IOException {
         return Arrays.asList(context.getAssets().list("")).contains("probe-trust");
     }
-    private static byte[] asset(Context c, String path) throws Exception {
+    static byte[] asset(Context c, String path) throws Exception {
         try (InputStream in = c.getAssets().open("probe-trust/" + path)) { return read(in, 4096); }
     }
-    private static byte[] read(InputStream in, int limit) throws Exception {
+    static byte[] read(InputStream in, int limit) throws Exception {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] buf = new byte[4096]; int count;
         while ((count = in.read(buf)) != -1) {
@@ -94,7 +94,7 @@ public final class SignedDeliveryProbe {
         long now = System.currentTimeMillis() / 1000;
         require(issued <= now + 60 && expires > now && expires > issued && expires - issued <= maxAge, "freshness");
     }
-    private static void write(AtomicFile file, byte[] bytes) throws Exception {
+    static void write(AtomicFile file, byte[] bytes) throws Exception {
         FileOutputStream out = file.startWrite();
         try { out.write(bytes); file.finishWrite(out); }
         catch (Exception e) { file.failWrite(out); throw e; }
@@ -209,6 +209,7 @@ public final class SignedDeliveryProbe {
         if (policy.optString("artifactProfile").equals("stored-inventory-1")) {
             int count = ArchiveProbe.verify(artifact, head, asset(c, "release.der"));
             result.put("components", count);
+            if (policy.optBoolean("coldDex")) ColdDexProbe.stage(c, envelope, artifact);
         }
         // Atomic replacement of harmless data, NOT executable-payload selection or activation.
         write(new AtomicFile(new File(c.getFilesDir(), "signed-artifact.bin")), artifact);

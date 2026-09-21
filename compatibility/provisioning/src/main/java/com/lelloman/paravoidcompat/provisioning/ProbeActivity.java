@@ -15,7 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import org.json.JSONObject;
 
-/** Downloads harmless bytes only. No downloaded classes/resources are ever loaded. */
+/** Fixture UI; optional cold-DEX mode executes explicitly signed test code at provider startup. */
 public final class ProbeActivity extends Activity {
     private JSONObject grant;
     private String endpoint;
@@ -46,7 +46,9 @@ public final class ProbeActivity extends Activity {
                 result.put("version", getPackageManager().getPackageInfo(app, 0).getLongVersionCode());
                 result.put("shellReader", ApkProvisioningProbe.class.getClassLoader() != getClass().getClassLoader());
                 if (com.lelloman.paravoidandroid.runtime.SignedDeliveryProbe.configured(this)) {
+                    com.lelloman.paravoidandroid.runtime.ColdDexProbe.describe(result);
                     com.lelloman.paravoidandroid.runtime.SignedDeliveryProbe.run(this, result, mode, endpoint);
+                    com.lelloman.paravoidandroid.runtime.ColdDexProbe.describe(result);
                     finishResult(result, status);
                     return;
                 }

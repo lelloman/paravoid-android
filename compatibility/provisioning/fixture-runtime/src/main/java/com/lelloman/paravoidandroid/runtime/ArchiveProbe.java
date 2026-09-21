@@ -75,6 +75,9 @@ public final class ArchiveProbe {
         return result;
     }
     public static int verify(byte[] bytes, Map<String, String> head, byte[] root) throws Exception {
+        return verifiedFiles(bytes, head, root).size() - 2;
+    }
+    static Map<String, byte[]> verifiedFiles(byte[] bytes, Map<String, String> head, byte[] root) throws Exception {
         Map<String, byte[]> files = entries(bytes);
         require(files.containsKey("manifest.sig") && files.containsKey("inventory.txt"), "archive-metadata");
         byte[] inventory = files.get("inventory.txt");
@@ -109,6 +112,6 @@ public final class ArchiveProbe {
             expected.add(path);
         }
         require(expected.equals(files.keySet()), "component-unexpected");
-        return rows.length - 1;
+        return files;
     }
 }

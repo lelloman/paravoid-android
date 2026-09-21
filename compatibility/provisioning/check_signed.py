@@ -37,6 +37,8 @@ class HostileHandler(Handler):
             return super().reply(302, Location=f"http://127.0.0.1:{self.server.trap_port}/leak")
         if head and fault == "unsolicited304":
             return super().reply(304, ETag='"absent"')
+        if fault == "offline":
+            return super().reply(503)
         if not head and status in (200, 206):
             if fault == "corrupt":
                 body = bytes([body[0] ^ 1]) + body[1:]
@@ -63,7 +65,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--serial", required=True)
     parser.add_argument("--archive", action="store_true", help="Run signed component-inventory vectors instead")
+    parser.add_argument("--cold-dex", action="store_true", help="Execute verified standalone DEX only on process startup")
     args = parser.parse_args()
+    assert not (args.archive and args.cold_dex), "Choose one experiment"
     import re
     assert re.fullmatch(r"emulator-\d+", args.serial), "Explicit emulator serial required"
     sdk = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
@@ -92,9 +96,14 @@ def main():
         (trust / "issuer.der").write_bytes(public_der(issuer))
         (trust / "publisher.der").write_bytes(public_der(publisher))
         policy = dict(audience="fixture-store", contract=secrets.token_hex(32), channel="test")
-        if args.archive:
+        if args.archive or args.cold_dex:
             policy["artifactProfile"] = "stored-inventory-1"
             (trust / "release.der").write_bytes(public_der(release_key))
+        payloads = None
+        if args.cold_dex:
+            from dex_fixture import compile_payloads
+            payloads = compile_payloads(sdk, temp / "dex")
+            policy["coldDex"] = True
         (trust / "policy.json").write_text(json.dumps(policy))
         build(3, trust.parent)
         # Long device runs must not keep reading mutable/shared Gradle output paths.
@@ -105,6 +114,16 @@ def main():
                 metadata = json.loads((output / "output-metadata.json").read_text())
                 snapshot = temp / f"{mode}-{access}.apk"
                 shutil.copyfile(output / metadata["elements"][0]["outputFile"], snapshot)
+                if args.cold_dex:
+                    import zipfile
+                    import io
+                    from check import dex
+                    descriptor = b"Lcom/lelloman/paravoidremote/Entry;"
+                    with zipfile.ZipFile(snapshot) as apk:
+                        assert descriptor not in dex(apk), "Remote implementation leaked into APK DEX"
+                        if "assets/paravoid/module.zip" in apk.namelist():
+                            with zipfile.ZipFile(io.BytesIO(apk.read("assets/paravoid/module.zip"))) as embedded:
+                                assert descriptor not in dex(embedded), "Remote implementation was bundled"
                 apks[(mode, access)] = (metadata["applicationId"], snapshot)
         artifact = temp / "artifact.bin"
         artifact.write_bytes(b"Signed harmless fixture data. Never execute these bytes.\n")
@@ -170,14 +189,16 @@ def main():
                             assert certificate == [line for line in verification.splitlines() if "certificate SHA-256 digest:" in line]
                         assert "Success" in adb("install", "--no-incremental", "-r", "-d", target)
 
-                    def run(label, status, reason=None, http=None, no_request=False, preserve=False):
+                    def run(label, status, reason=None, http=None, no_request=False, preserve=False, restart=True, expected_digest=None):
                         before = server.requests
                         stage = str(uuid.uuid4())
                         component = ("com.lelloman.paravoidandroid.runtime.LauncherActivity" if mode == "paravoidAndroid"
                             else "com.lelloman.paravoidcompat.provisioning.ProbeActivity")
-                        adb("shell", "am", "force-stop", app)
+                        if restart:
+                            adb("shell", "am", "force-stop", app)
                         launched = adb("shell", "am", "start", "-W", "-n", app + "/" + component,
-                            "--ei", "port", str(server.server_port), "--es", "stage", stage)
+                            "--ei", "port", str(server.server_port), "--es", "stage", stage,
+                            *([] if restart else ["-f", "0x18000000"]))  # NEW_TASK | MULTIPLE_TASK; same process.
                         assert "Status: ok" in launched, launched
                         result = None
                         for _ in range(50):
@@ -199,9 +220,9 @@ def main():
                         if no_request:
                             assert server.requests == before, "Credential sent before grant validation"
                         if status == "verified":
-                            assert result["sha256"] == digest, result
-                            if args.archive:
-                                assert result["components"] == 5, result
+                            assert result["sha256"] == (expected_digest or digest), result
+                            if args.archive or args.cold_dex:
+                                assert result["components"] == (1 if args.cold_dex else 5), result
                         if preserve:
                             if args.archive:
                                 kept = subprocess.run(["adb", "-s", args.serial, "exec-out", "run-as", app,
@@ -211,6 +232,7 @@ def main():
                                 assert adb("shell", "run-as", app, "cat", "files/signed-artifact.bin") == artifact.read_text().strip()
                         stages.append(dict(packagingMode=mode, access=access, label=label, **result))
                         print(f"PASS {mode}/{access}: {label}", flush=True)
+                        return result
 
                     publish()
                     install()
@@ -229,6 +251,12 @@ def main():
                             install(sign("grant", fields, signer_key))
                             run(label, "rejected", reason, no_request=True)
                         install(sign("grant", grant, issuer))
+                    if args.cold_dex:
+                        from cold_cases import exercise
+                        exercise(app=app, policy=policy, payloads=payloads, release_key=release_key,
+                            artifact=artifact, state=state, save=save, server=server, base_head=base_head,
+                            publish=publish, run=run, adb=adb, serial=args.serial)
+                        continue
                     if args.archive:
                         from archive_cases import vectors
                         preserved_digest = None
@@ -296,7 +324,7 @@ def main():
                         state["apps"][app]["keys"] = {}
                         save()
                         run("revoked key cannot use cache", "http-error", http=401, preserve=True)
-            profile = "archive" if args.archive else "signed"
+            profile = "cold-dex" if args.cold_dex else "archive" if args.archive else "signed"
             report = ROOT / f"build/{profile}-api{api}.json"
             report.parent.mkdir(parents=True, exist_ok=True)
             report.write_text(json.dumps(stages, indent=2))
