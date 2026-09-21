@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 
 public final class ProbeActivity extends ComponentActivity {
+    private com.lelloman.paravoidcompat.os.contract.BinderClient binderClient;
     private final ResultProbe activityResults = new ResultProbe(this);
     private final JSONObject results = new JSONObject();
     private Uri uri;
@@ -26,6 +27,11 @@ public final class ProbeActivity extends ComponentActivity {
             .putInt("activityPid", android.os.Process.myPid()).commit();
         run = getIntent().getStringExtra("probeRun");
         String scenario = getIntent().getStringExtra("scenario");
+        if ("multiprocess".equals(scenario)) {
+            binderClient = new com.lelloman.paravoidcompat.os.contract.BinderClient(this);
+            binderClient.start();
+            return;
+        }
         if ("alarmLifecycle".equals(scenario)) {
             AlarmLifecycleReceiver.start(this, run, getIntent().getStringExtra("alarmMode"));
             return;
@@ -68,6 +74,10 @@ public final class ProbeActivity extends ComponentActivity {
             check("shell_parent_isolation", !shell || !parentSees);
             launchPeer(10, false);
         } catch (Exception error) { fail(error); }
+    }
+    @Override protected void onDestroy() {
+        if (binderClient != null) binderClient.close();
+        super.onDestroy();
     }
     private void launchPeer(int request, boolean grant) {
         Intent intent = new Intent().setClassName("com.lelloman.paravoidcompat.os.peer",

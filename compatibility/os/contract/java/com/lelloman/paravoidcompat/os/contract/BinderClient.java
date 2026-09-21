@@ -1,4 +1,4 @@
-package com.lelloman.paravoidcompat.os.peer;
+package com.lelloman.paravoidcompat.os.contract;
 
 import android.app.Activity;
 import android.content.*;
@@ -11,7 +11,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONObject;
 
-final class BinderClient implements ServiceConnection {
+public final class BinderClient implements ServiceConnection {
     private final Activity activity;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final String run;
@@ -19,11 +19,11 @@ final class BinderClient implements ServiceConnection {
     private int generation;
     private IBinder current;
     private IBinder.DeathRecipient deathRecipient;
-    BinderClient(Activity activity) {
+    public BinderClient(Activity activity) {
         this.activity = activity;
         run = activity.getIntent().getStringExtra("run");
     }
-    void start() {
+    public void start() {
         Button button = new Button(activity);
         button.setText("Unbind service");
         activity.setContentView(button);
@@ -35,7 +35,9 @@ final class BinderClient implements ServiceConnection {
     }
     private void bind() {
         bound = activity.bindService(new Intent().setClassName(activity.getIntent().getStringExtra("target"),
-            "com.lelloman.paravoidcompat.os.BinderProbeService")
+            activity.getIntent().getBooleanExtra("remoteWorker", false)
+                ? "com.lelloman.paravoidcompat.os.WorkerProbeService"
+                : "com.lelloman.paravoidcompat.os.BinderProbeService")
             .putExtra("bindingParcel", new WireMessage(run, 0, 0, "binding", false)), this, Context.BIND_AUTO_CREATE);
         if (!bound) error(new IllegalStateException("bindService returned false"));
     }
@@ -86,6 +88,11 @@ final class BinderClient implements ServiceConnection {
                     .put("remote", binder.queryLocalInterface(IProbe.DESCRIPTOR) == null)
                     .put("uid", response.callerUid == android.os.Process.myUid())
                     .put("loader", response.loader)
+                    .put("clientLoader", WireMessage.class.getClassLoader() == activity.getClass().getClassLoader()
+                        && IProbe.class.getClassLoader() == activity.getClass().getClassLoader()
+                        && callback.getClass().getClassLoader() == activity.getClass().getClassLoader()
+                        && (activity.getClass().getClassLoader() instanceof dalvik.system.InMemoryDexClassLoader)
+                            == activity.getPackageName().endsWith(".paravoid"))
                     .put("text", ("echo-λ-" + run).equals(response.text))
                     .put("callback", delivered && reply != null && reply.text.equals(response.text)
                         && reply.instance.equals(response.instance) && reply.pid == response.pid)
@@ -109,5 +116,5 @@ final class BinderClient implements ServiceConnection {
     @Override public void onBindingDied(ComponentName name) { error(new IllegalStateException("binding died")); }
     private SharedPreferences prefs() { return activity.getSharedPreferences("os-probe", Context.MODE_PRIVATE); }
     private void error(Exception failure) { prefs().edit().putString("binderError", failure.toString()).commit(); }
-    void close() { if (bound) unbind(); worker.shutdownNow(); }
+    public void close() { if (bound) unbind(); worker.shutdownNow(); }
 }

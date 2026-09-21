@@ -3,6 +3,7 @@ package com.lelloman.paravoidcompat.os.peer;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
+import com.lelloman.paravoidcompat.os.contract.BinderClient;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;

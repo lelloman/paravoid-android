@@ -10,7 +10,8 @@ import com.lelloman.paravoidcompat.os.contract.*;
 import java.util.List;
 import java.util.UUID;
 
-public final class BinderProbeService extends Service {
+public class BinderProbeService extends Service {
+    protected String reportName() { return "os-probe"; }
     private final String instance = UUID.randomUUID().toString();
     private final IProbe.Stub endpoint = new IProbe.Stub() {
         @Override public WireMessage exchange(WireMessage request, IProbeCallback callback) throws RemoteException {
@@ -55,12 +56,13 @@ public final class BinderProbeService extends Service {
             WireMessage value = intent.getParcelableExtra("bindingParcel");
             observed = value == null ? "MISSING" : value.text;
         } catch (Exception error) { observed = error.toString(); }
-        getSharedPreferences("os-probe", MODE_PRIVATE).edit().putString("binderBinding", observed)
-            .putString("binderBindingInstance", instance).commit();
+        getSharedPreferences(reportName(), MODE_PRIVATE).edit().putString("binderBinding", observed)
+            .putString("binderBindingInstance", instance)
+            .putBoolean("binderActivityCreated", ProbeApplication.activityCreated).commit();
         return endpoint;
     }
     @Override public void onDestroy() {
-        getSharedPreferences("os-probe", MODE_PRIVATE).edit().putString("binderDestroyed", instance).commit();
+        getSharedPreferences(reportName(), MODE_PRIVATE).edit().putString("binderDestroyed", instance).commit();
         super.onDestroy();
     }
 }

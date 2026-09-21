@@ -22,6 +22,8 @@
         </receiver>
         <service android:name=".BinderProbeService" android:exported="true"
             android:permission="${applicationId}.BIND_PROBE" />
+        <service android:name=".WorkerProbeService" android:exported="true"
+            android:process=":worker" android:permission="${applicationId}.BIND_PROBE" />
         <service android:name=".ForegroundProbeService" android:exported="true"
             android:foregroundServiceType="dataSync" android:permission="${applicationId}.BIND_PROBE" />
         <provider android:name="androidx.core.content.FileProvider"
