@@ -20,8 +20,8 @@ complete packaging below 30 rather than silently raising minSdk or falling back.
 Exact DSL names will be finalized with implementation, not invented as working API.
 
 API 30 and the current API 36.1 emulator are required device gates for complete
-resource packaging. API 30 support is a target, not yet verified by our resource
-experiment. Shrinking and other currently rejected configurations stay rejected
+resource packaging. The bounded same-package fixture now passes on both, but the
+complete automatic packaging gate remains pending. Shrinking and other currently rejected configurations stay rejected
 until specifically implemented; this decision does not enable them.
 
 ## 2. Artifact ownership
@@ -96,11 +96,14 @@ Do not adopt the experiment's separate `0x80` namespace as the production contra
 - Select one immutable resource provider set per process startup. Do not mutate
   a live ResourcesLoader to switch app versions.
 
-The existing probe only proves separate-package loading. It does **not** prove
-this same-package split, automatic dependency linking, or early theme attachment.
-The first implementation experiment must demonstrate these before the strategy
-is locked into a released format. If it fails, revise this document explicitly;
-do not quietly substitute unsupported APIs or require a manual downstream split.
+The original probe only proves separate-package loading. The new
+[same-package fixture](compatibility/resource-split/README.md) now proves a bounded
+`0x7f` split, static-library R/styleable linking and early resource access on
+API 30 and 36.1. Its inputs are hand-selected and its loading hook is fixture-only; it
+does not prove automatic dependency splitting or the entire gate below. Complete
+that gate before locking the strategy into a released format. If it fails, revise
+this document explicitly; do not quietly substitute unsupported APIs or require
+a manual downstream split.
 
 ### Ledger lifecycle
 

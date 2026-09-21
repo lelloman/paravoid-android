@@ -36,7 +36,10 @@ The design baseline is now [defined in PACKAGING.md](PACKAGING.md): API 30+
 complete packaging, pinned shell resources, a shared stable-ID namespace, and a
 versioned shell compatibility contract. The same-package linking/early-loading
 strategy still requires its focused implementation proof; fixture assertions are
-not yet complete.
+not yet complete. The first [same-package fixture](compatibility/resource-split/README.md)
+now verifies stable linking, a pinned-only installed table and early runtime
+resource access; automatic resource ownership/pruning and the remaining gate
+scenarios are still pending.
 
 - Inventory app and dependency outputs from AGP; define which artifacts belong to
   the shell and which belong to the payload. Preserve ordinary normal packaging.
@@ -184,6 +187,7 @@ document requirements and limitations, and make small commits. Add focused probe
 when a concrete risk or real-app failure warrants one. Do not restart an open-ended
 compatibility exploration phase before finishing packaging.
 
-**Immediate next task:** prove the [packaging contract's resource strategy](PACKAGING.md#7-first-implementation-gate)
-with a same-package pinned-shell/payload fixture, then implement automatic AGP
-resource packaging. The design is defined; the executable gate is still pending.
+**Immediate next task:** extend the passing same-package proof to ordinary AGP
+app/library R integration and computed pinned-resource ownership, then wire it into
+automatic packaging. Finish the [remaining contract-gate scenarios](PACKAGING.md#7-first-implementation-gate)
+alongside that implementation before advertising complete packaging support.
