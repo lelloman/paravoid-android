@@ -302,6 +302,10 @@ Further independent probes exercise larger downstream stacks:
 - [Room + WorkManager](compatibility/storage/README.md): generated DAOs, persistent
   data, and cold background JobService/Worker execution in both modes. This uses
   the default Worker factory, not Hilt Worker injection.
+- [Room migrations](compatibility/migrations/README.md): two code versions share
+  persistent data; migration, generated DAOs, transaction/index checks and rejected
+  downgrade pass on API 36.1. A fixture-only selector switches prebundled payloads
+  without replacing the shell APK; this is not a production updater.
 - [Hilt + WorkManager](compatibility/hilt-work/README.md): generated assisted
   factories and cold injected workers pass with lazy Application initialization
   using optional `paravoid-work`; opt-out retains the original shell failure.
@@ -417,7 +421,7 @@ the host application's privileges; this is not an isolation boundary.
    behavior, and supported Android versions beyond the current sample.
 2. Turn the independent-resource experiment into automatic app/library resource
    packaging with stable-ID and installed-manifest contracts. Test broader library
-   cases: broader WorkManager DAGs/constraints and foreground work, Room migrations, OS integration
+   cases: broader WorkManager DAGs/constraints and foreground work, interrupted/complex Room migrations, OS integration
    and third-party native SDKs.
 3. Define independently signed payloads and negative signature tests before accepting
    code from outside the APK. Sign with the product shell's signing key and verify

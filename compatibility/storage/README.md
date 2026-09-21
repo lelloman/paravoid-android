@@ -35,6 +35,12 @@ migrations, Kotlin/KSP Room models, retry/backoff, periodic/foreground work, reb
 device-idle scheduling policy, multiprocess work or payload-update compatibility.
 Job dispatch here tests cold component loading, not delivery timing guarantees.
 
+The separate [two-version migration fixture](../migrations/README.md) verifies a
+manual Room 1→2 schema migration, generated DAO loading, transaction/index checks,
+rejected code downgrade and subsequent v2 recovery on API 36.1. Its shell APK
+stays fixed while a fixture-only hook selects between prebundled code versions;
+it is not production external-update or database-rollback support.
+
 The separate [Hilt Work probe](../hilt-work/README.md) now covers Hilt Worker
 injection: lazy configuration passes both modes with `paravoid-work`; without that
 optional plugin, shell mode needs explicit initialization. The Hilt custom path

@@ -57,6 +57,15 @@ The expected downgrade exception must identify the missing **2→1** path; an
 unrelated error is not accepted as success. Reopening v2 after this failure checks
 that rejection did not silently erase or downgrade data.
 
+## Verification evidence
+
+API 36.1 x86_64/debug: all ten device stages pass (five per packaging mode).
+Both versions pass normal/shell lint, exported schemas match the committed
+snapshots, and seven host assertion tests pass. These checks use the real Room
+implementation and generated DAOs, without instrumentation or database mocking.
+No production runtime/plugin fix was required; the only loader adaptation is
+the explicitly isolated fixture bundle selector described above.
+
 ## Requirements and limits
 
 A payload activation policy must consider persistent schema compatibility, not
