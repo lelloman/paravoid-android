@@ -24,6 +24,7 @@ public final class ShellApplication extends Application {
         super.attachBaseContext(base);
         instance = this;
         try {
+            EmbeddedResources.install(this);
             ModuleBundle bundle = ModuleBundle.read(getAssets().open("paravoid/module.zip"), Build.VERSION.SDK_INT);
             payloadLoader = bundle.createClassLoader(super.getClassLoader(),
                 NativeLibraryPaths.forApplication(getApplicationInfo()));
