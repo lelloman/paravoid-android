@@ -131,7 +131,8 @@ def main():
                         keys={"a": hashlib.sha256(raw_key.encode()).hexdigest()}, artifact=str(artifact),
                         release="fixture-a", signedHead=str(head_file))
                     save()
-                    now = int(time.time())
+                    # Emulator time may lag host time; expiry vectors target the verifier's clock.
+                    now = int(adb("shell", "date", "+%s"))
                     grant = dict(applicationId=app, audience=policy["audience"], keyId="a", key=raw_key,
                                  issued=now - 10, expires=now + 1800)
                     base_head = dict(applicationId=app, contract=policy["contract"], channel=policy["channel"],
@@ -247,10 +248,13 @@ def main():
                     run("new signed release", "verified", http=200)
                     publish()
                     run("old signed release after restart", "rejected", "replay", preserve=True)
-                    expires = int(time.time()) + 8
+                    expires = int(adb("shell", "date", "+%s")) + 8
                     publish(dict(newer, revision=12, issued=expires-20, expires=expires))
                     run("short-lived descriptor", "verified", http=200)
-                    time.sleep(max(0, expires + 1 - time.time()))
+                    deadline = time.monotonic() + 30
+                    while int(adb("shell", "date", "+%s")) <= expires:
+                        assert time.monotonic() < deadline, "Emulator clock stopped advancing"
+                        time.sleep(0.5)
                     run("304 cannot extend signed expiry", "rejected", "freshness", http=304, preserve=True)
                     if access == "keyed":
                         state["apps"][app]["keys"] = {}

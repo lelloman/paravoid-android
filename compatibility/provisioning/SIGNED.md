@@ -85,6 +85,9 @@ Coverage in normal and shell packaging, in both public and key modes:
 
 Results are written to ignored `build/signed-api{SDK}.json`. Each scenario starts
 a new app process; replay/cache evidence is not merely an in-memory check.
+Time-sensitive vectors use the emulator's clock, which can lag the host, and the
+expiry test waits for that clock to cross the deadline. This makes the assertion
+deterministic; it does not solve hostile or incorrect clocks in production.
 
 ## Still not proven
 
