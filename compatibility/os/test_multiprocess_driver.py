@@ -1,7 +1,10 @@
 import copy
+import contextlib
+import io
 from pathlib import Path
 import runpy
 import unittest
+from unittest.mock import Mock, patch
 
 driver = runpy.run_path(str(Path(__file__).with_name('multiprocess-device-check.py')))
 
@@ -50,6 +53,27 @@ class MultiprocessAssertions(unittest.TestCase):
         self.result['peerPid'] = 202
         with self.assertRaises(AssertionError):
             driver['validate']('test.app', self.result, self.worker, '202', '202')
+
+    def check_receiver_restoration(self, cleanup_failure):
+        command = Mock(return_value='')
+        cleanup = Mock(side_effect=RuntimeError('cleanup failed') if cleanup_failure else None)
+        check = driver['check_mode']
+        with patch.dict(check.__globals__, {
+            'install': lambda mode: 'test.app', 'adb': command, 'cleanup': cleanup,
+            'wait_for': Mock(side_effect=RuntimeError('connection failed')),
+        }), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, 'cleanup failed' if cleanup_failure else 'connection failed'):
+                check('normal', 'peer')
+        receiver = 'test.app/com.lelloman.paravoidcompat.os.AlarmLifecycleReceiver'
+        command.assert_any_call('shell', 'pm', 'disable', receiver)
+        self.assertEqual(command.call_args.args, ('shell', 'pm', 'default-state', receiver))
+        cleanup.assert_called_once_with('test.app')
+
+    def test_receiver_restored_after_test_failure(self):
+        self.check_receiver_restoration(False)
+
+    def test_receiver_restored_even_if_cleanup_fails(self):
+        self.check_receiver_restoration(True)
 
 
 if __name__ == '__main__':
