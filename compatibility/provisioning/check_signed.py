@@ -213,6 +213,8 @@ def main():
                         assert result and result.get("stage") == stage, label
                         assert result["status"] == status, (label, result)
                         assert result["shellReader"] == (mode == "paravoidAndroid"), result
+                        if not args.cold_dex:
+                            assert result["coldStatus"] == "disabled", "Non-executing profile enabled downloaded code"
                         if reason:
                             assert result["reason"] == reason, (label, result)
                         if http is not None:

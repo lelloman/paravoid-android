@@ -211,7 +211,7 @@ public final class SignedDeliveryProbe {
             result.put("components", count);
             if (policy.optBoolean("coldDex")) ColdDexProbe.stage(c, envelope, artifact);
         }
-        // Atomic replacement of harmless data, NOT executable-payload selection or activation.
+        // Diagnostic transfer copy; cold mode executes only its independently verified selection records.
         write(new AtomicFile(new File(c.getFilesDir(), "signed-artifact.bin")), artifact);
         result.put("status", "verified"); result.put("revision", revision); result.put("sha256", hash(artifact));
     }

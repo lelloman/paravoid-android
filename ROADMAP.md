@@ -169,6 +169,13 @@ separate from discovery, signed inventory coverage, component hashes and strict
 stored-ZIP bounds/layout checks. It retains the last verified archive on rejection;
 its role-labelled marker bytes are not yet real loadable app components.
 
+The [cold-DEX extension](compatibility/provisioning/COLD-DEX.md) executes real
+downloaded A/B code on cold startup using the existing module loader, without an
+APK update or in-process replacement. Offline execution, verification before load,
+failed-start recovery and retained-active preservation have focused fixture checks.
+Whole-app lifecycle replacement, crash/multiprocess coordination, data compatibility
+and authenticated repair of corrupt active state remain future gates.
+
 - Add plugin/server configuration and produce the complete uploadable package.
   Define signing and verification before accepting externally supplied content.
   Retain the existing signing direction: product-shell signing authority, explicit

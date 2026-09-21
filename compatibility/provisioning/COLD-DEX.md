@@ -84,3 +84,22 @@ Signed code executes with app privileges; the loader is not a security sandbox.
 
 Reports are written to ignored `build/cold-dex-api{SDK}.json`. Other experiment
 profiles retain their previous non-executing behavior.
+
+## Verified results (2026-09-21)
+
+- All 106 cold-DEX stages pass on both API 30 and API 36.1 x86_64, normal/shell and
+  public/key variants. Reports include payload version, process token, loader
+  ownership and actual entry-method invocation counts.
+- The compiled A/B DEX files are 736 bytes each; the throwing variant is 848 bytes
+  with the tested javac/D8 toolchain. None is bundled in the APK.
+- All 22 host tests and Android `lintDebug` pass.
+- All 136 archive-only regression stages pass again on API 36.1, now explicitly
+  asserting that cold DEX execution is disabled in that profile.
+
+Initial harness runs exposed Activity reuse (no fresh test Intent was processed)
+and incomplete binary writes through raw `adb exec-in`. Warm checks now explicitly
+create another Activity in the same process; disk fault injection uses shell-v2
+stdin/exit handling with exact byte-for-byte readback. Those incomplete runs are
+not counted as passing evidence. The final API 30 run also re-invokes entry methods
+across warm stages; its saved failure codes were checked for actual invocation
+failure versus pre-execution integrity rejection, as asserted directly on API 36.1.

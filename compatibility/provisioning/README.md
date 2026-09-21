@@ -10,6 +10,9 @@ verified signed discovery, durable replay checks and hostile-server tests in bot
 public and key modes. Neither suite executes downloaded content.
 The [archive gate](ARCHIVE.md) extends it with a signed component inventory and
 hostile-container rejection before retaining the downloaded archive.
+An explicitly enabled [cold-DEX profile](COLD-DEX.md) goes further: it downloads
+and executes real signed test DEX on process startup. That mode is separate from
+the non-executing baseline suites described below.
 
 - `apk_record.py` adds a fixture-only signing-block entry to a copy of an APK.
   Existing signature entries and ZIP contents are preserved, with aligned block

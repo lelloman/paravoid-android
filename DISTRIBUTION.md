@@ -33,6 +33,13 @@ bytes within a bounded stored-ZIP fixture. It tests hostile archives beneath val
 signed discovery, not a frozen VPK format, real component loading, SDK/ABI/runtime
 compatibility or executable activation.
 
+The optional [cold-DEX experiment](compatibility/provisioning/COLD-DEX.md) now
+downloads separately compiled, signed A/B code and executes it through the existing
+Paravoid DEX loader on process startup. It covers staged-only downloads, offline
+execution, re-verification of retained bytes and failure without automatic rollback.
+It is a single-process test entry point, not replacement of the whole payload
+application, production activation, or a tested crash-safe/multiprocess protocol.
+
 ## 1. Scope and ownership
 
 Paravoid specifies the payload artifact, discovery/download protocol, trust and

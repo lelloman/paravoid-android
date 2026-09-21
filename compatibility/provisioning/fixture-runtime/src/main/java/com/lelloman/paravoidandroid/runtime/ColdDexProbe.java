@@ -10,7 +10,7 @@ import java.util.zip.*;
 import org.json.JSONObject;
 import static com.lelloman.paravoidandroid.runtime.SignedDeliveryProbe.*;
 
-/** Single-process cold-start experiment. No download or code selection is performed by an Activity. */
+/** Activities may stage downloads; only provider startup loads the selected code. Single-process fixture. */
 public final class ColdDexProbe {
     private static final String ENTRY = "com.lelloman.paravoidremote.Entry";
     private static final String TOKEN = UUID.randomUUID().toString();

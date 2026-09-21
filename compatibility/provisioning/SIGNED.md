@@ -6,6 +6,8 @@ produce VPKs. Artifacts are still harmless bytes, never dynamically executed.
 The optional [archive extension](ARCHIVE.md) adds a separately signed component
 manifest/inventory gate. The baseline signed-discovery tests below remain distinct
 from that restricted container profile and its device results.
+The further [cold-DEX profile](COLD-DEX.md), selected with `--cold-dex`, executes
+real test code on process startup; it is not enabled by this baseline profile.
 
 `signed_profile.py` uses Python `cryptography` (tested with 41.0.7) to sign exact
 ASCII payload bytes using RSA-2048 / PKCS#1 v1.5 / SHA-256. Android independently

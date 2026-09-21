@@ -3,6 +3,8 @@
 This is a bounded extension of [signed discovery](SIGNED.md), not the finalized
 VPK format or a production updater. Component bytes are opaque fixtures; nothing
 downloaded is executed, resource-loaded, or extracted to component paths.
+The separate [cold-DEX mode](COLD-DEX.md) replaces marker bytes with real DEX and
+adds startup-only selection/execution. It does not change this archive-only gate.
 
 The experimental archive is a **stored-only ZIP** containing `manifest.sig`,
 `inventory.txt` and 1–16 regular component files. The manifest uses the existing
