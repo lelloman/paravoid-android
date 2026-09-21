@@ -145,6 +145,12 @@ remaining restrictions documented. This proves the integration, not every app.
 
 ## 3. Add authenticated delivery and safe activation
 
+The [store-agnostic distribution draft](DISTRIBUTION.md) now defines the design
+boundary and a proposed v1 HTTP binding. Public delivery is supported in the target
+contract; access authentication is optional/pluggable, payload verification is not.
+Store catalogs, upload APIs and admin UI are outside Paravoid. Freeze the draft's
+wire/security profiles with conformance vectors before claiming interoperability.
+
 - Add plugin/server configuration and produce the complete uploadable package.
   Define signing and verification before accepting externally supplied content.
   Retain the existing signing direction: product-shell signing authority, explicit
@@ -155,6 +161,10 @@ remaining restrictions documented. This proves the integration, not every app.
 - Implement app-private staging, offline startup, first-launch availability and
   atomic activation on cold starts. Define cross-process version coordination;
   do not hot-swap classes in a running process.
+- Support an explicit empty-shell option after proving payload-absent component
+  startup and shell-owned download/auth/recovery UI. Keep embedded bootstrap as
+  the packaging milestone default. Neither mode requires an installed store app;
+  an empty shell may bootstrap any currently offered compatible signed VPK.
 - Define startup health and recovery policy. A previous payload is a safe fallback
   only when persistent data is compatible: reverting DEX does not undo database
   migrations. Do not silently delete user data to make rollback succeed.

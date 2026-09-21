@@ -41,6 +41,12 @@ The example now uses plugin `com.lelloman.paravoid`, dimension `paravoidPackagin
 flavors `normal` and `paravoidAndroid`. Server/authentication configuration and external
 delivery remain future work; this experiment uses an embedded payload.
 
+The [distribution specification draft](DISTRIBUTION.md) defines the store-agnostic
+direction: signed VPKs, compatible-release discovery/download, optional pluggable
+authentication, and embedded or empty-shell bootstrap. No particular store or
+identity provider is required. The wire/security profiles still need review;
+these are not implemented plugin/runtime features.
+
 ### Application behavior
 
 The downstream source uses this shape (the current example is Java):

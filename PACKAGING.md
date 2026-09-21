@@ -225,6 +225,13 @@ silently relabel an incompatible payload as compatible with the previous one.
 
 ## 6. Container and startup contract
 
+The [store-agnostic distribution draft](DISTRIBUTION.md) calls the future outer
+container a **VPK** and defines discovery, optional access authentication, mandatory
+release verification and embedded/empty bootstrap requirements. Its wire and
+security profiles are not frozen; today's DEX-only `module.zip` is not a VPK.
+The embedded-first packaging milestone below remains unchanged. Empty-shell output
+is a later explicit option gated on safe startup without any payload.
+
 Use a new versioned **outer complete-payload format**, distinct from the existing
 DEX-only `module.zip` formats 1/2. Initially it contains one code bundle, one
 resource APK (including ordinary assets), Java-resource content, native libraries
