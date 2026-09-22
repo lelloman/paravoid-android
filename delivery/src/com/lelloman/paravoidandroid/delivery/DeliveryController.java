@@ -3,7 +3,8 @@ package com.lelloman.paravoidandroid.delivery;
 import com.lelloman.paravoidandroid.contract.*;
 import com.lelloman.paravoidandroid.contract.Protocol.*;
 import java.io.*;
-import java.nio.file.Path;
+import java.nio.file.*;
+import java.nio.channels.*;
 import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.function.BooleanSupplier;
@@ -36,6 +37,30 @@ public final class DeliveryController {
     private long operation;
     private Activity activity = Activity.IDLE;
     private String error;
+    private FileChannel attemptChannel;
+    private FileLock attemptLock;
+
+    // One attempt, including scheduled retries, across main/recovery controllers.
+    // OS releases this lock on process death; never hold a lifecycle selection lock.
+    private boolean claimAttempt() throws IOException {
+        Files.createDirectories(preferenceFile.getParent());
+        attemptChannel = FileChannel.open(preferenceFile.resolveSibling(preferenceFile.getFileName() + ".attempt"),
+                StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+        try { attemptLock = attemptChannel.tryLock(); }
+        catch (OverlappingFileLockException busy) { /* Another controller in this VM. */ }
+        if (attemptLock != null) return true;
+        attemptChannel.close(); attemptChannel = null; return false;
+    }
+    private void releaseAttempt() {
+        try { if (attemptLock != null) attemptLock.release(); }
+        catch (IOException failure) { fail("IO"); }
+        finally {
+            attemptLock = null;
+            try { if (attemptChannel != null) attemptChannel.close(); }
+            catch (IOException failure) { fail("IO"); }
+            attemptChannel = null;
+        }
+    }
 
     /** Pass one process-owned scheduled worker and a main-thread executor for callbacks. */
     public DeliveryController(DeliveryClient client, Lifecycle lifecycle, RequestScope scope, DeliveryClient.Clock clock,
@@ -61,13 +86,21 @@ public final class DeliveryController {
         attempts.cancel();
         worker.execute(() -> {
             if (pendingRetry != null) pendingRetry.cancel(false);
+            releaseAttempt();
             attempts.credentialsReplaced();
             operation = attempts.generation();
             try {
+                String previous = client.credentialPartition();
                 client.installedApk(baseApk);
-                preferences = new DeliveryPreferences(preferences.automaticChecks, preferences.automaticDownloads,
-                        preferences.unmeteredOnly, 0);
-                preferences.write(preferenceFile);
+                preferences = DeliveryPreferences.read(preferenceFile);
+                // Initializing the same installed APK on every process start must not
+                // erase the durable six-hour interval.
+                if (previous != null && !previous.equals(client.credentialPartition())) {
+                    preferences = new DeliveryPreferences(preferences.automaticChecks, preferences.automaticDownloads,
+                            preferences.unmeteredOnly, 0);
+                    preferences.write(preferenceFile);
+                }
+                applyPreferences();
                 activity = Activity.IDLE; error = null;
             } catch (ContractException failure) { fail(failure.code.name()); }
             catch (IOException failure) { fail("IO"); }
@@ -79,7 +112,7 @@ public final class DeliveryController {
         attempts.cancel(); client.cancelDownload();
         worker.execute(() -> {
             if (pendingRetry != null) pendingRetry.cancel(false);
-            attempts.finish(operation); activity = Activity.CANCELLED; error = null; publish();
+            attempts.finish(operation); releaseAttempt(); activity = Activity.CANCELLED; error = null; publish();
         });
     }
     public void preferences(DeliveryPreferences value) {
@@ -109,18 +142,32 @@ public final class DeliveryController {
     }
     private void submit(AttemptPolicy.Trigger trigger) {
         worker.execute(() -> {
+            // Refresh shared preferences before deciding, including changes made in recovery.
+            try { preferences = DeliveryPreferences.read(preferenceFile); applyPreferences(); }
+            catch (IOException failure) { fail("PREFERENCES_IO"); publish(); return; }
             long now = clock.unixSeconds();
             if (trigger == AttemptPolicy.Trigger.FOREGROUND && preferences.lastAutomaticCheckSeconds > 0
                     && now >= preferences.lastAutomaticCheckSeconds
                     && now - preferences.lastAutomaticCheckSeconds < 6 * 60 * 60) return;
             if (!attempts.begin(trigger, clock.elapsedMillis())) return;
             operation = attempts.generation();
+            try {
+                if (!claimAttempt()) { attempts.finish(operation); return; }
+                preferences = DeliveryPreferences.read(preferenceFile); applyPreferences();
+                if (trigger == AttemptPolicy.Trigger.FOREGROUND && preferences.lastAutomaticCheckSeconds > 0
+                        && now >= preferences.lastAutomaticCheckSeconds
+                        && now - preferences.lastAutomaticCheckSeconds < 6 * 60 * 60) {
+                    attempts.finish(operation); releaseAttempt(); return;
+                }
+            } catch (IOException failure) {
+                attempts.finish(operation); releaseAttempt(); fail("PREFERENCES_IO"); publish(); return;
+            }
             boolean explicit = trigger == AttemptPolicy.Trigger.CHECK_NOW || trigger == AttemptPolicy.Trigger.RETRY;
             if (!explicit) {
                 preferences = new DeliveryPreferences(preferences.automaticChecks, preferences.automaticDownloads,
                         preferences.unmeteredOnly, now);
                 try { preferences.write(preferenceFile); }
-                catch (IOException failure) { attempts.finish(operation); fail("PREFERENCES_IO"); publish(); return; }
+                catch (IOException failure) { attempts.finish(operation); releaseAttempt(); fail("PREFERENCES_IO"); publish(); return; }
             }
             run(operation, explicit);
         });
@@ -152,7 +199,7 @@ public final class DeliveryController {
                 else fail(http.status == 401 || http.status == 403 ? "CREDENTIAL_UNAVAILABLE" : http.code);
             } else fail("IO");
         }
-        attempts.finish(token); publish();
+        attempts.finish(token); releaseAttempt(); publish();
     }
     private void fail(String code) { activity = Activity.ERROR; error = code; }
     private void publish() {

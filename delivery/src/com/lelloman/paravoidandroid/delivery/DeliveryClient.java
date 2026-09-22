@@ -207,6 +207,9 @@ public final class DeliveryClient {
         }
     }
 
+    /** Opaque cache partition for scheduling only; never a bearer credential. */
+    synchronized String credentialPartition() { return session == null ? null : session.partition; }
+
     public synchronized void cancelDownload() { if (active != null) active.cancel(); }
     private String readMarker(String name) throws IOException {
         Path path = directory.resolve(name);

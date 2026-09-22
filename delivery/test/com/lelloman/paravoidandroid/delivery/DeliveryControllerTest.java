@@ -86,6 +86,34 @@ public final class DeliveryControllerTest {
             check(head.getRequestProperty("Authorization").equals("Bearer " + "B".repeat(43)));
             check(c.setup.life.stages == 1);
         }
+        try (Control c = new Control()) {
+            c.controller.preferences(new DeliveryPreferences(true, false, false)); c.barrier();
+            c.setup.head(); c.controller.foreground(false); c.barrier();
+            check(c.setup.f.requests == 1);
+            // Production initializes the installed APK every time a process starts.
+            c.controller.refreshInstalledApk(c.setup.f.dir.resolve("public.apk").toFile()); c.barrier();
+            c.controller.foreground(false); c.barrier();
+            check(c.setup.f.requests == 1);
+            // A second already-initialized controller must see persisted settings.
+            DeliveryController first = c.controller;
+            c.create(); c.barrier();
+            c.controller.preferences(new DeliveryPreferences(false, false, false)); c.barrier();
+            c.setup.clock.wall += 21601; c.setup.clock.elapsed += 21601000;
+            first.foreground(false); c.barrier();
+            check(c.setup.f.requests == 1);
+        }
+        try (Control c = new Control()) {
+            c.setup.f.responses.add(new Fake(429, new byte[0]).put("Retry-After", "3600"));
+            c.controller.checkNow(); c.await(DeliveryController.Activity.WAITING_TO_RETRY);
+            DeliveryController first = c.controller;
+            c.create(); c.barrier();
+            c.controller.checkNow(); c.barrier();
+            check(c.setup.f.requests == 1); // Retry delay holds the shared attempt lock.
+            first.cancelDownload(); c.barrier();
+            c.setup.head(); c.setup.f.responses.add(new Fake(200, ARCHIVE));
+            c.controller.checkNow(); c.await(DeliveryController.Activity.READY);
+            check(c.setup.f.requests == 3); // Cancellation releases it for another controller.
+        }
         System.out.println("DeliveryControllerTest: " + TransportTest.assertions + " assertions passed");
     }
 }
