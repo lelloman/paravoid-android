@@ -164,6 +164,11 @@ public final class StorageTest {
             catch (IllegalStateException expected) { }
             return null;
         });
-        System.out.println("PASS publication death boundaries and enforced lock ordering");
+        long descriptorsBefore;
+        try (java.util.stream.Stream<Path> fds = Files.list(Paths.get("/proc/self/fd"))) { descriptorsBefore = fds.count(); }
+        for (int i = 0; i < 200; i++) check(unleased(root.resolve("probe-" + i + ".lock"), () -> null));
+        try (java.util.stream.Stream<Path> fds = Files.list(Paths.get("/proc/self/fd"))) { check(fds.count() <= descriptorsBefore + 2); }
+        check(!unleased(root.resolve("b.lock"), () -> { throw new AssertionError(); }));
+        System.out.println("PASS publication death boundaries, lock ordering and bounded unleased-probe descriptors");
     }
 }

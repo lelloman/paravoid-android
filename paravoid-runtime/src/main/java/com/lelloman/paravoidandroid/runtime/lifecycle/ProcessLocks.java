@@ -8,7 +8,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Permanent lock files. Channels are retained until OS process exit, never unlinked. */
+/** Permanent lock files, never unlinked. Shared lease channels live until OS process exit. */
 final class ProcessLocks {
     private static final Map<Path, Entry> ENTRIES = new HashMap<>();
     private static boolean selecting;
@@ -80,6 +80,11 @@ final class ProcessLocks {
             if (lock == null) return false;
             operation.run();
             return true;
+        } finally {
+            // No local shared lease exists and this registry owns the only local descriptor.
+            // Close only after releasing the exclusive probe, while still holding the registry monitor.
+            ENTRIES.values().remove(entry);
+            entry.channel.close();
         }
     }
 }
