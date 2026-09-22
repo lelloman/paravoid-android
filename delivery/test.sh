@@ -9,4 +9,6 @@ javac --release 11 -Xlint:all -d "$output" "${contracts[@]}" "${sources[@]}"
 java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.TransportTest
 java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.AttemptPolicyTest
 java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.DeliveryClientTest
+java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.ApkGrantReaderTest
+java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.DeliveryControllerTest
 DELIVERY_TEST_CLASSES="$output" PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s reference -p 'test_*.py'
