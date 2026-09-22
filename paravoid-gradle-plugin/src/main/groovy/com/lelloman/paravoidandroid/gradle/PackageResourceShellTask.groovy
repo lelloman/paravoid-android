@@ -2,6 +2,7 @@ package com.lelloman.paravoidandroid.gradle
 
 import com.android.apksig.ApkSigner
 import com.android.apksig.ApkVerifier
+import groovy.xml.XmlParser
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
