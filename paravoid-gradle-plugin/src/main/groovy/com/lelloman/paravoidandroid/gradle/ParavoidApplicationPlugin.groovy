@@ -176,6 +176,23 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                     : "outputs/paravoid/${variant.name}/complete-policy/shell-policy.json"))
             }
             if (complete) project.tasks.named("export${cap}ParavoidBaseline") { dependsOn(completePolicy) }
+            def packagingReport = project.tasks.register("report${cap}ParavoidPackaging", GeneratePackagingReportTask) {
+                group = 'paravoid'
+                description = 'Exports public ownership, compatibility and limitation reports without modifying accepted baselines.'
+                policyFile.set(completePolicy.flatMap { it.policyFile })
+                boundaryFile.set(analysis.flatMap { it.boundaryFile })
+                ledgerFile.set(ledger.flatMap { it.ledgerFile })
+                baselineFile.set(extension.baselineDirectory.file("${variant.name}/shell-contract.json"))
+                it.packaging.set(packaging)
+                exportedContract.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/shell-contract.json"))
+                exportedLedger.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/resource-ledger.json"))
+                jsonReport.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/packaging-report.json"))
+                textReport.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/packaging-report.txt"))
+            }
+            if (complete) project.tasks.named("export${cap}ParavoidBaseline") {
+                description = 'Exports ledger, resource boundary, complete shell contract and public packaging reports for review.'
+                dependsOn(packagingReport)
+            }
             project.tasks.register("export${cap}ParavoidCompleteBaseline", org.gradle.api.tasks.Sync) {
                 group = 'paravoid'
                 description = 'Exports complete-policy baseline candidates; never changes accepted baselines.'
@@ -186,6 +203,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 into(project.layout.buildDirectory.dir("outputs/paravoid/${variant.name}/complete-baseline-candidate"))
             }
             def completeCheck = project.tasks.register("check${cap}ParavoidVpkContract", CheckShellContractTask) {
+                dependsOn(packagingReport)
                 group = 'verification'
                 baselineFile.set(extension.baselineDirectory.file("${variant.name}/shell-contract.json"))
                 candidateFile.set(completePolicy.flatMap { it.policyFile })
@@ -209,7 +227,8 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 debuggable.set(android.buildTypes.getByName(variant.buildType).debuggable)
                 vpkFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/payload.vpk"))
                 releaseFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/release.json"))
-                digestFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/payload.vpk.sha256"))
+                digestFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/payload.sha256"))
+                legacyDigestFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/payload.vpk.sha256"))
                 reportFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/vpk-report.json"))
             }
             if (complete) {
@@ -239,6 +258,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 shell.configure { transformation.set(shellRequest) }
             }
             def contractCheck = project.tasks.register("check${cap}ParavoidContract", CheckShellContractTask) {
+                if (complete) dependsOn(packagingReport)
                 group = 'verification'
                 baselineFile.set(extension.baselineDirectory.file("${variant.name}/shell-contract.json"))
                 candidateFile.set(complete ? completePolicy.flatMap { it.policyFile } : contract.flatMap { it.contractFile })

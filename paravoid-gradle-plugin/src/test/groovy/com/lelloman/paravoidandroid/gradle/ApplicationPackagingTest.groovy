@@ -35,12 +35,23 @@ class ApplicationPackagingTest {
                 signing { keyId = 'release'; privateKeyFile = layout.projectDirectory.file('release.der') }
             }
         '''
-        write(root, 'app/src/main/res/values/strings.xml', '<resources><string name="movable">Payload</string></resources>')
+        write(root, 'app/src/main/res/values/strings.xml', '<resources><string name="movable">Payload</string><string name="pinned">Shell label</string></resources>')
+        File sourceManifest = new File(root, 'app/src/main/AndroidManifest.xml')
+        sourceManifest.text = sourceManifest.text.replace('<application ', '<application android:label="@string/pinned" ')
         write(root, 'app/src/main/assets/content.txt', 'payload asset')
         def result = run(root, ':app:assembleNormalDebug', ':app:assembleParavoidAndroidDebug').build()
         assertNotNull(result.task(':app:packageParavoidAndroidDebugParavoidCompleteShell'))
         File output = new File(root, 'app/build/outputs/paravoid/paravoidAndroidDebug')
         File shell = new File(output, 'shell.apk')
+        def report = new groovy.json.JsonSlurper().parse(new File(output, 'packaging-report.json'))
+        assertEquals('new-shell', report.compatibility.status)
+        assertEquals(['release'], report.trustKeyIds.releaseKeys)
+        assertTrue(report.ownership.payload.resources.contains('string/movable'))
+        assertTrue(report.ownership.shell.pinnedResources.any { it.name == 'string/pinned' && !it.chain.empty })
+        assertFalse(new File(output, 'packaging-report.txt').text.contains(root.absolutePath))
+        assertFalse(new File(output, 'packaging-report.json').text.contains('release.der'))
+        assertArrayEquals(new File(output, 'baseline-candidate/shell-contract.json').bytes, new File(output, 'shell-contract.json').bytes)
+        assertArrayEquals(new File(output, 'baseline-candidate/resource-ledger.json').bytes, new File(output, 'resource-ledger.json').bytes)
         assertTrue(new com.android.apksig.ApkVerifier.Builder(shell).build().verify().verified)
         new ZipFile(shell).withCloseable { zip ->
             assertNotNull(zip.getEntry('assets/paravoid/shell-policy.json'))
@@ -60,6 +71,7 @@ class ApplicationPackagingTest {
         result = run(root, ':app:assembleParavoidAndroidDebug').build()
         assertNull(result.task(':app:packageParavoidAndroidDebugParavoidVpk'))
         assertTrue(shell.length() < embeddedSize)
+        assertEquals('empty', new groovy.json.JsonSlurper().parse(new File(output, 'packaging-report.json')).distribution.bootstrap)
         new ZipFile(shell).withCloseable { zip ->
             assertNull(zip.getEntry('assets/paravoid/payload.vpk'))
             def policy = com.lelloman.paravoidandroid.contract.InstalledPolicyCodec.read(ResourceArchive.read(zip, 'assets/paravoid/shell-policy.json'), true)
@@ -112,6 +124,7 @@ class ApplicationPackagingTest {
         assertEquals(1L, first.identity.payloadVersion)
         assertArrayEquals(first.envelope(), new File(output, 'release.json').bytes)
         assertEquals(first.identity.archiveSha256, new File(output, 'payload.vpk.sha256').text.trim())
+        assertArrayEquals(new File(output, 'payload.vpk.sha256').bytes, new File(output, 'payload.sha256').bytes)
         new ZipFile(archive).withCloseable { zip ->
             assertNotNull(zip.getEntry('code/classes.dex'))
             assertNotNull(zip.getEntry('resources.apk'))
@@ -126,6 +139,7 @@ class ApplicationPackagingTest {
         write(root, 'app/src/main/res/values/strings.xml', '<resources><string name="movable">B</string><string name="new_entry">New</string></resources>')
         run(root, task).build()
         assertArrayEquals(accepted, policyFile.bytes)
+        assertEquals('compatible', new groovy.json.JsonSlurper().parse(new File(output, 'packaging-report.json')).compatibility.status)
         def second = new com.lelloman.paravoidandroid.contract.CompleteVpkVerifier().verifyEmbedded(archive, policy, scope)
         assertEquals(2L, second.identity.payloadVersion)
         assertNotEquals(first.identity.archiveSha256, second.identity.archiveSha256)
@@ -133,6 +147,9 @@ class ApplicationPackagingTest {
         byte[] previousArchive = archive.bytes
         build << "\nparavoid.updates.baseUrl = 'https://other.example/'\n"
         assertTrue(run(root, task).buildAndFail().output.contains('distribution/baseUrl'))
+        def incompatible = new groovy.json.JsonSlurper().parse(new File(output, 'packaging-report.json'))
+        assertEquals('new-shell-required', incompatible.compatibility.status)
+        assertTrue(incompatible.compatibility.changes.any { it.contains('distribution/baseUrl') })
         assertArrayEquals(previousArchive, archive.bytes)
         assertArrayEquals(accepted, new File(baseline, 'shell-contract.json').bytes)
     }

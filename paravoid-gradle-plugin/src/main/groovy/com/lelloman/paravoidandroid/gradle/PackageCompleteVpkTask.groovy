@@ -29,6 +29,7 @@ abstract class PackageCompleteVpkTask extends DefaultTask {
     @OutputFile abstract RegularFileProperty getVpkFile()
     @OutputFile abstract RegularFileProperty getReleaseFile()
     @OutputFile abstract RegularFileProperty getDigestFile()
+    @OutputFile @Optional abstract RegularFileProperty getLegacyDigestFile()
     @OutputFile abstract RegularFileProperty getReportFile()
     PackageCompleteVpkTask() {
         outputs.upToDateWhen { false }
@@ -79,6 +80,7 @@ abstract class PackageCompleteVpkTask extends DefaultTask {
         def release = new VpkWriter().write(vpkFile.get().asFile, components, specification, policy, device, keyId.get(), key)
         releaseFile.get().asFile.bytes = release.envelope()
         digestFile.get().asFile.setText(release.identity.archiveSha256 + '\n', 'US-ASCII')
+        if (legacyDigestFile.present) legacyDigestFile.get().asFile.setText(release.identity.archiveSha256 + '\n', 'US-ASCII')
         reportFile.get().asFile.setText(JsonOutput.prettyPrint(JsonOutput.toJson([
             profile: 'complete-vpk-1', applicationId: policy.applicationId, shellContractId: policy.shellContractId,
             releaseId: release.identity.releaseId, payloadVersion: release.identity.payloadVersion,

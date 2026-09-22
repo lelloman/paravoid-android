@@ -41,7 +41,17 @@ For a variant such as `paravoidAndroidDebug`, run
 resource/asset APK, merged Java-resource JAR, native libraries and resource ledger;
 signs and verifies them with the shared complete-VPK verifier before publishing
 `build/outputs/paravoid/<variant>/payload.vpk`. Adjacent outputs are the exact
-signed `release.json`, `payload.vpk.sha256`, and a public `vpk-report.json`.
+signed `release.json`, `payload.sha256`, and a public `vpk-report.json`.
+`payload.vpk.sha256` remains an identical compatibility alias for existing fixtures.
+
+`report<Variant>ParavoidPackaging` exports root-level `shell-contract.json`,
+`resource-ledger.json`, and `packaging-report.json`/`.txt`. It describes pinned
+roots and their dependency chains, movable resources, shell/payload ownership,
+public trust key IDs, unsupported features and the accepted-baseline diff. It
+does not read private signing keys or grants. Complete assembly, VPK compatibility
+checks and complete-mode baseline export generate this evidence automatically.
+An incompatible build writes the report before its contract gate fails; a report
+is not approval to publish the candidate or proof of installed-device behavior.
 
 Automatic output is `outputs/paravoid/<variant>/shell.apk`, also exposed through
 AGP's transformed APK artifact (used by its install tasks). The intermediate
