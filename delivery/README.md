@@ -1,3 +1,5 @@
+> Current finish-track changes, device results and unresolved gates: [FINISH-HANDOFF.md](FINISH-HANDOFF.md).
+
 # Track B: delivery internals
 
 Branch `v1/delivery`, baseline `8c40885`. Shared foundation `7ace172` is imported as

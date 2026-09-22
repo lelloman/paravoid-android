@@ -1,3 +1,5 @@
+> Current finish-track changes, device results and unresolved gates: [FINISH-HANDOFF.md](FINISH-HANDOFF.md).
+
 # Track B handoff, 2026-09-22
 
 Worktree `/tmp/paravoid-v1-delivery`, branch `v1/delivery`, baseline `8c40885`.

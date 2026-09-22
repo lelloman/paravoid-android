@@ -1,3 +1,5 @@
+> Current finish-track changes, device results and unresolved gates: [FINISH-HANDOFF.md](../FINISH-HANDOFF.md).
+
 # Shell-owned controls integration
 
 `ShellUpdatesActivity` is a programmatic Android screen, with no payload/resource

@@ -50,7 +50,8 @@ public final class DeliveryClientTest {
         final Life life = new Life();
         final DeliveryClient client;
         final RequestScope scope = new RequestScope("example.app", "a".repeat(64), "stable", 30, Arrays.asList("x86_64"), 1);
-        Setup(boolean apkKey) throws Exception {
+        Setup(boolean apkKey) throws Exception { this(apkKey, false); }
+        Setup(boolean apkKey, boolean insufficientStorage) throws Exception {
             metadata.archive = new ExpectedArchive("r1", 1, "b".repeat(64), HASH, ARCHIVE.length);
             life.clock = clock;
             ShellPolicy policy = new ShellPolicy("example.app", "a".repeat(64),
@@ -60,7 +61,10 @@ public final class DeliveryClientTest {
             client = new DeliveryClient(policy, metadata, life, clock, f.dir, url -> {
                 f.requests++; Fake next = f.responses.poll();
                 if (next == null) throw new AssertionError("unexpected HTTP"); return next;
-            }, (directory, size) -> check(size == ARCHIVE.length));
+            }, (directory, size) -> {
+                check(size == ARCHIVE.length);
+                if (insufficientStorage) throw new ContractException(ContractException.Code.INSUFFICIENT_STORAGE, "Insufficient update storage");
+            });
             client.installedCredential(apkKey ? new byte[] {1} : null);
         }
         Fake head() throws Exception {
@@ -158,6 +162,13 @@ public final class DeliveryClientTest {
             try (DirectoryStream<Path> files = Files.newDirectoryStream(s.f.dir, "*.part")) {
                 check(!files.iterator().hasNext());
             }
+        }
+        try (Setup s = new Setup(false, true)) {
+            s.head();
+            contractFailure(ContractException.Code.INSUFFICIENT_STORAGE, () -> s.client.check(s.scope, true, false));
+            check(s.f.requests == 1 && s.life.stages == 0);
+            check(s.life.observations == 1); // Storage rejection never undoes authenticated head observation.
+            check(s.life.snapshot().availability == Availability.RUNNABLE);
         }
         System.out.println("DeliveryClientTest: " + TransportTest.assertions + " assertions passed");
     }
