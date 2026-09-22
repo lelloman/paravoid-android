@@ -10,4 +10,6 @@ dependencyResolutionManagement {
 rootProject.name = 'compose-compatibility'
 include ':paravoid-api', ':paravoid-runtime'
 project(':paravoid-api').projectDir = file('../../paravoid-api')
+include ':paravoid-contract'
+project(':paravoid-contract').projectDir = file('../../paravoid-contract')
 project(':paravoid-runtime').projectDir = file('../../paravoid-runtime')

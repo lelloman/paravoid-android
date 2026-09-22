@@ -91,7 +91,8 @@ abstract class PackageApplicationTask extends DefaultTask {
         new ZipOutputStream(new FileOutputStream(shell)).withCloseable { host ->
             new ZipOutputStream(new FileOutputStream(payload)).withCloseable { module ->
                 classes.each { name, bytes ->
-                    if (name.startsWith('com/lelloman/paravoidandroid/runtime/') || name.startsWith('com/lelloman/paravoidandroid/api/')) {
+                    if (name.startsWith('com/lelloman/paravoidandroid/runtime/') || name.startsWith('com/lelloman/paravoidandroid/api/') ||
+                        name.startsWith('com/lelloman/paravoidandroid/contract/') || name.startsWith('com/lelloman/paravoidandroid/delivery/')) {
                         PackageApplicationTask.write(host, name, bytes)
                     } else {
                         ClassWriter writer = new ClassWriter(0)

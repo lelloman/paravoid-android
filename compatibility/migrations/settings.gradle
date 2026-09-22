@@ -9,5 +9,7 @@ dependencyResolutionManagement {
 rootProject.name = 'migration-compatibility'
 include ':paravoid-api', ':paravoid-runtime'
 project(':paravoid-api').projectDir = file('../../paravoid-api')
+include ':paravoid-contract'
+project(':paravoid-contract').projectDir = file('../../paravoid-contract')
 // Only this experiment substitutes the bundle-selection hook; production is untouched.
 project(':paravoid-runtime').projectDir = file('fixture-runtime')
