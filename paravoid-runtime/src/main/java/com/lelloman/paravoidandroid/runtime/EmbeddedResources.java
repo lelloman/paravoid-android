@@ -15,6 +15,8 @@ final class EmbeddedResources {
         File file = EmbeddedArchive.materialize(app, "resources", ".apk");
         if (file != null) Api30.attach(app, file);
     }
+    /** Only for files returned by a verified, process-leased complete generation. */
+    static void installVerified(Application app, File file) throws IOException { Api30.attach(app, file); }
 
     @android.annotation.TargetApi(30)
     private static final class Api30 {

@@ -718,6 +718,12 @@ class ApplicationPackagingTest {
                 if (file.isFile()) write(root, "${module}/src/main/" + source.toPath().relativize(file.toPath()), file.text)
             }
         }
+        ['delivery/src', 'delivery/android/src'].each { path ->
+            File source = new File(repo, path)
+            source.eachFileRecurse { file ->
+                if (file.isFile()) write(root, path + '/' + source.toPath().relativize(file.toPath()), file.text)
+            }
+        }
         write(root, 'app/build.gradle', """
             plugins { id 'com.lelloman.paravoid' }
             android { namespace 'example'; compileSdk 36; defaultConfig { applicationId 'example.fixture'; minSdk 28; targetSdk 36; versionCode 1; versionName '1.0' } }
