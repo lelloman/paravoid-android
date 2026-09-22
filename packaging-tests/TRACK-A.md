@@ -26,3 +26,41 @@ remote push is authorized by the track assignment.
 This evidence is build-level, not installed-device acceptance. Remaining Track A
 work includes complete-profile boundary tests, real-app AGP integration, publishing
 artifact correctness and cross-track acceptance after B/C handoff.
+
+## Pezzottify build experiment
+
+The isolated app worktree is `/tmp/pezzottify-paravoid-v1-track-a`, branch
+`codex/paravoid-v1-packaging`, based on integration commit `152445ac`. Its optional
+`paravoidComplete` property enables the complete profile without changing its normal
+variants. It includes `paravoid-contract` from this checkout. The assistant source
+is independently checked out at its pinned commit
+`87a499561a4db146d75051c34d46f89f4dac9e85` in `/tmp/paravoid-track-a-assistant`.
+
+Generate disposable RSA test keys (requires Python `cryptography`):
+
+```sh
+python3 packaging-tests/prepare-keys.py \
+  --application-id com.lelloman.pezzottify.android.paravoid \
+  --output /tmp/paravoid-track-a-pezzottify-keys
+```
+
+The helper reuses existing keys; never use this fixture for production signing.
+It creates private files with mode 0600 and exports only public keys in `trust.json`.
+Keep the generated directory outside Git. Re-running the helper was checked to
+preserve the public trust policy.
+
+From the isolated app's `android/`, use Gradle 9.1 with these arguments:
+
+```sh
+./gradlew --gradle-user-home /tmp/paravoid-track-a-gradle \
+  -PparavoidCheckout=/tmp/paravoid-v1-packaging-finish \
+  -PassistantCheckout=/tmp/paravoid-track-a-assistant \
+  -PparavoidComplete=true \
+  -PparavoidTrustPolicy=/tmp/paravoid-track-a-pezzottify-keys/trust.json \
+  -PparavoidReleaseKey=/tmp/paravoid-track-a-pezzottify-keys/release.der \
+  :app:assembleParavoidAndroidPhoneDebug --no-parallel --max-workers=2
+```
+
+Gradle 9's Groovy 4 exposed missing explicit `groovy.xml.XmlParser` imports in
+two packaging tasks. The fix compiles under Gradle 9; Gradle 8 shell-contract and
+resource-shell regression tests also pass. This is not device acceptance.
