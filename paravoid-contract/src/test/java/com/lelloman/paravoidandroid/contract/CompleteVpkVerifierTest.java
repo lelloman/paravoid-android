@@ -100,6 +100,24 @@ public class CompleteVpkVerifierTest {
             new VpkWriter.ReleaseSpec("a", 1, 30, 0, Collections.emptyList()), f.policy, f.scope, "release", f.release.getPrivate()));
         assertArrayEquals(new byte[]{42}, Files.readAllBytes(output.toPath()));
     }
+    @Test public void acceptsOnlyZeroLocalZipalignPaddingInNestedContainers() throws Exception {
+        byte[] original = zip(Collections.singletonMap("probe.txt", new byte[]{42}), true);
+        int nameLength = ByteBuffer.wrap(original).order(ByteOrder.LITTLE_ENDIAN).getShort(26) & 65535;
+        int extraLength = ByteBuffer.wrap(original).order(ByteOrder.LITTLE_ENDIAN).getShort(28) & 65535;
+        int insertion = 30 + nameLength + extraLength;
+        int central = signature(original, 0x02014b50), end = signature(original, 0x06054b50);
+        for (int padding = 1; padding <= 3; padding++) {
+            byte[] aligned = new byte[original.length + padding];
+            System.arraycopy(original, 0, aligned, 0, insertion);
+            System.arraycopy(original, insertion, aligned, insertion + padding, original.length - insertion);
+            ByteBuffer.wrap(aligned).order(ByteOrder.LITTLE_ENDIAN).putShort(28, (short)(extraLength + padding))
+                .putInt(end + padding + 16, central + padding);
+            Map<String,byte[]> c = components("A"); c.put("java-resources.jar", aligned);
+            verifier.verifyEmbedded(pack(c, Collections.emptyMap()), f.policy, f.scope);
+            aligned[insertion] = 1;
+            rejected(pack(c, Collections.emptyMap()));
+        }
+    }
     private void rejected(File file) { assertThrows(ContractException.class, () -> verifier.verifyEmbedded(file, f.policy, f.scope)); }
     File pack(Map<String,byte[]> components, Map<String,Object> changes) throws Exception {
         Map<String,Object> body = new LinkedHashMap<>();

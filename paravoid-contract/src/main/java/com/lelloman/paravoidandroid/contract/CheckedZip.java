@@ -55,13 +55,13 @@ final class CheckedZip {
             String name = name(nameBytes, outer);
             if ((outer && name.endsWith("/")) || ((attrs & 16) != 0 && !name.endsWith("/"))
                     || (unixType == 0040000 && !name.endsWith("/")) || entries.containsKey(name)) throw bad();
-            extras(cursor + 46 + nameSize, extraSize);
+            extras(cursor + 46 + nameSize, extraSize, false);
             if (local + 30 > directory || u32(local) != 0x04034b50L || u16(local + 4) != needed
                     || u16(local + 6) != flags || u16(local + 8) != method || u16(local + 10) != time || u16(local + 12) != date
                     || u16(local + 26) != nameSize || !Arrays.equals(bytes(local + 30, nameSize), nameBytes)) throw bad();
             int localExtra = u16(local + 28);
             if (outer && localExtra != 0) throw bad();
-            extras(local + 30 + nameSize, localExtra);
+            extras(local + 30 + nameSize, localExtra, !outer);
             long data = local + 30 + nameSize + localExtra;
             long entryEnd = data + compressed;
             if (entryEnd > directory || (method == 0 && size != compressed)) throw bad();
@@ -128,10 +128,16 @@ final class CheckedZip {
         } catch (ZipException malformed) { throw bad(); }
         finally { if (inflater != null) inflater.end(); }
     }
-    private void extras(long at, int size) throws IOException, ContractException {
+    private void extras(long at, int size, boolean localPadding) throws IOException, ContractException {
         long end = at + size;
         while (at < end) {
-            if (at + 4 > end) throw bad();
+            if (at + 4 > end) {
+                // Android zipalign appends up to three zero bytes to a local extra
+                // area for four-byte alignment. Never accept this in central or outer headers.
+                if (!localPadding) throw bad();
+                for (byte b : bytes(at, (int)(end - at))) if (b != 0) throw bad();
+                return;
+            }
             int id = u16(at), n = u16(at + 2);
             if (id == 1 || at + 4 + n > end) throw bad(); // ZIP64 forbidden even without sentinels
             at += 4 + n;
