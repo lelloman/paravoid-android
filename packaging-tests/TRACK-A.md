@@ -70,3 +70,21 @@ The real app also exposed AAPT-generated names such as
 and VPK admission now preserve `$` in linked names. Regression tests cover exact
 stable-ID/tombstone preservation and continued rejection of path-like names;
 resource-ledger tests and the shared contract suite pass.
+
+The signed VPK then built successfully, but shell assembly rejected Room's
+library-declared `androidx.room.MultiInstanceInvalidationService` because it is
+`directBootAware=true`. The isolated app has no call enabling multi-instance
+invalidation or device-protected storage. Its Paravoid-only manifest overlay
+sets that service to `directBootAware=false`; normal packaging is unaffected.
+This is an explicit app integration decision, not automatic removal of a library
+capability by Paravoid. Apps that require pre-unlock payload execution remain
+unsupported. Earlier actionable diagnostics for this condition remain a follow-up.
+
+Final complete `assembleParavoidAndroidPhoneDebug` passed on AGP 9.0.0 / Gradle
+9.1.0. APK v3 signature verification passed. The embedded VPK's SHA-256 equals
+the standalone VPK and `payload.sha256`; the VPK is 86,047,312 bytes. The shell
+contains the public policy, shell DEX and four ABI markers. This is a debug-key
+signed, embedded-bootstrap, updates-disabled build, not a production release.
+The build used the opt-in app configuration committed as `dd6fe7a9` plus the
+Paravoid-only Room overlay. No APK was installed; runtime acceptance is pending
+integration with Tracks B/C.
