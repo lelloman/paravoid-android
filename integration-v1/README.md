@@ -52,14 +52,21 @@ These counts describe host/build checks, not new installed-device acceptance.
 
 Still required before calling the three-track implementation complete:
 
-- Embed the installed-policy carrier and wire complete-shell APK packaging into
-  the supported Gradle artifact workflow (the explicit VPK producer is implemented).
-- Android adapter for the implemented current-APK credential authority.
-- Early loader, boot-clock adapter, shell-only recovery process and controls wiring.
-- First-initialization recovery, storage admission and unavailable-component adapters.
+- Validate the now-implemented automatic complete-shell APK/policy assembly,
+  Android authority/clock adapters, early loader and recovery routing on devices.
+- Harden controls/scheduling, storage admission and unavailable-component behavior.
 - Installed-app API 30/36.1 fault/repair tests; real-app, signed-release and physical
   ARM64 acceptance; independent format/security review and grant-block ID review.
 
+Automatic embedded/empty shell assembly passes its build integration test. Atomic
+first initialization now passes five host process-death boundaries and a concurrent
+first-start test without resetting established history. The initial installed-device
+fixture and its outstanding startup failure are documented in
+[complete-v1](../compatibility/complete-v1/README.md). These additions do not yet
+satisfy the installed-app acceptance gates.
+
 Track B/C handoff notes remain accurate about their narrower evidence. The imported
-branches are preserved; this checkout continues on `v1/packaging` with shared
-foundation commits included only once.
+branches are preserved. The user requested integrating the consolidated checkpoint
+into the repository's primary branch, `main` (there is no `master` branch), with
+shared foundation commits included only once. This is an in-progress integration,
+not a v1 release or wire freeze.
