@@ -6,12 +6,15 @@ import static com.lelloman.paravoidandroid.delivery.TransportTest.*;
 
 public final class DeliveryControllerTest {
     static final class Control implements AutoCloseable {
-        final DeliveryClientTest.Setup setup = new DeliveryClientTest.Setup(false);
+        final DeliveryClientTest.Setup setup;
         final ScheduledThreadPoolExecutor worker = new ScheduledThreadPoolExecutor(1);
         final BlockingQueue<DeliveryController.Snapshot> snapshots = new LinkedBlockingQueue<>();
-        final Path preferences = setup.f.dir.resolve("preferences");
+        final Path preferences;
         DeliveryController controller;
-        Control() throws Exception {
+        Control() throws Exception { this(false); }
+        Control(boolean apkKey) throws Exception {
+            setup = new DeliveryClientTest.Setup(apkKey);
+            preferences = setup.f.dir.resolve("preferences");
             worker.setRemoveOnCancelPolicy(true); create();
             await(DeliveryController.Activity.IDLE);
         }
@@ -70,6 +73,18 @@ public final class DeliveryControllerTest {
             c.controller.foreground(true); c.barrier(); check(c.setup.f.requests == 1);
             c.setup.head(); c.setup.f.responses.add(new Fake(200, ARCHIVE));
             c.controller.retry(); c.await(DeliveryController.Activity.READY); check(c.setup.f.requests == 3);
+        }
+        try (Control c = new Control(true)) {
+            c.setup.f.responses.add(new Fake(401, new byte[0]));
+            c.controller.foreground(true); c.await(DeliveryController.Activity.ERROR);
+            Path replacement = c.setup.f.dir.resolve("replacement.apk");
+            Files.write(replacement, ApkGrantReaderTest.apk(new byte[] {2}, false, true));
+            c.snapshots.clear();
+            c.controller.refreshInstalledApk(replacement.toFile()); c.await(DeliveryController.Activity.IDLE);
+            Fake head = c.setup.head(); c.setup.f.responses.add(new Fake(200, ARCHIVE));
+            c.controller.foreground(false); c.await(DeliveryController.Activity.READY);
+            check(head.getRequestProperty("Authorization").equals("Bearer " + "B".repeat(43)));
+            check(c.setup.life.stages == 1);
         }
         System.out.println("DeliveryControllerTest: " + TransportTest.assertions + " assertions passed");
     }

@@ -46,6 +46,7 @@ public final class AttemptPolicyTest {
         check(!p.begin(AttemptPolicy.Trigger.RETRY, 3)); // stale completion cannot finish new attempt
         p.finish(p.generation()); p.automaticChecks = true;
         check(p.begin(AttemptPolicy.Trigger.EMPTY_BOOTSTRAP, 3)); // stale 401 did not suppress
+        check(p.retryDelay(new HttpTransport.Failure("network-io"), 0.5, p.generation()) == 1000);
         System.out.println("AttemptPolicyTest: " + TransportTest.assertions + " assertions passed");
     }
 }

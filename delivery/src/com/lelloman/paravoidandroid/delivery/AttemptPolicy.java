@@ -49,7 +49,7 @@ final class AttemptPolicy {
                 authSuppressed = true;
                 return -1;
             }
-            boolean retryable = f.code.equals("truncated-head") || f.code.equals("truncated-archive")
+            boolean retryable = f.code.equals("network-io") || f.code.equals("truncated-head") || f.code.equals("truncated-archive")
                     || (f.code.equals("http-status") && (f.status == 429 || f.status >= 500 && f.status <= 599));
             if (!retryable) return -1;
             retryAfter = f.retryAfterSeconds;

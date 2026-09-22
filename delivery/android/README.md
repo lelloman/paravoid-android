@@ -11,7 +11,9 @@ Required initialization in that process:
 1. Construct real A verification and C lifecycle implementations from APK policy.
 2. Create `DeliveryClient` with its own directory under `Context.getNoBackupFilesDir()`.
 3. Call `installedApk(new File(getApplicationInfo().sourceDir))` on every process
-   startup and installed-APK refresh. Missing/bad grants deny updates. Public mode
+   startup. After controller initialization, route installed-APK refresh through
+   `controller.refreshInstalledApk` to cancel old retries and reset scheduling
+   suppression as well. Missing/bad grants deny updates. Public mode
    never reads or sends a bearer key. Do not reuse an old process's grant after replacement.
 4. Create `DeliveryController` with a **single-thread** scheduled executor, clock
    backed by Unix time and `SystemClock.elapsedRealtime()`, main-thread callbacks,

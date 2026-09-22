@@ -71,43 +71,54 @@ public final class DeliveryClient {
     /** At process startup/APK replacement. Null is valid only for public mode. No asset fallback. */
     public synchronized void installedCredential(byte[] grantEnvelope) throws ContractException, IOException {
         invalidateCredential();
-        CredentialScope credential;
-        String bearer = null;
-        if (policy.authentication == Authentication.PUBLIC) credential = CredentialScope.publicAccess();
-        else {
-            if (grantEnvelope == null) throw new ContractException(ContractException.Code.CREDENTIAL_UNAVAILABLE, "APK update credential missing");
-            VerifiedGrant grant = verifier.verifyGrant(grantEnvelope, policy);
-            credential = CredentialScope.provisioned(grant);
-            validCredential(credential);
-            bearer = grant.bearerKey();
-        }
-        HttpTransport transport = new HttpTransport(URI.create(policy.baseUrl), policy.debugHttpAllowed, bearer, connections);
-        Files.createDirectories(directory);
-        String partition = HttpTransport.hash((policy.shellContractId + ":" + credential.id).getBytes(StandardCharsets.UTF_8));
-        // Isolated B-only directory: credential replacement removes all abandoned partials.
-        // An active old worker owns its open file until its finally block; its scope cannot be reused.
-        if (!partition.equals(readMarker("credential-scope"))) {
-            try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "*.part")) {
-                for (Path file : files) Files.deleteIfExists(file);
+        try {
+            CredentialScope credential;
+            String bearer = null;
+            if (policy.authentication == Authentication.PUBLIC) credential = CredentialScope.publicAccess();
+            else {
+                if (grantEnvelope == null) throw new ContractException(ContractException.Code.CREDENTIAL_UNAVAILABLE, "APK update credential missing");
+                VerifiedGrant grant = verifier.verifyGrant(grantEnvelope, policy);
+                credential = CredentialScope.provisioned(grant);
+                validCredential(credential);
+                bearer = grant.bearerKey();
             }
-            Files.deleteIfExists(directory.resolve("auth-denied"));
-            writeMarker("credential-scope", partition);
+            HttpTransport transport = new HttpTransport(URI.create(policy.baseUrl), policy.debugHttpAllowed, bearer, connections);
+            Files.createDirectories(directory);
+            String partition = HttpTransport.hash((policy.shellContractId + ":" + credential.id).getBytes(StandardCharsets.UTF_8));
+            // Isolated B-only directory: credential replacement removes all abandoned partials.
+            // An active old worker owns its open file until its finally block; its scope cannot be reused.
+            if (!partition.equals(readMarker("credential-scope"))) {
+                try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "*.part")) {
+                    for (Path file : files) Files.deleteIfExists(file);
+                }
+                Files.deleteIfExists(directory.resolve("auth-denied"));
+                writeMarker("credential-scope", partition);
+            }
+            lifecycle.setCredentialScope(credential);
+            authSuppressed = partition.equals(readMarker("auth-denied"));
+            session = new Session(credential, transport, partition);
+        } catch (IOException | ContractException | RuntimeException failed) {
+            lifecycle.setCredentialScope(null);
+            throw failed;
         }
-        lifecycle.setCredentialScope(credential);
-        authSuppressed = partition.equals(readMarker("auth-denied"));
-        session = new Session(credential, transport, partition);
     }
 
     /** Caller obtains this path from Android ApplicationInfo.sourceDir, never a downloaded file. */
     public synchronized void installedApk(File installedBaseApk) throws ContractException, IOException {
         invalidateCredential();
-        installedCredential(policy.authentication == Authentication.PUBLIC ? null : ApkGrantReader.read(installedBaseApk));
+        try {
+            installedCredential(policy.authentication == Authentication.PUBLIC ? null : ApkGrantReader.read(installedBaseApk));
+        } catch (IOException | ContractException | RuntimeException failed) {
+            lifecycle.setCredentialScope(null);
+            throw failed;
+        }
     }
 
-    private void invalidateCredential() throws ContractException {
+    private void invalidateCredential() {
         if (active != null) active.cancel();
         session = null; cache = null; authSuppressed = false;
-        lifecycle.setCredentialScope(null);
+        // Do not transiently revoke the same valid scope in other processes. Publish
+        // the verified replacement (or null on failure) to C exactly when known.
     }
 
     /** Must run off the UI thread. explicitRetry lifts HTTP auth suppression, never grant checks. */
@@ -162,6 +173,10 @@ public final class DeliveryClient {
             URI archiveUri = transport.archiveUri(scope.applicationId, expected.releaseId);
             String partialScope = policy.shellContractId + ":" + captured.credential.id + ":" + expected.manifestSha256;
             partial = transport.partial(directory, partialScope, archiveUri, expected.archiveSize, expected.archiveSha256);
+            // At most one resumable candidate. This directory never contains C-owned archives.
+            try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "*.part")) {
+                for (Path file : files) if (!file.equals(partial)) Files.deleteIfExists(file);
+            }
             storage.reserve(directory, expected.archiveSize);
             current(captured, cancel);
             transport.download(archiveUri, partial, expected.archiveSize, expected.archiveSha256, cancel);

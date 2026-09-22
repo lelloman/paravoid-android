@@ -15,10 +15,10 @@ public final class DeliveryClientTest {
     }
     static final class Life implements Lifecycle {
         CredentialScope credential;
-        int observations, stages;
+        int observations, stages, credentialDenials;
         Clock clock;
         VerifiedHead last;
-        public void setCredentialScope(CredentialScope scope) { credential = scope; }
+        public void setCredentialScope(CredentialScope scope) { credential = scope; if (scope == null) credentialDenials++; }
         public AdmissionResult observeHead(VerifiedHead head, CredentialScope scope) throws ContractException {
             if (credential == null || !scope.id.equals(credential.id)) throw new ContractException(ContractException.Code.CREDENTIAL_CHANGED, "changed");
             if (clock.wall >= head.expiresAt) throw new ContractException(ContractException.Code.EXPIRED, "expired");
@@ -77,9 +77,11 @@ public final class DeliveryClientTest {
     }
     public static void main(String[] args) throws Exception {
         for (boolean apkKey : new boolean[] {false, true}) try (Setup s = new Setup(apkKey)) {
+            Path abandoned = s.f.dir.resolve("old-release.part"); Files.write(abandoned, new byte[] {1});
             s.head(); s.f.responses.add(new Fake(200, ARCHIVE));
             DeliveryClient.Result result = s.client.check(s.scope, true, false);
             check(result.stage.status == StageStatus.PENDING); check(s.life.stages == 1);
+            check(!Files.exists(abandoned));
             try (DirectoryStream<Path> files = Files.newDirectoryStream(s.f.dir, "*.part")) { check(!files.iterator().hasNext()); }
             s.cached(); s.client.check(s.scope, false, false);
             check(s.life.observations == 2); check(s.metadata.headVerifications == 1);
@@ -116,6 +118,7 @@ public final class DeliveryClientTest {
             Files.write(s.f.partial, new byte[] {1, 2, 3});
             s.client.installedCredential(new byte[] {1});
             check(Files.size(s.f.partial) == 3); // Same credential preserves resumable bytes.
+            check(s.life.credentialDenials == 0); // A new process must not revoke another same-scope admission.
             s.client.installedCredential(new byte[] {2});
             check(!Files.exists(s.f.partial));
         }

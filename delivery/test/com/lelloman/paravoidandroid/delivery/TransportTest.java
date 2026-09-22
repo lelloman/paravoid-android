@@ -178,6 +178,18 @@ public final class TransportTest {
     }
     static void cancellation() throws Exception {
         try (Fixture f = new Fixture()) {
+            Fake response = new Fake(200, ARCHIVE);
+            response.stream = new InputStream() {
+                int offset;
+                public int read() throws IOException {
+                    if (offset == 5) throw new IOException("untrusted server text or credential must not escape");
+                    return ARCHIVE[offset++];
+                }
+            };
+            f.responses.add(response);
+            fails("network-io", f::download); check(Files.size(f.partial) == 5);
+        }
+        try (Fixture f = new Fixture()) {
             HttpTransport.Cancellation cancel = new HttpTransport.Cancellation(); cancel.cancel();
             fails("cancelled", () -> f.transport.download(URL, f.partial, ARCHIVE.length, HASH, cancel));
             check(f.requests == 0);

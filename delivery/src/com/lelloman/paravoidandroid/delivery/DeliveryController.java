@@ -55,6 +55,25 @@ public final class DeliveryController {
     }
     public void checkNow() { submit(AttemptPolicy.Trigger.CHECK_NOW); }
     public void retry() { submit(AttemptPolicy.Trigger.RETRY); }
+    /** Invoke on APK replacement with a freshly obtained ApplicationInfo.sourceDir. */
+    public void refreshInstalledApk(File baseApk) {
+        client.cancelDownload();
+        attempts.cancel();
+        worker.execute(() -> {
+            if (pendingRetry != null) pendingRetry.cancel(false);
+            attempts.credentialsReplaced();
+            operation = attempts.generation();
+            try {
+                client.installedApk(baseApk);
+                preferences = new DeliveryPreferences(preferences.automaticChecks, preferences.automaticDownloads,
+                        preferences.unmeteredOnly, 0);
+                preferences.write(preferenceFile);
+                activity = Activity.IDLE; error = null;
+            } catch (ContractException failure) { fail(failure.code.name()); }
+            catch (IOException failure) { fail("IO"); }
+            publish();
+        });
+    }
     public void cancelDownload() {
         // Disconnect directly: worker may currently be blocked in an HTTP read.
         attempts.cancel(); client.cancelDownload();

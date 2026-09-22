@@ -104,7 +104,7 @@ final class HttpTransport {
         try {
             c.setRequestProperty("Accept", "application/json");
             if (verifiedCacheEtag != null) c.setRequestProperty("If-None-Match", verifiedCacheEtag);
-            int status = c.getResponseCode();
+            int status = responseCode(c, cancel);
             cancel.check(); encoding(c);
             if (status == 304) {
                 if (verifiedCacheEtag == null || !verifiedCacheEtag.equals(header(c, "ETag")))
@@ -116,7 +116,7 @@ final class HttpTransport {
             long length = c.getContentLengthLong();
             if (length > MAX_HEAD) throw new Failure("head-too-large");
             byte[] body;
-            try (InputStream in = c.getInputStream(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            try (InputStream in = responseStream(c, cancel); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
                 copy(in, out, MAX_HEAD, cancel);
                 body = out.toByteArray();
             }
@@ -154,7 +154,7 @@ final class HttpTransport {
                     c.setRequestProperty("Range", "bytes=" + offset + "-");
                     c.setRequestProperty("If-Range", etag);
                 }
-                int status = c.getResponseCode();
+                int status = responseCode(c, cancel);
                 cancel.check(); encoding(c);
                 if (status == 416) {
                     Files.deleteIfExists(partial);
@@ -171,7 +171,7 @@ final class HttpTransport {
                     throw new Failure("invalid-range");
                 if (c.getContentLengthLong() != size - start) throw new Failure("invalid-length");
                 if (status == 200 && header(c, "Content-Range") != null) throw new Failure("invalid-range");
-                try (InputStream in = c.getInputStream(); OutputStream out = Files.newOutputStream(partial,
+                try (InputStream in = responseStream(c, cancel); OutputStream out = Files.newOutputStream(partial,
                         StandardOpenOption.CREATE, StandardOpenOption.WRITE,
                         start == 0 ? StandardOpenOption.TRUNCATE_EXISTING : StandardOpenOption.APPEND)) {
                     long copied = copy(in, out, size - start, cancel);
@@ -209,13 +209,24 @@ final class HttpTransport {
         byte[] buffer = new byte[32 * 1024]; long total = 0;
         for (;;) {
             cancel.check();
-            int n = in.read(buffer, 0, (int) Math.min(buffer.length, limit - total + 1));
+            int n;
+            try { n = in.read(buffer, 0, (int) Math.min(buffer.length, limit - total + 1)); }
+            catch (IOException network) { cancel.check(); throw new Failure("network-io"); }
             cancel.check();
             if (n == -1) return total;
             total += n;
             if (total > limit) throw new Failure("body-too-large");
             out.write(buffer, 0, n);
         }
+    }
+
+    private static int responseCode(HttpURLConnection c, Cancellation cancel) throws IOException {
+        try { return c.getResponseCode(); }
+        catch (IOException network) { cancel.check(); throw new Failure("network-io"); }
+    }
+    private static InputStream responseStream(HttpURLConnection c, Cancellation cancel) throws IOException {
+        try { return c.getInputStream(); }
+        catch (IOException network) { cancel.check(); throw new Failure("network-io"); }
     }
 
     private static String header(HttpURLConnection c, String name) throws Failure {
@@ -253,7 +264,11 @@ final class HttpTransport {
             throw new IllegalArgumentException("invalid application ID");
     }
     private static int port(URI uri) { return uri.getPort() >= 0 ? uri.getPort() : "https".equals(uri.getScheme()) ? 443 : 80; }
-    private static String encode(String value) { return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20"); }
+    private static String encode(String value) {
+        // String charset overload is available on the full API 30 support floor.
+        try { return URLEncoder.encode(value, "UTF-8").replace("+", "%20"); }
+        catch (UnsupportedEncodingException impossible) { throw new AssertionError(impossible); }
+    }
     private static String quoted(String value) { return "\"" + value + "\""; }
     static String hash(byte[] bytes) { return hex(digest().digest(bytes)); }
     private static String hash(Path file, Cancellation cancel) throws IOException {
