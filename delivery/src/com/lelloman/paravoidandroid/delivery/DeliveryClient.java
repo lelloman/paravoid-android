@@ -152,12 +152,8 @@ public final class DeliveryClient {
         synchronized (this) {
             if (!policy.updatesEnabled) throw new ContractException(ContractException.Code.UNAVAILABLE, "Updates disabled by shell policy");
             if (active != null) throw new ContractException(ContractException.Code.UNAVAILABLE, "Update already in progress");
-            if (session != null && session.partition.equals(readMarker("auth-denied"))) authSuppressed = true;
-            if (explicitRetry) {
-                Files.deleteIfExists(directory.resolve("auth-denied"));
-                authSuppressed = false;
-            }
-            if (session == null || authSuppressed)
+            authSuppressed = session != null && session.partition.equals(readMarker("auth-denied"));
+            if (session == null || (authSuppressed && !explicitRetry))
                 throw new ContractException(ContractException.Code.CREDENTIAL_UNAVAILABLE, "Update access unavailable");
             if (!scope.applicationId.equals(policy.applicationId) || !scope.shellContractId.equals(policy.shellContractId)
                     || !scope.channel.equals(policy.channel) || scope.runtimeAbi != policy.runtimeAbi)
@@ -176,6 +172,12 @@ public final class DeliveryClient {
             catch (OverlappingFileLockException busy) { /* Same-JVM second controller. */ }
             if (lock == null) throw new ContractException(ContractException.Code.UNAVAILABLE, "Another process is checking updates");
             current(captured, cancel);
+            // Only the current transfer owner may lift suppression. A stale/busy
+            // controller cannot clear another process's authentication failure.
+            if (explicitRetry) {
+                Files.deleteIfExists(directory.resolve("auth-denied"));
+                synchronized (this) { authSuppressed = false; }
+            }
             if (!explicitRetry && captured.partition.equals(readMarker("auth-denied")))
                 throw new ContractException(ContractException.Code.CREDENTIAL_UNAVAILABLE, "Update access unavailable");
             HttpTransport transport = captured.transport;

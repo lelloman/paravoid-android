@@ -41,6 +41,55 @@ public final class DeliveryControllerTest {
         }
     }
     public static void main(String[] args) throws Exception {
+        if (args.length == 2 && args[0].equals("cancel")) {
+            new CancellationSignal(Paths.get(args[1])).cancel(); return;
+        }
+        try (Control c = new Control()) {
+            c.setup.head();
+            Fake archive = new Fake(200, ARCHIVE);
+            CountDownLatch reading = new CountDownLatch(1);
+            archive.stream = new java.io.InputStream() {
+                @Override public int read() throws java.io.IOException {
+                    reading.countDown(); long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                    while (!archive.disconnected && System.nanoTime() < deadline) {
+                        try { Thread.sleep(10); }
+                        catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new java.io.IOException(failure); }
+                    }
+                    if (!archive.disconnected) throw new AssertionError("cross-process cancel did not disconnect HTTP");
+                    throw new java.io.IOException("disconnected");
+                }
+            };
+            c.setup.f.responses.add(archive); c.controller.checkNow();
+            check(reading.await(5, TimeUnit.SECONDS)); cancelFromProcess(c.preferences);
+            c.await(DeliveryController.Activity.CANCELLED); c.barrier();
+            check(archive.disconnected && c.setup.life.stages == 0 && c.setup.f.requests == 2);
+        }
+        try (Control c = new Control()) {
+            c.setup.f.responses.add(new Fake(429, new byte[0]).put("Retry-After", "3600"));
+            c.controller.checkNow(); c.await(DeliveryController.Activity.WAITING_TO_RETRY);
+            cancelFromProcess(c.preferences);
+            c.await(DeliveryController.Activity.CANCELLED); c.barrier();
+            check(c.setup.f.requests == 1);
+            check(!Files.exists(c.preferences.resolveSibling("preferences.retry")));
+        }
+        try (Control c = new Control()) {
+            Path retry = c.preferences.resolveSibling("preferences.retry");
+            new PendingRetry(c.setup.client.credentialPartition(), 0, 1, true).write(retry);
+            cancelFromProcess(c.preferences); // Original attempt's process is already gone.
+            c.controller.foreground(true); c.await(DeliveryController.Activity.CANCELLED); c.barrier();
+            check(c.setup.f.requests == 0 && !Files.exists(retry));
+            c.setup.head(); c.setup.f.responses.add(new Fake(200, ARCHIVE));
+            c.controller.checkNow(); c.await(DeliveryController.Activity.READY);
+            check(c.setup.f.requests == 2); // New explicit work is not permanently suppressed.
+        }
+        try (Control c = new Control()) {
+            c.controller.preferences(new DeliveryPreferences(true, false, false)); c.barrier();
+            c.setup.head(); c.controller.foreground(); c.barrier(); c.barrier();
+            check(c.setup.f.requests == 1);
+            c.create(); c.barrier();
+            c.controller.foreground(); c.barrier(); c.barrier();
+            check(c.setup.f.requests == 1); // Recovery UI alone is not empty bootstrap.
+        }
         try (Control c = new Control()) {
             c.setup.head(); c.setup.f.responses.add(new Fake(200, ARCHIVE));
             c.controller.checkNow();
@@ -121,12 +170,14 @@ public final class DeliveryControllerTest {
             check(c.setup.f.requests == 0); // Restart honors persisted Retry-After.
             c.controller.cancelDownload(); c.await(DeliveryController.Activity.CANCELLED); c.barrier();
             check(!Files.exists(retry));
-            new PendingRetry(c.setup.client.credentialPartition(), 0, 3, false).write(retry);
+            new PendingRetry(c.setup.client.credentialPartition(), 0, 3, false,
+                    new CancellationSignal(c.preferences).read()).write(retry);
             c.setup.f.responses.add(new Fake(503, new byte[0]));
             c.controller.foreground(true); c.await(DeliveryController.Activity.ERROR); c.barrier();
             check(c.setup.f.requests == 1 && c.worker.getQueue().isEmpty());
             check(!Files.exists(retry)); // A restart does not reset the retry budget.
-            new PendingRetry(c.setup.client.credentialPartition(), 0, 4, false).write(retry);
+            new PendingRetry(c.setup.client.credentialPartition(), 0, 4, false,
+                    new CancellationSignal(c.preferences).read()).write(retry);
             c.controller.foreground(true);
             check(c.await(DeliveryController.Activity.ERROR).errorCode.equals("RETRY_EXHAUSTED"));
             check(c.setup.f.requests == 1); // Death during the last retry cannot replay it.
@@ -139,5 +190,11 @@ public final class DeliveryControllerTest {
             check(c.setup.f.requests == 1); // Disabling automatic checks stops delayed automatic retries.
         }
         System.out.println("DeliveryControllerTest: " + TransportTest.assertions + " assertions passed");
+    }
+    private static void cancelFromProcess(Path preferences) throws Exception {
+        Process process = new ProcessBuilder(Paths.get(System.getProperty("java.home"), "bin", "java").toString(),
+                "-cp", System.getProperty("java.class.path"), DeliveryControllerTest.class.getName(),
+                "cancel", preferences.toString()).inheritIO().start();
+        check(process.waitFor(5, TimeUnit.SECONDS)); check(process.exitValue() == 0);
     }
 }

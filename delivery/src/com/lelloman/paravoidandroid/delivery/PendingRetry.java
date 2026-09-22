@@ -10,8 +10,13 @@ final class PendingRetry {
     final long dueSeconds;
     final int retries;
     final boolean explicit;
+    final String cancellationEpoch;
     PendingRetry(String partition, long dueSeconds, int retries, boolean explicit) {
+        this(partition, dueSeconds, retries, explicit, "");
+    }
+    PendingRetry(String partition, long dueSeconds, int retries, boolean explicit, String cancellationEpoch) {
         this.partition = partition; this.dueSeconds = dueSeconds; this.retries = retries; this.explicit = explicit;
+        this.cancellationEpoch = cancellationEpoch;
     }
     static PendingRetry read(Path path) throws IOException {
         if (!Files.exists(path)) return null;
@@ -25,13 +30,16 @@ final class PendingRetry {
             String explicit = p.getProperty("explicit", "");
             if (!partition.matches("[0-9a-f]{64}") || due < 0 || retries < 1 || retries > 4
                     || !(explicit.equals("true") || explicit.equals("false"))) throw new IllegalArgumentException();
-            return new PendingRetry(partition, due, retries, Boolean.parseBoolean(explicit));
+            String epoch = p.getProperty("cancellationEpoch", "");
+            if (!epoch.isEmpty() && !epoch.matches("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}")) throw new IllegalArgumentException();
+            return new PendingRetry(partition, due, retries, Boolean.parseBoolean(explicit), epoch);
         } catch (IllegalArgumentException failure) { throw new IOException("Invalid retry state"); }
     }
     void write(Path path) throws IOException {
         Properties p = new Properties();
         p.setProperty("partition", partition); p.setProperty("due", Long.toString(dueSeconds));
         p.setProperty("retries", Integer.toString(retries)); p.setProperty("explicit", Boolean.toString(explicit));
+        p.setProperty("cancellationEpoch", cancellationEpoch);
         Path tmp = Files.createTempFile(path.getParent(), "retry", ".tmp");
         try {
             try (FileOutputStream out = new FileOutputStream(tmp.toFile())) { p.store(out, "Delivery retry schedule"); out.getFD().sync(); }

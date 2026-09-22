@@ -40,10 +40,10 @@ final class CompleteRuntime {
         lifecycle = new RuntimeLifecycle(new File(app.getNoBackupFilesDir(), "paravoid-v1"), policy, scope,
             new CompleteVpkVerifier(), environment, mainProcess, source);
         lifecycle.openOrInitialize();
-        // Per-process transport files prevent two live processes from writing one partial.
-        String partition = Application.getProcessName().replace(':', '_');
+        // Delivery's OS transfer lock serializes shared partials; credential and
+        // authentication suppression must be visible in every app process.
         DeliveryClient client = new DeliveryClient(policy, new SignedMetadataVerifier(), lifecycle, environment,
-            new File(app.getNoBackupFilesDir(), "paravoid-delivery/" + partition));
+            new File(app.getNoBackupFilesDir(), "paravoid-delivery/shared-v1"));
         Handler main = new Handler(Looper.getMainLooper());
         controller = new DeliveryController(client, lifecycle, scope, environment,
             new File(app.getNoBackupFilesDir(), "paravoid-update-preferences"),
@@ -57,7 +57,7 @@ final class CompleteRuntime {
             public void onActivityCreated(Activity activity, Bundle state) {}
             public void onActivityStarted(Activity activity) {}
             public void onActivityResumed(Activity activity) {
-                if (policy.updatesEnabled && (mainProcess || shellOnly)) controller.foreground(shellOnly);
+                if (policy.updatesEnabled && (mainProcess || shellOnly)) controller.foreground();
                 if (!mainProcess || shellOnly || lease == null || uiHealthy || activity instanceof LauncherActivity) return;
                 View view = activity.getWindow().getDecorView();
                 ViewTreeObserver.OnDrawListener listener = new ViewTreeObserver.OnDrawListener() {

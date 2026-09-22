@@ -49,12 +49,13 @@ public final class DeliveryClientTest {
         final Clock clock = new Clock();
         final Life life = new Life();
         final DeliveryClient client;
+        ShellPolicy policy;
         final RequestScope scope = new RequestScope("example.app", "a".repeat(64), "stable", 30, Arrays.asList("x86_64"), 1);
         Setup(boolean apkKey) throws Exception { this(apkKey, false); }
         Setup(boolean apkKey, boolean insufficientStorage) throws Exception {
             metadata.archive = new ExpectedArchive("r1", 1, "b".repeat(64), HASH, ARCHIVE.length);
             life.clock = clock;
-            ShellPolicy policy = new ShellPolicy("example.app", "a".repeat(64),
+            policy = new ShellPolicy("example.app", "a".repeat(64),
                     new TrustPolicy("example.app", Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap(), 1, 1),
                     BASE.toString(), "stable", apkKey ? Authentication.APK_KEY : Authentication.PUBLIC,
                     Bootstrap.EMBEDDED, true, false, 1, Collections.emptyMap(), new byte[0]);
@@ -72,6 +73,14 @@ public final class DeliveryClientTest {
                     .put("ETag", "\"" + HttpTransport.hash(new byte[] {1}) + "\"");
             f.responses.add(fake); return fake;
         }
+        DeliveryClient peer() throws Exception {
+            DeliveryClient peer = new DeliveryClient(policy, metadata, life, clock, f.dir, url -> {
+                f.requests++; Fake next = f.responses.poll();
+                if (next == null) throw new AssertionError("unexpected peer HTTP"); return next;
+            }, (directory, size) -> {});
+            peer.installedCredential(new byte[] {1});
+            return peer;
+        }
         Fake cached() throws Exception {
             Fake fake = new Fake(304, new byte[0]).put("ETag", "\"" + HttpTransport.hash(new byte[] {1}) + "\"");
             f.responses.add(fake); return fake;
@@ -83,6 +92,35 @@ public final class DeliveryClientTest {
         catch (ContractException failure) { check(failure.code == code); }
     }
     public static void main(String[] args) throws Exception {
+        try (Setup s = new Setup(true)) {
+            DeliveryClient peer = s.peer();
+            s.f.responses.add(new Fake(403, new byte[0]));
+            fails("http-status", () -> s.client.check(s.scope, false, false));
+            s.clock.wall += 7 * 60 * 60; s.metadata.expiresAt = s.clock.wall + 100;
+            contractFailure(ContractException.Code.CREDENTIAL_UNAVAILABLE, () -> peer.check(s.scope, false, false));
+            check(s.f.requests == 1); // Shared denial, independent of six-hour controller throttle.
+        }
+        try (Setup s = new Setup(true)) {
+            DeliveryClient peer = s.peer();
+            s.f.responses.add(new Fake(403, new byte[0]));
+            fails("http-status", () -> s.client.check(s.scope, false, false));
+            contractFailure(ContractException.Code.CREDENTIAL_UNAVAILABLE, () -> peer.check(s.scope, false, false));
+            s.head(); s.client.check(s.scope, false, true);
+            s.head(); peer.check(s.scope, false, false);
+            check(s.f.requests == 3); // Explicit retry lifts the peer's cached denial too.
+        }
+        try (Setup s = new Setup(true)) {
+            DeliveryClient peer = s.peer();
+            s.f.responses.add(new Fake(403, new byte[0]));
+            fails("http-status", () -> s.client.check(s.scope, false, false));
+            try (java.nio.channels.FileChannel channel = java.nio.channels.FileChannel.open(s.f.dir.resolve("transfer.lock"),
+                    StandardOpenOption.WRITE); java.nio.channels.FileLock lock = channel.lock()) {
+                check(lock.isValid());
+                contractFailure(ContractException.Code.UNAVAILABLE, () -> peer.check(s.scope, false, true));
+            }
+            contractFailure(ContractException.Code.CREDENTIAL_UNAVAILABLE, () -> s.client.check(s.scope, false, false));
+            check(s.f.requests == 1); // Busy retry must not erase a denial without an attempt.
+        }
         for (boolean apkKey : new boolean[] {false, true}) try (Setup s = new Setup(apkKey)) {
             Path abandoned = s.f.dir.resolve("old-release.part"); Files.write(abandoned, new byte[] {1});
             s.head(); s.f.responses.add(new Fake(200, ARCHIVE));

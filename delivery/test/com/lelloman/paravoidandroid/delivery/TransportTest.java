@@ -16,7 +16,7 @@ public final class TransportTest {
     static final class Fake extends HttpURLConnection {
         final Map<String, List<String>> headers = new LinkedHashMap<>();
         byte[] body;
-        boolean disconnected;
+        volatile boolean disconnected;
         InputStream stream;
         Fake(int status, byte[] body) throws Exception {
             super(URL.toURL()); this.responseCode = status; this.body = body;

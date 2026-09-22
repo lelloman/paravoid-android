@@ -11,6 +11,9 @@ import java.util.function.BooleanSupplier;
 
 /** Shell-owned asynchronous controls; no background service or payload loading required. */
 public final class DeliveryController {
+    private static final ScheduledExecutorService SIGNALS = Executors.newSingleThreadScheduledExecutor(task -> {
+        Thread thread = new Thread(task, "paravoid-cancellation"); thread.setDaemon(true); return thread;
+    });
     public enum Activity { IDLE, CHECKING, WAITING_TO_RETRY, READY, CANCELLED, ERROR }
     public static final class Snapshot {
         public final LifecycleSnapshot lifecycle;
@@ -39,6 +42,9 @@ public final class DeliveryController {
     private String error;
     private FileChannel attemptChannel;
     private FileLock attemptLock;
+    private final CancellationSignal cancellation;
+    private String cancellationEpoch;
+    private ScheduledFuture<?> cancellationWatch;
 
     // One attempt, including scheduled retries, across main/recovery controllers.
     // OS releases this lock on process death; never hold a lifecycle selection lock.
@@ -57,6 +63,7 @@ public final class DeliveryController {
         catch (IOException failure) { fail("PREFERENCES_IO"); }
     }
     private void releaseAttempt() {
+        if (cancellationWatch != null) { cancellationWatch.cancel(false); cancellationWatch = null; }
         try { if (attemptLock != null) attemptLock.release(); }
         catch (IOException failure) { fail("IO"); }
         finally {
@@ -72,6 +79,7 @@ public final class DeliveryController {
             File preferenceFile, BooleanSupplier metered, ScheduledExecutorService worker, Executor callbacks) {
         this.client = Objects.requireNonNull(client); this.lifecycle = Objects.requireNonNull(lifecycle);
         this.scope = scope; this.clock = clock; this.preferenceFile = preferenceFile.toPath();
+        cancellation = new CancellationSignal(this.preferenceFile);
         this.metered = metered; this.worker = worker; this.callbacks = callbacks;
         worker.execute(() -> {
             try { preferences = DeliveryPreferences.read(this.preferenceFile); applyPreferences(); }
@@ -80,6 +88,13 @@ public final class DeliveryController {
         });
     }
     public void listen(Listener listener) { this.listener = listener; worker.execute(this::publish); }
+    /** Resolve bootstrap from lifecycle state, never from the caller's process or Activity. */
+    public void foreground() {
+        worker.execute(() -> {
+            try { foreground(lifecycle.snapshot().availability == Availability.EMPTY); }
+            catch (ContractException failure) { fail(failure.code.name()); publish(); }
+        });
+    }
     public void foreground(boolean emptyBootstrap) {
         submit(emptyBootstrap ? AttemptPolicy.Trigger.EMPTY_BOOTSTRAP : AttemptPolicy.Trigger.FOREGROUND);
     }
@@ -109,9 +124,17 @@ public final class DeliveryController {
         });
     }
     public void cancelDownload() {
+        try { cancellation.cancel(); }
+        catch (IOException failure) { worker.execute(() -> { fail("PREFERENCES_IO"); publish(); }); }
+        cancelLocal();
+    }
+    private void cancelLocal() {
         // Disconnect directly: worker may currently be blocked in an HTTP read.
-        attempts.cancel(); client.cancelDownload();
+        final long cancelledOperation;
+        synchronized (attempts) { cancelledOperation = attempts.generation(); attempts.cancel(); }
+        client.cancelDownload();
         worker.execute(() -> {
+            if (attempts.generation() != cancelledOperation) return;
             if (pendingRetry != null) pendingRetry.cancel(false);
             attempts.finish(operation); activity = Activity.CANCELLED; error = null;
             if (attemptLock != null) clearRetry();
@@ -158,6 +181,11 @@ public final class DeliveryController {
                 if (!claimAttempt()) { attempts.finish(operation); return; }
                 preferences = DeliveryPreferences.read(preferenceFile); applyPreferences();
                 resume = PendingRetry.read(retryFile());
+                cancellationEpoch = cancellation.read();
+                if (resume != null && !resume.cancellationEpoch.equals(cancellationEpoch)) {
+                    clearRetry(); resume = null;
+                    if (!explicit) { attempts.finish(operation); releaseAttempt(); activity = Activity.CANCELLED; publish(); return; }
+                }
                 if (resume != null && (explicit || !resume.partition.equals(client.credentialPartition()))) {
                     clearRetry(); resume = null;
                 }
@@ -169,6 +197,21 @@ public final class DeliveryController {
             } catch (IOException failure) {
                 attempts.finish(operation); releaseAttempt(); fail("PREFERENCES_IO"); publish(); return;
             }
+            final long watchedOperation = operation;
+            final String watchedEpoch = cancellationEpoch;
+            cancellationWatch = SIGNALS.scheduleWithFixedDelay(() -> {
+                try {
+                    if (!watchedEpoch.equals(cancellation.read())) {
+                        synchronized (attempts) {
+                            if (attempts.current(watchedOperation)) cancelLocal();
+                        }
+                    }
+                } catch (IOException failure) {
+                    synchronized (attempts) {
+                        if (attempts.current(watchedOperation)) cancelLocal();
+                    }
+                }
+            }, 0, 100, TimeUnit.MILLISECONDS);
             if (resume != null) {
                 if (resume.retries > 3) {
                     attempts.finish(operation); clearRetry(); releaseAttempt(); fail("RETRY_EXHAUSTED"); publish(); return;
@@ -197,11 +240,12 @@ public final class DeliveryController {
         if (!attempts.current(token)) return;
         activity = Activity.CHECKING; error = null; publish();
         try {
+            if (!cancellationEpoch.equals(cancellation.read())) { cancelLocal(); return; }
             if (attempts.retryCount() > 0) {
                 // Consume this retry durably before HTTP. Death during a request
                 // cannot replay the same retry indefinitely on each process restart.
                 new PendingRetry(client.credentialPartition(), clock.unixSeconds(),
-                        attempts.retryCount() + 1, explicit).write(retryFile());
+                        attempts.retryCount() + 1, explicit, cancellationEpoch).write(retryFile());
             }
             preferences = DeliveryPreferences.read(preferenceFile); applyPreferences();
             if (!explicit && !preferences.automaticChecks) {
@@ -222,7 +266,7 @@ public final class DeliveryController {
             if (delay >= 0) {
                 try {
                     new PendingRetry(client.credentialPartition(), clock.unixSeconds() + (delay + 999) / 1000,
-                            attempts.retryCount(), explicit).write(retryFile());
+                            attempts.retryCount(), explicit, cancellationEpoch).write(retryFile());
                     activity = Activity.WAITING_TO_RETRY;
                     pendingRetry = worker.schedule(() -> run(token, explicit), delay, TimeUnit.MILLISECONDS);
                     publish(); return;
