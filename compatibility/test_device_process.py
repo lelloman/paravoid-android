@@ -43,6 +43,11 @@ class ProcessDeathTest(unittest.TestCase):
                     kill_fixture_process(adb, serial, self.app, "123")
                 self.assertFalse(any(c[1] == "su" for c in calls))
 
+    def test_debug_api30_emulator_fallback(self):
+        adb, calls = self.fake_adb(deny=True, sdk="30")
+        kill_fixture_process(adb, "emulator-5584", self.app, "123")
+        self.assertEqual(calls[-1], ("shell", "su", "0", "kill", "-9", "123"))
+
     def test_changed_initial_pid_is_never_killed(self):
         adb, calls = self.fake_adb(pids=("456",))
         with self.assertRaises(RuntimeError):

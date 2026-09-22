@@ -9,13 +9,13 @@ def kill_fixture_process(adb, serial, app, pid):
     try:
         adb("shell", "run-as", app, "kill", "-9", pid)
     except RuntimeError:
-        # API 29 Google APIs rev13 denies runas_app -> untrusted_app sigkill.
+        # API 29 Google APIs rev13 and API 30 AOSP rev11 deny runas_app -> untrusted_app sigkill.
         # Only a debuggable emulator may use its existing su for this test.
         # No adb root, SELinux changes, force-stop, or physical-device fallback.
         if (not serial.startswith("emulator-")
-                or adb("shell", "getprop", "ro.build.version.sdk") != "29"
+                or adb("shell", "getprop", "ro.build.version.sdk") not in ("29", "30")
                 or adb("shell", "getprop", "ro.debuggable") != "1"
                 or adb("shell", "pidof", app, check=False) != pid):
             raise
-        print(f"Process-death harness: API 29 emulator su kills validated {app} PID {pid}", flush=True)
+        print(f"Process-death harness: debuggable API 29/30 emulator su kills validated {app} PID {pid}", flush=True)
         adb("shell", "su", "0", "kill", "-9", pid)

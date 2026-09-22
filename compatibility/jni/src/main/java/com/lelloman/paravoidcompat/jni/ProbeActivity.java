@@ -64,6 +64,9 @@ public final class ProbeActivity extends Activity {
                     }
                 });
                 JSONObject report = new JSONObject().put("run", run).put("pid", android.os.Process.myPid())
+                    .put("process64", android.os.Process.is64Bit()).put("abi", NativeBridge.abi())
+                    .put("nativeMaps", java.nio.file.Files.readAllLines(java.nio.file.Paths.get("/proc/self/maps")).stream()
+                        .filter(line -> line.contains("libprobe_jni.so")).collect(java.util.stream.Collectors.joining("\n")))
                     .put("restored", state != null).put("results", results);
                 getSharedPreferences("jni-probe", MODE_PRIVATE).edit().putString("report", report.toString()).commit();
                 runOnUiThread(() -> view.setText(results.toString()));

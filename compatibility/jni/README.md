@@ -1,5 +1,8 @@
 # JNI and native library compatibility probe
 
+For the newer production **relocated** native-library path, see
+[PAYLOAD.md](PAYLOAD.md). The original checks below cover installed native libraries.
+
 A conventional Android library dependency supplies a Java bridge and CMake-built
 native code. The app uses Paravoid's normal and shell modes without native-loading
 adapters in downstream source. Toolchain: AGP 8.13.2, NDK 27.0.12077973, CMake

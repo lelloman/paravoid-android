@@ -482,7 +482,7 @@ code stays fixed in this fixture; this is not yet full-VPK update validation.
 
 Current limits: standalone APKs and the analyzer's supported resource profile.
 Unknown reserved `assets/paravoid/` entries or unclassified `res/` files fail rather
-than silently disappear. Native payload splitting, signing the full
+than silently disappear. Signing the full
 VPK, full shell-contract validation and complete-packaging assemble integration are
 still unfinished. See [AAPT2](https://developer.android.com/tools/aapt2) and
 [zipalign](https://developer.android.com/tools/zipalign) for the underlying tools.
@@ -509,6 +509,13 @@ The JAR uses the same read-only, hash-checked no-backup cache rules as resources
 On pre-existing Binder threads, use an explicit loader for `ServiceLoader`; those
 threads do not inherit the app context loader even in normal Android packaging.
 
+Native libraries are likewise relocated into `native-libraries.zip`. Fixed,
+shell-owned ABI markers preserve Android's installed ABI selection; they contain
+no app logic. Before payload startup, the runtime verifies/extracts the matching
+process ABI into a read-only private generation directory and supplies that native
+search path to the DEX loader. App libraries are not left installed as a fallback.
+See the [native payload gate and limitations](compatibility/jni/PAYLOAD.md).
+
 The production runtime loads this embedded container before constructing the user
 Application, component factory or providers. It materializes a content-addressed,
 read-only file under no-backup storage, serializes extraction across app processes,
@@ -525,7 +532,7 @@ supported by this task. Private signing credentials are excluded from task cache
 keys; signed output is always regenerated and never build-cached.
 
 This is **embedded code + resources/assets**, not `packaging = 'complete'` or a
-signed VPK. Native libraries still live in the installed APK;
+signed VPK. All supported app content is relocated in this embedded-only stage;
 there is no empty shell, downloaded update, version activation, generation retention
 or full shell-contract check. Accepted resource-boundary checks do apply when a
 baseline is configured. Cached resource generations currently remain until app

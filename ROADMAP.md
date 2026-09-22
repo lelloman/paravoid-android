@@ -31,8 +31,10 @@ device coverage is still required.
 complete payload. The same payload is embedded in the shell for this milestone.
 An embedded first version lets us validate packaging independently of delivery.
 
-Today the plugin moves app/dependency DEX into the payload, but resources, assets,
-Java resources and native libraries still reside in the installed APK. The
+Default DEX-only assembly still leaves resources/assets/Java resources/native
+libraries installed. The explicit embedded-resource shell task now relocates all
+four app-content categories; independently signed full-VPK assembly and full
+contract integration remain unfinished. The older
 [independent-resource probe](compatibility/resources/README.md) is a manually
 constructed experiment, not the missing automatic implementation.
 
@@ -258,8 +260,8 @@ when a concrete risk or real-app failure warrants one. Do not restart an open-en
 compatibility exploration phase before finishing packaging.
 
 **Immediate next task:** extend the resource-boundary diff into the full shell
-contract and coherent payload packaging gates, then finish native
-relocation and full-VPK assembly/validation. The explicit embedded-resource APK
+contract and coherent payload packaging gates, then finish independently signed
+full-VPK assembly/validation. The explicit embedded-resource APK
 task and production early loader now pass API 30/36.1 device tests. They do not
 enable `packaging = 'complete'` or downloaded full-VPK updates.
 Finish the [remaining contract-gate scenarios](PACKAGING.md#7-first-implementation-gate)
@@ -318,3 +320,14 @@ production gate passes 25 stages each on API 30/36.1, including independent Java
 archive corruption/writability rejection. Binder-thread default ServiceLoader is
 not promised; the normal control also requires an explicit loader there. Native
 relocation, full contract/VPK integration, activation and retention remain pending.
+
+Sixth slice: the embedded shell relocates native libraries too, leaving only fixed
+ABI markers installed so PackageManager selects the original ABI/bitness. ELF
+headers and limits are checked; the runtime materializes and verifies the selected
+ABI before user code and uses only that native directory. The [native payload
+gate](compatibility/jni/PAYLOAD.md) passes 104 JNI assertions plus native cache
+corruption/writability/repair controls on API 30 and 36.1 x86_64, and API 30 with
+x86-only/32-bit packaging. ARM builds are artifact-only evidence. The filename
+profile now permits `+` for libc++. All supported app-content categories now move
+in this explicit embedded-only stage; full shell contracts, standalone signed
+VPKs, external activation, empty shells and recovery/retention remain unfinished.

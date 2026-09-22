@@ -99,6 +99,10 @@ extern "C" JNIEXPORT jstring JNICALL JNI_METHOD(abi)(JNIEnv* env, jclass) {
     std::string value = "arm64-v8a";
 #elif defined(__x86_64__)
     std::string value = "x86_64";
+#elif defined(__i386__)
+    std::string value = "x86";
+#elif defined(__arm__)
+    std::string value = "armeabi-v7a";
 #else
     std::string value = "unsupported";
 #endif

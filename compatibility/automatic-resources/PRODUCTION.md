@@ -56,7 +56,8 @@ The driver deliberately repairs cache bytes for a negative-control recovery test
 the runtime does not provide that repair mechanism to users yet.
 
 This implements production assembly/loading for an explicit embedded-resource APK
-stage, not the full v1 packaging contract. Native resources remain installed;
+stage, not the full v1 packaging contract. Native relocation is now covered by the
+separate [JNI payload gate](../jni/PAYLOAD.md);
 standalone VPK signing, external activation/leases, empty-shell adapters, cache
 retention and recovery UI are unfinished. No ARM64, release-device, R8, direct-boot,
 isolated-process or broader AGP compatibility claim follows from these runs.
