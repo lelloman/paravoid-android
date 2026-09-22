@@ -14,6 +14,12 @@ The original [fixture requirements](README.md) apply. This script selects the re
 trusted-hash Java generation or local resource-selector file is used. APK signatures
 and resource identities are generated and verified by the production task.
 
+The builder exports the three-file baseline (ledger, resource boundary and
+`embedded-apk-v1` shell contract) from A, then builds both A and B against it.
+Artifact checks require both signed shells to embed the exact accepted contract
+bytes. This covers movable resource/asset/Java-resource changes against a fixed
+build-time boundary; it is still APK replacement, not downloaded-VPK activation.
+
 ## Evidence — 2026-09-21
 
 22/22 stages passed on each of the API 30 and API 36.1 x86_64 emulators identified

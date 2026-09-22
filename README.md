@@ -500,6 +500,28 @@ container and its SHA-256 identity, aligns the APK and signs/verifies it with th
 build type's `signingConfig`. The certificate must match the input APK. Normal
 and existing DEX-only assemble outputs are unchanged; install this new APK explicitly.
 
+The task now depends on `check<Variant>ParavoidContract` and embeds a canonical
+`assets/paravoid/shell-contract.json`. The **embedded-apk-v1** build-time profile
+fingerprints installed manifest declarations (except versionCode/versionCodeMajor),
+pinned resources, shell/API class bytes, signing certificates, ABI markers, initial
+resource-ID reservations, and AGP/build-tools/compile-SDK versions. Payload code, movable resources/assets,
+Java resources and native library bytes can change without changing that contract;
+changing the ABI set or another installed boundary requires a new shell generation.
+
+For a first generation, run `export<Variant>ParavoidBaseline` without a configured
+baseline. Review and copy all three candidate files (`resource-ledger.json`,
+`resource-boundary.json`, `shell-contract.json`) into the accepted per-variant
+baseline directory described above. Configuring a baseline makes missing files or
+contract changes fail the explicit shell build. Older two-file baselines need a
+reviewed contract before using this task. The plugin never overwrites accepted
+files. As payload resources evolve, promote the updated ledger, but retain the
+original contract and its installed ID reservations. A new shell generation starts
+with a deliberately separate baseline; do not automatically accept failed diffs.
+
+This is not the future downloaded-VPK contract: distribution is currently fixed to
+embedded bootstrap/no updates. Download trust, endpoints, authentication and runtime
+VPK compatibility enforcement remain future work, not guarantees of this snapshot.
+
 The task also relocates merged Java resources into `java-resources.jar`, preserving
 the final AGP merge/exclude/pickFirst result and removing the installed copies.
 APK signatures and reserved Android build metadata are not Java payload content.

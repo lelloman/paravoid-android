@@ -3,6 +3,7 @@ package com.lelloman.paravoidandroid.gradle
 import com.android.build.api.artifact.SingleArtifact
 import com.android.build.api.artifact.ScopedArtifact
 import com.android.build.api.variant.ScopedArtifacts
+import com.android.builder.model.Version
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.GradleException
@@ -45,7 +46,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                     ['--stable-ids', it.asFile.absolutePath]
                 })
             }
-            project.tasks.register("export${cap}ParavoidResourceLedger", ExportResourceLedgerTask) {
+            def ledger = project.tasks.register("export${cap}ParavoidResourceLedger", ExportResourceLedgerTask) {
                 group = 'paravoid'
                 description = 'Exports a reviewable resource ID ledger; does not modify the accepted baseline.'
                 apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
@@ -120,7 +121,31 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
                 nativeArchive.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/native-libraries.zip"))
             }
+            def contract = project.tasks.register("generate${cap}ParavoidContract", GenerateShellContractTask) {
+                apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
+                boundaryFile.set(analysis.flatMap { it.boundaryFile })
+                ledgerFile.set(ledger.flatMap { it.ledgerFile })
+                shellClasses.set(pack.flatMap { it.shellClasses })
+                manifestFile.set(manifest.flatMap { it.outputManifest })
+                baselineFile.set(extension.baselineDirectory.file("${variant.name}/shell-contract.json"))
+                minSdk.set(variant.minSdk.apiLevel)
+                toolchain.set([agp: Version.ANDROID_GRADLE_PLUGIN_VERSION,
+                    buildTools: android.buildToolsVersion.toString(), compileSdk: android.compileSdk.toString()])
+                contractFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/baseline-candidate/shell-contract.json"))
+            }
+            project.tasks.register("export${cap}ParavoidBaseline") {
+                group = 'paravoid'
+                description = 'Exports ledger, resource boundary and embedded shell contract candidates for review.'
+                dependsOn(contract)
+            }
+            def contractCheck = project.tasks.register("check${cap}ParavoidContract", CheckShellContractTask) {
+                group = 'verification'
+                baselineFile.set(extension.baselineDirectory.file("${variant.name}/shell-contract.json"))
+                candidateFile.set(contract.flatMap { it.contractFile })
+                reportFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/shell-contract-check.txt"))
+            }
             project.tasks.register("package${cap}ParavoidResourceShell", PackageResourceShellTask) {
+                dependsOn(contractCheck)
                 group = 'paravoid'
                 description = 'Signs an embedded-resource shell APK (not a complete VPK); leaves ordinary APK outputs unchanged.'
                 apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
@@ -130,6 +155,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 nativeResourceArchive.set(nativeResources.flatMap { it.nativeArchive })
                 shellClasses.set(pack.flatMap { it.shellClasses })
                 manifestFile.set(manifest.flatMap { it.outputManifest })
+                contractFile.set(contract.flatMap { it.contractFile })
                 minSdk.set(variant.minSdk.apiLevel)
                 zipalign.set(components.sdkComponents.sdkDirectory.map { it.file("build-tools/${android.buildToolsVersion}/zipalign") })
                 def signing = android.buildTypes.getByName(variant.buildType).signingConfig

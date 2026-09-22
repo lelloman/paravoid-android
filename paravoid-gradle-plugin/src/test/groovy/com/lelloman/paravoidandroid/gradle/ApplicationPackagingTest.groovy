@@ -16,6 +16,43 @@ import static org.junit.Assert.*
 class ApplicationPackagingTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder()
 
+    @Test void gatesEmbeddedShellAgainstReviewedContractWithoutFreezingPayload() {
+        File root = fixture()
+        File build = new File(root, 'app/build.gradle')
+        build.text = build.text.replace('minSdk 28', 'minSdk 30')
+        String task = ':app:packageParavoidAndroidDebugParavoidResourceShell'
+        String export = ':app:exportParavoidAndroidDebugParavoidBaseline'
+        write(root, 'app/src/main/res/values/strings.xml', '<resources><string name="movable">A</string></resources>')
+        run(root, export).build()
+        File output = new File(root, 'app/build/outputs/paravoid/paravoidAndroidDebug')
+        File baseline = new File(root, 'app/paravoid/baseline/paravoidAndroidDebug')
+        baseline.mkdirs()
+        ['resource-ledger.json', 'resource-boundary.json', 'shell-contract.json'].each { name ->
+            new File(baseline, name).bytes = new File(output, 'baseline-candidate/' + name).bytes
+        }
+        byte[] accepted = new File(baseline, 'shell-contract.json').bytes
+        build << "\nparavoid { baselineDirectory = layout.projectDirectory.dir('paravoid/baseline') }\n"
+        run(root, task).build()
+        new ZipFile(new File(output, 'resource-shell.apk')).withCloseable {
+            assertArrayEquals(accepted, ResourceArchive.read(it, 'assets/paravoid/shell-contract.json'))
+        }
+        write(root, 'app/src/main/res/values/strings.xml', '<resources><string name="movable">B</string><string name="new_resource">New</string></resources>')
+        write(root, 'app/src/main/resources/content.txt', 'changed payload resource')
+        File activity = new File(root, 'app/src/main/java/example/MainActivity.java')
+        activity.text = activity.text.replace('int count', 'int extra = 7; int count')
+        build << '\nandroid.defaultConfig.versionCode = 2\n'
+        run(root, task).build()
+        assertArrayEquals(accepted, new File(output, 'baseline-candidate/shell-contract.json').bytes)
+        new File(baseline, 'resource-ledger.json').bytes = new File(output, 'baseline-candidate/resource-ledger.json').bytes
+        run(root, task).build()
+        assertArrayEquals(accepted, new File(output, 'baseline-candidate/shell-contract.json').bytes)
+        File manifest = new File(root, 'app/src/main/AndroidManifest.xml')
+        manifest.text = manifest.text.replace('<application ', '<uses-permission android:name="android.permission.CAMERA"/><application ')
+        // Dedicated gate reports the declaration; packaging also depends on this gate.
+        assertTrue(run(root, ':app:checkParavoidAndroidDebugParavoidContract').buildAndFail().output.contains('android.permission.CAMERA'))
+        assertArrayEquals(accepted, new File(baseline, 'shell-contract.json').bytes)
+    }
+
     @Test void packagesSignedEmbeddedResourceShellWithoutChangingNormalOrDexOnlyApks() {
         File root = fixture()
         String task = ':app:packageParavoidAndroidDebugParavoidResourceShell'

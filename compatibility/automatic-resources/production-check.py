@@ -36,11 +36,11 @@ def assemble():
                   '-alias', 'fixture', '-dname', 'CN=Paravoid resource fixture', '-keyalg', 'RSA', '-keysize', '2048', '-validity', '3650')
     def gradle(*tasks, baseline=False):
         build.gradle('-PproductionRuntime', *tasks, baseline=baseline)
-    gradle('exportParavoidAndroidADebugParavoidResourceLedger', 'analyzeParavoidAndroidADebugParavoidResources')
+    gradle('exportParavoidAndroidADebugParavoidBaseline')
     for version in ('A', 'B'):
         baseline = ROOT / f'build/baseline/paravoidAndroid{version}Debug'
         baseline.mkdir(parents=True, exist_ok=True)
-        for name in ('resource-ledger.json', 'resource-boundary.json'):
+        for name in ('resource-ledger.json', 'resource-boundary.json', 'shell-contract.json'):
             shutil.copyfile(build.outputs('A') / 'baseline-candidate' / name, baseline / name)
     gradle('packageParavoidAndroidADebugParavoidResourceShell', 'packageParavoidAndroidBDebugParavoidResourceShell',
            'assembleNormalADebug', 'lintNormalADebug', 'lintParavoidAndroidADebug', baseline=True)
@@ -49,6 +49,7 @@ def assemble():
         shell = build.outputs(version) / 'resource-shell.apk'
         shutil.copyfile(shell, OUT / f'{version}.apk')
         with zipfile.ZipFile(shell) as archive:
+            assert archive.read('assets/paravoid/shell-contract.json') == (build.outputs('A') / 'baseline-candidate/shell-contract.json').read_bytes()
             payload = archive.read('assets/paravoid/resources.apk')
             import hashlib
             assert archive.read('assets/paravoid/resources.sha256').decode() == hashlib.sha256(payload).hexdigest() + '\n'

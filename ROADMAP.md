@@ -331,3 +331,12 @@ x86-only/32-bit packaging. ARM builds are artifact-only evidence. The filename
 profile now permits `+` for libc++. All supported app-content categories now move
 in this explicit embedded-only stage; full shell contracts, standalone signed
 VPKs, external activation, empty shells and recovery/retention remain unfinished.
+
+Seventh slice: the explicit embedded-shell task now exports and checks a canonical
+`embedded-apk-v1` contract, covering installed declarations, pinned resources,
+shell/API classes, signer certificates, ABI markers, initial resource-ID reservations
+and AGP/build-tools/compile-SDK versions. It embeds the checked snapshot in the signed APK. Baseline exports
+remain review-only; evolving payload ledgers preserve the initial installed anchor.
+This is a build-time embedded profile, not downloaded-VPK verification. The next
+integration is independently signed coherent VPK assembly and its trust/distribution
+contract, followed by external selection, activation and recovery.

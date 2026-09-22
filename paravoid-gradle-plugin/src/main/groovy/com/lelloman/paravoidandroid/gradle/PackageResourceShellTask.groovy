@@ -27,6 +27,7 @@ abstract class PackageResourceShellTask extends DefaultTask {
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getNativeResourceArchive()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getShellClasses()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getManifestFile()
+    @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getContractFile()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getZipalign()
     @Input abstract Property<Integer> getMinSdk()
     @Internal abstract RegularFileProperty getKeyStoreFile()
@@ -79,7 +80,7 @@ abstract class PackageResourceShellTask extends DefaultTask {
             new ZipFile(shellResources.get().asFile).withCloseable { pinned ->
                 new ZipFile(javaResourceArchive.get().asFile).withCloseable { javaResources ->
                     writeShell(unsigned, original, pinned, payload.bytes, javaResourceArchive.get().asFile.bytes,
-                        javaResources.entries().collect { it.name }.toSet(), nativeResourceArchive.get().asFile.bytes)
+                        javaResources.entries().collect { it.name }.toSet(), nativeResourceArchive.get().asFile.bytes, contractFile.get().asFile.bytes)
                 }
             }
         }
@@ -104,7 +105,7 @@ abstract class PackageResourceShellTask extends DefaultTask {
         Files.copy(signed.toPath(), output.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
 
-    static void writeShell(File output, ZipFile original, ZipFile pinned, byte[] payload, byte[] javaResources = null, Set<String> javaPaths = [], byte[] nativeResources = null) {
+    static void writeShell(File output, ZipFile original, ZipFile pinned, byte[] payload, byte[] javaResources = null, Set<String> javaPaths = [], byte[] nativeResources = null, byte[] contract = null) {
         if (!Arrays.equals(ResourceArchive.read(original, 'AndroidManifest.xml'), ResourceArchive.read(pinned, 'AndroidManifest.xml')))
             throw new GradleException('Resource shell manifest does not match the original APK.')
         Set<String> keep = original.entries().findAll { entry ->
@@ -118,6 +119,10 @@ abstract class PackageResourceShellTask extends DefaultTask {
         }.collect { it.name }.toSet()
         if (!keep.contains('assets/paravoid/module.zip')) throw new GradleException('Embedded code bundle is missing.')
         Map<String, byte[]> replacements = [:]
+        if (contract != null) {
+            ShellContract.read(contract)
+            replacements['assets/paravoid/shell-contract.json'] = contract
+        }
         pinned.entries().each { entry ->
             if (!entry.directory) {
                 if (!(entry.name in ['AndroidManifest.xml', 'resources.arsc']) && !entry.name.startsWith('res/'))
