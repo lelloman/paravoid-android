@@ -36,7 +36,7 @@ final class GenerationStore {
             long sourceSize = expected == null ? Files.size(source.toPath()) : expected.archiveSize;
             long required = Math.addExact(Math.multiplyExact(sourceSize, 2), 64L * 1024 * 1024);
             if (sourceSize < 1 || sourceSize > Protocol.MAX_ARCHIVE_BYTES) throw fail(Code.LIMIT_EXCEEDED);
-            if (Files.getFileStore(root).getUsableSpace() < required) throw fail(Code.INSUFFICIENT_STORAGE);
+            if (root.toFile().getUsableSpace() < required) throw fail(Code.INSUFFICIENT_STORAGE);
             staging = Files.createTempDirectory(root.resolve("staging"), "generation-");
             Path archive = staging.resolve("archive.vpk");
             try (InputStream input = Files.newInputStream(source.toPath())) {
@@ -51,7 +51,7 @@ final class GenerationStore {
                 materialized = Math.addExact(materialized, entry.size);
                 if (entry.size < 0 || materialized > 2L * 1024 * 1024 * 1024) throw fail(Code.LIMIT_EXCEEDED);
             }
-            if (Files.getFileStore(root).getUsableSpace() < materialized + 64L * 1024 * 1024)
+            if (root.toFile().getUsableSpace() < materialized + 64L * 1024 * 1024)
                 throw fail(Code.INSUFFICIENT_STORAGE);
             Path components = Files.createDirectory(staging.resolve("components"));
             try (ZipFile zip = new ZipFile(archive.toFile())) {

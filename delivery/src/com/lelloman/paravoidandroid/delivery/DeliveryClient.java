@@ -57,7 +57,7 @@ public final class DeliveryClient {
                 url -> (java.net.HttpURLConnection) url.openConnection(), (directory, size) -> {
                     // Conservative reservation: B source + C private copy + maximum materialization + headroom.
                     long required = 2 * size + (2L << 30) + (64L << 20);
-                    if (Files.getFileStore(directory).getUsableSpace() < required)
+                    if (directory.toFile().getUsableSpace() < required)
                         throw new ContractException(ContractException.Code.INSUFFICIENT_STORAGE, "Insufficient update storage");
                 });
     }
