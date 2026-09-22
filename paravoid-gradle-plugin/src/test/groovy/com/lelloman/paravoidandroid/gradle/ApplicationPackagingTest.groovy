@@ -26,6 +26,10 @@ class ApplicationPackagingTest {
         manifest.text = manifest.text.replace('<application ', '<application android:label="@string/pinned" ')
         write(root, 'app/src/main/res/values/strings.xml', '<resources><string name="pinned">Shell</string><string name="movable">Payload</string></resources>')
         write(root, 'app/src/main/assets/content.txt', 'Movable asset')
+        write(root, 'app/src/main/resources/probe/merged.txt', 'app\n')
+        write(root, 'logic/src/main/resources/probe/merged.txt', 'library\n')
+        write(root, 'app/src/main/resources/probe/excluded.txt', 'excluded')
+        build << "\nandroid.packaging.resources { merges += 'probe/merged.txt'; excludes += 'probe/excluded.txt' }\n"
         run(root, ':app:assembleNormalDebug', ':app:assembleParavoidAndroidDebug').build()
         File normal = new File(root, 'app/build/outputs/apk/normal/debug/app-normal-debug.apk')
         File dexOnly = new File(root, 'app/build/outputs/apk/paravoidAndroid/debug/app-paravoidAndroid-debug.apk')
@@ -45,6 +49,20 @@ class ApplicationPackagingTest {
             assertEquals(java.security.MessageDigest.getInstance('SHA-256').digest(payload).encodeHex().toString() + '\n',
                 new String(ResourceArchive.read(zip, 'assets/paravoid/resources.sha256')))
             assertTrue(dexText(zip).contains('EmbeddedResources'))
+            assertNull(zip.getEntry('probe/merged.txt'))
+            byte[] javaResources = ResourceArchive.read(zip, 'assets/paravoid/java-resources.jar')
+            assertNotNull(javaResources)
+            Map<String, byte[]> contents = [:]
+            new ZipInputStream(new ByteArrayInputStream(javaResources)).withCloseable { jar ->
+                ZipEntry entry
+                while ((entry = jar.nextEntry) != null) contents[entry.name] = jar.readAllBytes()
+            }
+            assertFalse(contents.containsKey('probe/excluded.txt'))
+            new ZipFile(dexOnly).withCloseable { original ->
+                assertArrayEquals(ResourceArchive.read(original, 'probe/merged.txt'), contents['probe/merged.txt'])
+            }
+            assertEquals(java.security.MessageDigest.getInstance('SHA-256').digest(javaResources).encodeHex().toString() + '\n',
+                new String(ResourceArchive.read(zip, 'assets/paravoid/java-resources.sha256')))
         }
         assertTrue(run(root, ':app:packageParavoidAndroidReleaseParavoidResourceShell').buildAndFail().output.contains('requires the variant signingConfig'))
         manifest.text = manifest.text.replace('<application ', '<application android:directBootAware="true" ')

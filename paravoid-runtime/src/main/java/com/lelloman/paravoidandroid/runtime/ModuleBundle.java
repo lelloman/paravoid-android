@@ -27,7 +27,15 @@ final class ModuleBundle {
     }
 
     ClassLoader createClassLoader(ClassLoader parent, String nativeLibraryPath) throws IOException {
+        return createClassLoader(parent, nativeLibraryPath, null);
+    }
+
+    ClassLoader createClassLoader(ClassLoader parent, String nativeLibraryPath, java.io.File resources) throws IOException {
         NativeLibraryPaths.requireSupportedApi(nativeLibraryPath, Build.VERSION.SDK_INT);
+        if (resources != null) {
+            if (Build.VERSION.SDK_INT < 30) throw new IOException("Payload Java resources require API 30+");
+            parent = new PayloadResourceClassLoader(parent, resources);
+        }
         if (dexFiles.length == 1 && nativeLibraryPath == null) {
             return new InMemoryDexClassLoader(ByteBuffer.wrap(dexFiles[0]), parent);
         }

@@ -23,6 +23,7 @@ abstract class PackageResourceShellTask extends DefaultTask {
     @InputDirectory @PathSensitive(PathSensitivity.RELATIVE) abstract DirectoryProperty getApkDirectory()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getShellResources()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getPayloadResources()
+    @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getJavaResourceArchive()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getShellClasses()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getManifestFile()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getZipalign()
@@ -52,7 +53,8 @@ abstract class PackageResourceShellTask extends DefaultTask {
             } })
             throw new GradleException('Resource shells do not yet support directBootAware or isolatedProcess components.')
         new ZipFile(shellClasses.get().asFile).withCloseable {
-            if (it.getEntry('com/lelloman/paravoidandroid/runtime/EmbeddedResources.class') == null)
+            if (it.getEntry('com/lelloman/paravoidandroid/runtime/EmbeddedResources.class') == null ||
+                it.getEntry('com/lelloman/paravoidandroid/runtime/PayloadResourceClassLoader.class') == null)
                 throw new GradleException('Resource shell requires a matching runtime with EmbeddedResources support.')
         }
         List<File> apks = apkDirectory.get().asFile.listFiles().findAll { it.name.endsWith('.apk') && it.isFile() }
@@ -66,10 +68,15 @@ abstract class PackageResourceShellTask extends DefaultTask {
         File payload = payloadResources.get().asFile
         if (payload.length() <= 0 || payload.length() > 256L * 1024 * 1024)
             throw new GradleException('Embedded resource archive exceeds the current 256 MiB profile.')
+        if (javaResourceArchive.get().asFile.length() > 256L * 1024 * 1024)
+            throw new GradleException('Java-resource archive exceeds 256 MiB.')
         File unsigned = new File(temporaryDir, 'unsigned.apk')
         new ZipFile(input).withCloseable { original ->
             new ZipFile(shellResources.get().asFile).withCloseable { pinned ->
-                writeShell(unsigned, original, pinned, payload.bytes)
+                new ZipFile(javaResourceArchive.get().asFile).withCloseable { javaResources ->
+                    writeShell(unsigned, original, pinned, payload.bytes, javaResourceArchive.get().asFile.bytes,
+                        javaResources.entries().collect { it.name }.toSet())
+                }
             }
         }
         File aligned = new File(temporaryDir, 'aligned.apk')
@@ -93,12 +100,12 @@ abstract class PackageResourceShellTask extends DefaultTask {
         Files.copy(signed.toPath(), output.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
 
-    static void writeShell(File output, ZipFile original, ZipFile pinned, byte[] payload) {
+    static void writeShell(File output, ZipFile original, ZipFile pinned, byte[] payload, byte[] javaResources = null, Set<String> javaPaths = []) {
         if (!Arrays.equals(ResourceArchive.read(original, 'AndroidManifest.xml'), ResourceArchive.read(pinned, 'AndroidManifest.xml')))
             throw new GradleException('Resource shell manifest does not match the original APK.')
         Set<String> keep = original.entries().findAll { entry ->
             String name = entry.name
-            !entry.directory && name != 'resources.arsc' && !name.startsWith('res/') &&
+            !entry.directory && !javaPaths.contains(name) && name != 'resources.arsc' && !name.startsWith('res/') &&
                 (!name.startsWith('assets/') || name == 'assets/paravoid/module.zip') &&
                 !(name.startsWith('META-INF/') && (name.toUpperCase(Locale.ROOT).endsWith('.SF') ||
                     name.toUpperCase(Locale.ROOT).endsWith('.RSA') || name.toUpperCase(Locale.ROOT).endsWith('.DSA') ||
@@ -116,6 +123,11 @@ abstract class PackageResourceShellTask extends DefaultTask {
         if (!replacements.containsKey('resources.arsc')) throw new GradleException('Pinned resource table is missing.')
         replacements['assets/paravoid/resources.apk'] = payload
         replacements['assets/paravoid/resources.sha256'] = (MessageDigest.getInstance('SHA-256').digest(payload).encodeHex().toString() + '\n').getBytes('US-ASCII')
+        if (javaResources != null) {
+            if (javaResources.length > 256L * 1024 * 1024) throw new GradleException('Java-resource archive exceeds 256 MiB.')
+            replacements['assets/paravoid/java-resources.jar'] = javaResources
+            replacements['assets/paravoid/java-resources.sha256'] = (MessageDigest.getInstance('SHA-256').digest(javaResources).encodeHex().toString() + '\n').getBytes('US-ASCII')
+        }
         ResourceArchive.write(output, original, keep, replacements)
     }
 }
