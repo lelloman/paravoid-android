@@ -10,6 +10,12 @@ public final class StorageTest {
     private static void fails(ProcessLocks.Operation<Void> action) throws Exception {
         try { action.run(); throw new AssertionError("Expected IOException"); } catch (IOException expected) { }
     }
+    private static boolean unleased(Path path, ProcessLocks.Operation<Void> action) throws IOException {
+        return ProcessLocks.selection(path.getParent().resolve("selection.lock"), () -> ProcessLocks.ifUnleased(path, action));
+    }
+    private static boolean remove(OwnedArchive archive, Set<Path> protectedPaths, Path lease) throws IOException {
+        return ProcessLocks.selection(lease.getParent().resolve("selection.lock"), () -> archive.removeIfUnprotected(protectedPaths, lease));
+    }
     private static Process child(String mode, Path root) throws IOException {
         return new ProcessBuilder(System.getProperty("java.home") + "/bin/java", "-cp",
             System.getProperty("java.class.path"), StorageTest.class.getName(), mode, root.toString())
@@ -77,15 +83,19 @@ public final class StorageTest {
         Process one = child("lease", root), two = child("lease", root);
         try {
             ready(one); ready(two);
-            check(!ProcessLocks.ifUnleased(root.resolve("a.lock"), () -> { throw new AssertionError(); }));
+            check(!unleased(root.resolve("a.lock"), () -> { throw new AssertionError(); }));
             one.destroyForcibly(); check(one.waitFor(10, TimeUnit.SECONDS));
-            check(!ProcessLocks.ifUnleased(root.resolve("a.lock"), () -> { throw new AssertionError(); }));
+            check(!unleased(root.resolve("a.lock"), () -> { throw new AssertionError(); }));
             two.destroyForcibly(); check(two.waitFor(10, TimeUnit.SECONDS));
-            check(ProcessLocks.ifUnleased(root.resolve("a.lock"), () -> null));
+            check(unleased(root.resolve("a.lock"), () -> null));
         } finally { one.destroyForcibly(); two.destroyForcibly(); }
-        ProcessLocks.leaseForProcess(root.resolve("b.lock"));
-        ProcessLocks.leaseForProcess(root.resolve("b.lock"));
-        check(!ProcessLocks.ifUnleased(root.resolve("b.lock"), () -> { throw new AssertionError(); }));
+        ProcessLocks.selection(root.resolve("selection.lock"), () -> {
+            ProcessLocks.leaseForProcess(root.resolve("b.lock")); return null;
+        });
+        ProcessLocks.selection(root.resolve("selection.lock"), () -> {
+            ProcessLocks.leaseForProcess(root.resolve("b.lock")); return null;
+        });
+        check(!unleased(root.resolve("b.lock"), () -> { throw new AssertionError(); }));
         System.out.println("PASS shared leases: two processes, partial death, final death, repeated local acquisition");
         new AtomicRecord(root.resolve("counter")).write(new byte[4]);
         List<Process> racers = new ArrayList<>();
@@ -95,5 +105,35 @@ public final class StorageTest {
         } finally { for (Process process : racers) process.destroyForcibly(); }
         check(java.nio.ByteBuffer.wrap(new AtomicRecord(root.resolve("counter")).read()).getInt() == 160);
         System.out.println("PASS selection journal races: four processes, 160 durable transactions");
+        Path staging = Files.createDirectory(root.resolve("staging"));
+        Path accepted = Files.createDirectory(root.resolve("accepted"));
+        byte[] download = { 3, 4, 5 };
+        byte[] identity = AtomicRecord.hash(download);
+        OwnedArchive.Verification fake = owned -> check(Arrays.equals(Files.readAllBytes(owned), new byte[] {3, 4, 5}));
+        OwnedArchive prepared = OwnedArchive.prepare(staging, new ByteArrayInputStream(download), 3, identity, fake);
+        download[0] = 9; // Transport can mutate its bytes after handoff without affecting owned bytes.
+        OwnedArchive published = ProcessLocks.selection(root.resolve("selection.lock"), () -> prepared.publish(accepted));
+        check(!Files.exists(prepared.path));
+        published.reverify(fake);
+        fails(() -> { OwnedArchive.prepare(staging, new ByteArrayInputStream(download), 3, identity, fake); return null; });
+        fails(() -> { OwnedArchive.prepare(staging, new ByteArrayInputStream(new byte[] {3,4,5}), 2, identity, fake); return null; });
+        fails(() -> { OwnedArchive.prepare(staging, new ByteArrayInputStream(new byte[] {3,4}), 3, identity, fake); return null; });
+        fails(() -> { OwnedArchive.prepare(staging, new ByteArrayInputStream(new byte[] {3,4,5}), 3, identity,
+            owned -> { throw new IOException("fake verifier rejection"); }); return null; });
+        try (java.util.stream.Stream<Path> files = Files.list(staging)) { check(files.count() == 0); }
+        check(!remove(published, Collections.singleton(published.path), root.resolve("a.lock")));
+        Process holder = child("lease", root);
+        try {
+            ready(holder);
+            check(!remove(published, Collections.emptySet(), root.resolve("a.lock")));
+        } finally { holder.destroyForcibly(); check(holder.waitFor(10, TimeUnit.SECONDS)); }
+        Files.setPosixFilePermissions(published.path, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+        fails(() -> { published.reverify(fake); return null; });
+        Files.write(published.path, new byte[] { 8, 4, 5 });
+        Files.setPosixFilePermissions(published.path, java.nio.file.attribute.PosixFilePermissions.fromString("r--------"));
+        fails(() -> { published.reverify(fake); return null; });
+        check(remove(published, Collections.emptySet(), root.resolve("a.lock")));
+        check(!Files.exists(published.path));
+        System.out.println("PASS owned archives: private copy, fake verification, read-only publication, bounds/corruption, protected/leased cleanup");
     }
 }
