@@ -58,7 +58,10 @@ security sandbox against app code already executing in the same process.
 
 ## Status
 
-First slice: compilable interfaces/value types and immutability tests. Full archive
-verification and executable signed vectors follow in separate commits. No stub
-verifier is shipped, and these declarations alone do not authorize downloads.
+Implemented: compilable interfaces/value types, immutable-value tests, strict
+bounded JSON and `SignedMetadataVerifier` for head/grant/trust metadata. Checked-in
+positive/negative signed metadata vectors are under `src/test/resources/metadata-vectors`.
+They include two head versions, not complete A/B VPK archives. Full archive
+verification and executable VPK vectors follow in separate commits. No stub
+archive verifier is shipped, and metadata authentication alone does not authorize downloads.
 The wire schemas remain V1.md; public interoperability/security freeze is pending.
