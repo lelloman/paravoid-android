@@ -2,6 +2,13 @@
 
 Agreed 2026-09-22. Starting implementation baseline: `aeefcb3`.
 
+Consolidation update: at the user's request all three implementations now continue
+on `v1/packaging`, rebased onto lifecycle with delivery's implementation commits
+applied and duplicate foundations skipped. The delegated branches remain untouched.
+Actual shared APIs/status are documented in `paravoid-contract/README.md`; integrated
+evidence and remaining gates are in `integration-v1/README.md`. The ownership table
+below records the original division, not three agents still concurrently editing.
+
 This document divides the remaining work into three tracks. [V1.md](V1.md) is
 the selected product, archive, signing and update design; [DISTRIBUTION.md](DISTRIBUTION.md)
 and [PACKAGING.md](PACKAGING.md) provide supporting context. Do not invent a

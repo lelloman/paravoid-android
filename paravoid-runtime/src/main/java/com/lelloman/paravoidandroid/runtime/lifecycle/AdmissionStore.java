@@ -2,6 +2,7 @@ package com.lelloman.paravoidandroid.runtime.lifecycle;
 
 import com.lelloman.paravoidandroid.contract.ContractException;
 import com.lelloman.paravoidandroid.contract.ContractException.Code;
+import com.lelloman.paravoidandroid.contract.InstalledStateSource;
 import com.lelloman.paravoidandroid.contract.Protocol.*;
 import java.io.*;
 import java.nio.file.*;
@@ -18,9 +19,14 @@ final class AdmissionStore {
     private final ShellPolicy policy;
     private final Clock clock;
     private final AtomicRecord record;
+    private final InstalledStateSource installed;
 
     AdmissionStore(Path root, ShellPolicy policy, Clock clock) {
+        this(root, policy, clock, null);
+    }
+    AdmissionStore(Path root, ShellPolicy policy, Clock clock, InstalledStateSource installed) {
         this.root = root; this.policy = policy; this.clock = clock;
+        this.installed = installed;
         this.record = new AtomicRecord(root.resolve("security"));
     }
 
@@ -36,6 +42,14 @@ final class AdmissionStore {
 
     private interface Transaction<T> { T run(State state) throws ContractException, IOException; }
     private <T> T transaction(Transaction<T> operation) throws ContractException {
+        return transaction(operation, false, null, false);
+    }
+    private <T> T transaction(Transaction<T> operation, boolean assertCredential, CredentialScope claimed, boolean useStoredCredential) throws ContractException {
+        // Read/cryptographic work is outside selection. The short identity check below linearizes authorization.
+        InstalledStateSource.Snapshot current = installed == null ? null : installed.read();
+        if (installed != null && current == null) throw failure(Code.INCOMPATIBLE);
+        if (current != null && (!policy.applicationId.equals(current.policy.applicationId)
+                || !policy.shellContractId.equals(current.policy.shellContractId))) throw failure(Code.INCOMPATIBLE);
         final ContractException[] problem = new ContractException[1];
         try {
             T result = ProcessLocks.selection(root.resolve("selection.lock"), () -> {
@@ -45,7 +59,18 @@ final class AdmissionStore {
                 if (!policy.applicationId.equals(state.applicationId)) {
                     problem[0] = failure(Code.CORRUPT_STATE); return null;
                 }
-                try { return operation.run(state); }
+                try {
+                    if (current != null) {
+                        if (!installed.isCurrent(current)) throw failure(Code.CREDENTIAL_CHANGED);
+                        String live = current.credential == null ? null : current.credential.id;
+                        if (assertCredential && (!Objects.equals(live, claimed == null ? null : claimed.id)
+                                || (claimed != null && (claimed.authentication != current.credential.authentication
+                                || claimed.issuedAt != current.credential.issuedAt || claimed.expiresAt != current.credential.expiresAt))))
+                            throw failure(Code.CREDENTIAL_CHANGED);
+                        if (useStoredCredential && !Objects.equals(live, state.credential)) throw failure(Code.CREDENTIAL_CHANGED);
+                    }
+                    return operation.run(state);
+                }
                 catch (ContractException e) { problem[0] = e; return null; }
             });
             if (problem[0] != null) throw problem[0];
@@ -64,7 +89,7 @@ final class AdmissionStore {
                 record.write(encode(state));
             }
             return null;
-        });
+        }, true, credential, false);
     }
 
     AdmissionResult observeHead(VerifiedHead head, CredentialScope credential) throws ContractException {
@@ -110,7 +135,7 @@ final class AdmissionStore {
             }
             record.write(encode(state));
             return new AdmissionResult(head.status, id, head.release);
-        });
+        }, true, credential, false);
     }
 
     /** Preliminary lookup only; preparation must be followed by authorizePublication. */
@@ -138,7 +163,7 @@ final class AdmissionStore {
             anchor(state, sample);
             record.write(encode(state));
             return publication.run(a.release);
-        });
+        }, false, null, true);
     }
 
     /** Embedded authorization still obeys lineage knowledge and never resets it. */

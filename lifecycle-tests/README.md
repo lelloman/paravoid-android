@@ -69,3 +69,20 @@ in LifecycleTest verify ownership/control flow only, not VPK interoperability.
 
 See PLAN.md for slice-by-slice implementation notes and earlier limitations that
 are superseded by this current handoff.
+
+## Consolidated follow-up
+
+The branches have been consolidated on `v1/packaging`. `CompleteVpkVerifier` and
+`integration-v1/run.sh` now exercise actual Android-built signed A/B content through
+delivery and lifecycle on the host; this is not yet installed-app startup evidence.
+
+The stale credential question above is addressed by `InstalledStateSource`: C reads
+current authority outside selection, then checks its identity inside admission/
+publication. Old non-null and null assertions cannot supersede the actual APK's
+scope, and changed shell contracts reject old instances. `InstalledAuthorityTest`
+covers replacement and final-check races. The full APK profile requires this source;
+Android PackageManager and early-loader wiring remain to be completed.
+
+Byte repair below the lineage floor remains deliberately rejected. Retained accepted
+payloads may run offline, but a new download must not bypass the floor; publish a
+higher-version forward repair instead.

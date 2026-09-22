@@ -38,8 +38,8 @@ except for explicitly ephemeral keys/endpoint/head times.
 
 ## Remaining consolidated work
 
-- Complete Gradle DSL/tasks and production installed-policy carrier.
-- Credential authority tied to the currently installed APK across old processes.
+- Complete Gradle DSL/tasks and embedding of the implemented installed-policy carrier.
+- Android adapter for the implemented current-APK credential authority.
 - Early loader, boot-clock adapter, shell-only recovery process and controls wiring.
 - First-initialization recovery, storage admission and unavailable-component adapters.
 - Installed-app API 30/36.1 fault/repair tests; real-app, signed-release and physical

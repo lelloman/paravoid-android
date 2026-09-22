@@ -19,16 +19,28 @@ public final class RuntimeLifecycle implements Lifecycle {
     private final AdmissionStore admission;
     private final GenerationStore generations;
     private final boolean mainProcess;
+    private final ShellPolicy policy;
+    private final InstalledStateSource installed;
 
     /** Opens established state. Missing/damaged state never triggers initialization. Use Android no-backup storage. */
     public RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
             Clock clock, boolean mainProcess) throws ContractException {
+        this(root, policy, device, verifier, clock, mainProcess, null);
+    }
+    public RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
+            Clock clock, boolean mainProcess, InstalledStateSource installed) throws ContractException {
         this.root = root.toPath().toAbsolutePath().normalize(); this.mainProcess = mainProcess;
+        this.policy = policy; this.installed = installed;
+        if (installed == null && policy.contractDescriptor().length != 0) {
+            Object descriptor = StrictJson.parse(policy.contractDescriptor(), InstalledPolicyCodec.MAX_BYTES);
+            if (descriptor instanceof Map && InstalledPolicyCodec.PROFILE.equals(((Map<?,?>)descriptor).get("profile")))
+                throw new ContractException(Code.INCOMPATIBLE, "Complete APK lifecycle requires installed-state authority");
+        }
         admission = new AdmissionStore(this.root, policy, new AdmissionStore.Clock() {
             public long unixSeconds() { return clock.unixSeconds(); }
             public long elapsedSeconds() { return clock.elapsedSeconds(); }
             public String bootId() { return clock.bootId(); }
-        });
+        }, installed);
         generations = new GenerationStore(this.root, policy, device, verifier);
     }
 
@@ -72,9 +84,13 @@ public final class RuntimeLifecycle implements Lifecycle {
         long bytes = storageBytes(); return selection(j -> j.snapshot(bytes));
     }
     @Override public GenerationLease acquireForProcess() throws ContractException {
+        InstalledStateSource.Snapshot current = currentInstalled();
         synchronized (PROCESS_HANDLES) {
             Lease existing = PROCESS_HANDLES.get(root);
-            if (existing != null) { existing.beforeUserCode(); return existing; }
+            if (existing != null) {
+                if (!policy.shellContractId.equals(existing.release().shellContractId)) throw fail(Code.INCOMPATIBLE);
+                existing.beforeUserCode(); return existing;
+            }
             // Staging may supersede a candidate while its bytes are verified. Bound local retries, never load stale paths.
             for (int attempt = 0; attempt < 3; attempt++) {
                 SelectionJournal.Generation candidate = selection(SelectionJournal::candidate);
@@ -88,7 +104,10 @@ public final class RuntimeLifecycle implements Lifecycle {
                     throw rejected;
                 }
                 try {
-                    SelectionJournal.Generation acquired = selection(j -> j.acquire(candidate));
+                    SelectionJournal.Generation acquired = selection(j -> {
+                        if (current != null && !installed.isCurrent(current)) throw fail(Code.CREDENTIAL_CHANGED);
+                        return j.acquire(candidate);
+                    });
                     Lease handle = new Lease(acquired, loaded); PROCESS_HANDLES.put(root, handle); return handle;
                 } catch (ContractException changed) {
                     if (changed.code != Code.UNAVAILABLE) throw changed;
@@ -98,9 +117,13 @@ public final class RuntimeLifecycle implements Lifecycle {
         }
     }
     @Override public void retryQuarantined(ExpectedArchive release) throws ContractException {
+        InstalledStateSource.Snapshot current = currentInstalled();
         SelectionJournal.Generation candidate = selection(j -> j.selectedForRetry(release));
         generations.load(candidate); // An intact retry is explicit; corruption must be repaired with verified bytes.
-        selection(j -> { j.retry(candidate); return null; });
+        selection(j -> {
+            if (current != null && !installed.isCurrent(current)) throw fail(Code.CREDENTIAL_CHANGED);
+            j.retry(candidate); return null;
+        });
     }
     @Override public void setRetainedPrevious(int count) throws ContractException {
         selection(j -> { j.retain(count); return null; });
@@ -181,7 +204,11 @@ public final class RuntimeLifecycle implements Lifecycle {
         public VerifiedRelease release() { return loaded.release; }
         public GenerationFiles files() { return loaded.files; }
         public void beforeUserCode() throws ContractException {
-            selection(j -> { j.checkEntry(generation); return null; }); // Trial already durable before paths were returned.
+            InstalledStateSource.Snapshot current = currentInstalled();
+            selection(j -> {
+                if (current != null && !installed.isCurrent(current)) throw fail(Code.CREDENTIAL_CHANGED);
+                j.checkEntry(generation); return null;
+            }); // Trial already durable before paths were returned.
         }
         public synchronized void applicationCreated() throws ContractException {
             selection(j -> { j.applicationCreated(generation); return null; }); applicationCreated = true;
@@ -193,6 +220,13 @@ public final class RuntimeLifecycle implements Lifecycle {
         public void startupFailed(Code safeReason) throws ContractException {
             selection(j -> { j.failed(generation, Objects.requireNonNull(safeReason)); return null; });
         }
+    }
+    private InstalledStateSource.Snapshot currentInstalled() throws ContractException {
+        if (installed == null) return null;
+        InstalledStateSource.Snapshot current = installed.read();
+        if (current == null || !policy.applicationId.equals(current.policy.applicationId)
+                || !policy.shellContractId.equals(current.policy.shellContractId)) throw fail(Code.INCOMPATIBLE);
+        return current;
     }
     private static ContractException fail(Code code) { return new ContractException(code, "Runtime lifecycle: " + code.name()); }
 }
