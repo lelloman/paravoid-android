@@ -6,11 +6,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.*;
 import java.util.*;
+import com.lelloman.paravoidandroid.contract.Protocol;
 
 /** Internal byte transport. All signed identities must come from the shared verifier. */
 final class HttpTransport {
-    static final long MAX_ARCHIVE = 1L << 30;
-    static final int MAX_HEAD = 64 * 1024;
+    static final long MAX_ARCHIVE = Protocol.MAX_ARCHIVE_BYTES;
+    static final int MAX_HEAD = Protocol.MAX_HEAD_BYTES;
     interface Connections { HttpURLConnection open(URL url) throws IOException; }
 
     static final class Failure extends IOException {

@@ -5,6 +5,8 @@ import com.lelloman.paravoidandroid.contract.Protocol.*;
 import java.io.*;
 import java.net.URI;
 import java.nio.file.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.channels.*;
 import java.util.*;
 
 /** Blocking worker-thread delivery orchestration; never selects or executes a payload. */
@@ -19,7 +21,10 @@ public final class DeliveryClient {
     private static final class Session {
         final CredentialScope credential;
         final HttpTransport transport;
-        Session(CredentialScope credential, HttpTransport transport) { this.credential = credential; this.transport = transport; }
+        final String partition;
+        Session(CredentialScope credential, HttpTransport transport, String partition) {
+            this.credential = credential; this.transport = transport; this.partition = partition;
+        }
     }
     private static final class Cache {
         final Session session;
@@ -65,9 +70,7 @@ public final class DeliveryClient {
 
     /** At process startup/APK replacement. Null is valid only for public mode. No asset fallback. */
     public synchronized void installedCredential(byte[] grantEnvelope) throws ContractException, IOException {
-        if (active != null) active.cancel();
-        session = null; cache = null; authSuppressed = false;
-        lifecycle.setCredentialScope(null); // Fail closed even if extraction/verification subsequently fails.
+        invalidateCredential();
         CredentialScope credential;
         String bearer = null;
         if (policy.authentication == Authentication.PUBLIC) credential = CredentialScope.publicAccess();
@@ -80,13 +83,31 @@ public final class DeliveryClient {
         }
         HttpTransport transport = new HttpTransport(URI.create(policy.baseUrl), policy.debugHttpAllowed, bearer, connections);
         Files.createDirectories(directory);
+        String partition = HttpTransport.hash((policy.shellContractId + ":" + credential.id).getBytes(StandardCharsets.UTF_8));
         // Isolated B-only directory: credential replacement removes all abandoned partials.
         // An active old worker owns its open file until its finally block; its scope cannot be reused.
-        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "*.part")) {
-            for (Path file : files) Files.deleteIfExists(file);
+        if (!partition.equals(readMarker("credential-scope"))) {
+            try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "*.part")) {
+                for (Path file : files) Files.deleteIfExists(file);
+            }
+            Files.deleteIfExists(directory.resolve("auth-denied"));
+            writeMarker("credential-scope", partition);
         }
         lifecycle.setCredentialScope(credential);
-        session = new Session(credential, transport);
+        authSuppressed = partition.equals(readMarker("auth-denied"));
+        session = new Session(credential, transport, partition);
+    }
+
+    /** Caller obtains this path from Android ApplicationInfo.sourceDir, never a downloaded file. */
+    public synchronized void installedApk(File installedBaseApk) throws ContractException, IOException {
+        invalidateCredential();
+        installedCredential(policy.authentication == Authentication.PUBLIC ? null : ApkGrantReader.read(installedBaseApk));
+    }
+
+    private void invalidateCredential() throws ContractException {
+        if (active != null) active.cancel();
+        session = null; cache = null; authSuppressed = false;
+        lifecycle.setCredentialScope(null);
     }
 
     /** Must run off the UI thread. explicitRetry lifts HTTP auth suppression, never grant checks. */
@@ -97,7 +118,11 @@ public final class DeliveryClient {
         synchronized (this) {
             if (!policy.updatesEnabled) throw new ContractException(ContractException.Code.UNAVAILABLE, "Updates disabled by shell policy");
             if (active != null) throw new ContractException(ContractException.Code.UNAVAILABLE, "Update already in progress");
-            if (explicitRetry) authSuppressed = false;
+            if (session != null && session.partition.equals(readMarker("auth-denied"))) authSuppressed = true;
+            if (explicitRetry) {
+                Files.deleteIfExists(directory.resolve("auth-denied"));
+                authSuppressed = false;
+            }
             if (session == null || authSuppressed)
                 throw new ContractException(ContractException.Code.CREDENTIAL_UNAVAILABLE, "Update access unavailable");
             if (!scope.applicationId.equals(policy.applicationId) || !scope.shellContractId.equals(policy.shellContractId)
@@ -109,7 +134,13 @@ public final class DeliveryClient {
         }
         Path partial = null;
         boolean handedOff = false;
+        FileChannel lockChannel = null;
+        FileLock lock = null;
         try {
+            lockChannel = FileChannel.open(directory.resolve("transfer.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+            try { lock = lockChannel.tryLock(); }
+            catch (OverlappingFileLockException busy) { /* Same-JVM second controller. */ }
+            if (lock == null) throw new ContractException(ContractException.Code.UNAVAILABLE, "Another process is checking updates");
             HttpTransport transport = captured.transport;
             URI headUri = transport.headUri(scope.applicationId, scope.shellContractId, scope.channel, scope.sdk, scope.abis, scope.runtimeAbi);
             HttpTransport.HeadBytes response = transport.head(headUri, cached == null ? null : "\"" + cached.head.envelopeSha256 + "\"", cancel);
@@ -140,19 +171,48 @@ public final class DeliveryClient {
             return new Result(admission.status, staged);
         } catch (HttpTransport.Failure failure) {
             if (failure.status == 401 || failure.status == 403) synchronized (this) {
-                if (session == captured) authSuppressed = true;
+                if (session == captured) {
+                    authSuppressed = true;
+                    writeMarker("auth-denied", captured.partition);
+                }
             }
             throw failure;
         } finally {
             synchronized (this) {
                 try {
                     if (partial != null && (handedOff || session != captured)) Files.deleteIfExists(partial);
-                } finally { if (active == cancel) active = null; }
+                } finally {
+                    try { if (lock != null) lock.release(); }
+                    finally {
+                        try { if (lockChannel != null) lockChannel.close(); }
+                        finally { if (active == cancel) active = null; }
+                    }
+                }
             }
         }
     }
 
     public synchronized void cancelDownload() { if (active != null) active.cancel(); }
+    private String readMarker(String name) throws IOException {
+        Path path = directory.resolve(name);
+        if (!Files.exists(path)) return null;
+        try (InputStream input = Files.newInputStream(path)) {
+            byte[] bytes = new byte[65]; int total = 0, count;
+            while (total < bytes.length && (count = input.read(bytes, total, bytes.length - total)) != -1) total += count;
+            if (total != 64) return null;
+            String value = new String(bytes, 0, total, StandardCharsets.US_ASCII);
+            return value.matches("[0-9a-f]{64}") ? value : null;
+        }
+    }
+    private void writeMarker(String name, String value) throws IOException {
+        Path temporary = Files.createTempFile(directory, name, ".tmp");
+        try {
+            try (FileOutputStream output = new FileOutputStream(temporary.toFile())) {
+                output.write(value.getBytes(StandardCharsets.US_ASCII)); output.getFD().sync();
+            }
+            Files.move(temporary, directory.resolve(name), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } finally { Files.deleteIfExists(temporary); }
+    }
     private synchronized void current(Session captured, HttpTransport.Cancellation cancel) throws ContractException, IOException {
         if (session != captured) throw new ContractException(ContractException.Code.CREDENTIAL_CHANGED, "Installed credential changed");
         cancel.check();

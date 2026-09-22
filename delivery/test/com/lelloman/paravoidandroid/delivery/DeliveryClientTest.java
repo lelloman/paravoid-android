@@ -32,7 +32,10 @@ public final class DeliveryClientTest {
             return new StageResult(StageStatus.PENDING, last.release);
         }
         public StageResult stageEmbedded(File archive) { throw new AssertionError("delivery must not stage embedded"); }
-        public LifecycleSnapshot snapshot() { throw new AssertionError("not used"); }
+        public LifecycleSnapshot snapshot() {
+            return new LifecycleSnapshot(Availability.RUNNABLE, null, stages == 0 ? null : last.release,
+                    null, stages > 0, 1, 0, null);
+        }
         public GenerationLease acquireForProcess() { throw new AssertionError("delivery must never select or execute"); }
         public void retryQuarantined(ExpectedArchive release) { throw new AssertionError("not a download action"); }
         public void setRetainedPrevious(int count) { throw new AssertionError("not used"); }
@@ -77,7 +80,7 @@ public final class DeliveryClientTest {
             s.head(); s.f.responses.add(new Fake(200, ARCHIVE));
             DeliveryClient.Result result = s.client.check(s.scope, true, false);
             check(result.stage.status == StageStatus.PENDING); check(s.life.stages == 1);
-            try (java.util.stream.Stream<Path> files = Files.list(s.f.dir)) { check(files.count() == 0); }
+            try (DirectoryStream<Path> files = Files.newDirectoryStream(s.f.dir, "*.part")) { check(!files.iterator().hasNext()); }
             s.cached(); s.client.check(s.scope, false, false);
             check(s.life.observations == 2); check(s.metadata.headVerifications == 1);
             s.clock.wall = 1100; s.clock.elapsed = 100000;
@@ -98,6 +101,8 @@ public final class DeliveryClientTest {
             fails("http-status", () -> s.client.check(s.scope, true, false));
             contractFailure(ContractException.Code.CREDENTIAL_UNAVAILABLE, () -> s.client.check(s.scope, true, false));
             check(s.f.requests == 1);
+            s.client.installedCredential(new byte[] {1}); // Same APK/process restart preserves suppression.
+            contractFailure(ContractException.Code.CREDENTIAL_UNAVAILABLE, () -> s.client.check(s.scope, true, false));
             s.head(); s.client.check(s.scope, false, true); check(s.f.requests == 2);
             s.f.responses.add(new Fake(status, new byte[0]));
             fails("http-status", () -> s.client.check(s.scope, false, false));
@@ -106,6 +111,13 @@ public final class DeliveryClientTest {
             Fake fresh = s.head(); s.client.check(s.scope, false, false);
             check(fresh.getRequestProperty("If-None-Match") == null);
             check(fresh.getRequestProperty("Authorization").equals("Bearer " + "B".repeat(43)));
+        }
+        try (Setup s = new Setup(true)) {
+            Files.write(s.f.partial, new byte[] {1, 2, 3});
+            s.client.installedCredential(new byte[] {1});
+            check(Files.size(s.f.partial) == 3); // Same credential preserves resumable bytes.
+            s.client.installedCredential(new byte[] {2});
+            check(!Files.exists(s.f.partial));
         }
         try (Setup s = new Setup(true)) {
             contractFailure(ContractException.Code.CREDENTIAL_UNAVAILABLE, () -> s.client.installedCredential(null));
