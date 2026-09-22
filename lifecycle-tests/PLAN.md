@@ -117,3 +117,35 @@ identity reuse, rejected input not poisoning floors, non-available heads, invali
 wall/elapsed rollback, reboot, contract replacement and corrupt/missing state.
 APK-key tests cover replacement races, denied public fallback and grant expiration.
 These are fake-authenticated-object tests, not executable signature-vector evidence.
+
+## Selection/trial journal (follow-up)
+
+`SelectionJournal` uses the same selection lock as admission publication. It records
+selected/pending/last-healthy identities, trial attempt count, quarantine, bounded
+rejection references and retention preferences. Staging never changes selected.
+A candidate is snapshotted, verified outside selection, then identity-rechecked
+under selection before a lifetime lease and durable trial can be returned. A stale
+verification requires a retry; a rejected pending candidate leaves selected intact.
+The eventual facade must protect/reverify every materialized component, not just
+pass these references as proof. Directory identities must never be reused.
+
+Subprocess tests prove joining a leased generation, activation only after both
+processes exit, background progress remaining trial, two incomplete cold attempts,
+caught failure not undone by later success callbacks, explicit retry and newer
+forward repair. Retention protects selected/pending and configured healthy history.
+Quarantine never selects a retained older archive. Corrupt journals fail closed.
+
+New archive-publication death tests cover before rename, after rename and after
+parent-directory force. Orphan archives leave the independent selection unchanged.
+Lock-order assertions reject leases outside selection, nested selection and long
+reverification under selection.
+
+`ANDROID_HOME=/home/lelloman/Android/Sdk ./gradlew :paravoid-runtime:testDebugUnitTest
+--offline --no-daemon` passes in this worktree with its own plugin build output.
+
+Still pending: complete Lifecycle/GenerationLease facade; signed archive verifier
+and real release fixtures from A; materialized component storage and byte-repair
+publication; startup/main-frame adapter and unavailable component inventory/routing;
+Android tests; capacity reservation and bounded orphan cleanup. In particular the
+journal's identical-selected staging result is not yet the corrupted-byte repair
+path, and its health helper relies on the future facade to enforce callback order.

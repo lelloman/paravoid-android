@@ -60,11 +60,18 @@ final class OwnedArchive {
 
     /** Caller holds selection lock. Unique destinations are never overwritten or activated. */
     OwnedArchive publish(Path accepted) throws IOException {
+        return publish(accepted, boundary -> {});
+    }
+
+    OwnedArchive publish(Path accepted, AtomicRecord.Fault fault) throws IOException {
         ProcessLocks.requireSelection();
         Path target = accepted.resolve(UUID.randomUUID() + ".vpk");
+        fault.at("before-publication");
         Files.move(path, target, StandardCopyOption.ATOMIC_MOVE);
+        fault.at("archive-renamed");
         AtomicRecord.syncDirectory(accepted);
         if (!path.getParent().equals(accepted)) AtomicRecord.syncDirectory(path.getParent());
+        fault.at("archive-synced");
         return new OwnedArchive(target, size, digest);
     }
 

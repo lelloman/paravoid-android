@@ -38,6 +38,13 @@ public final class StorageTest {
                 });
                 System.out.println("ready"); System.out.flush();
                 Thread.sleep(60000);
+            } else if (args[0].startsWith("publish-")) {
+                byte[] bytes = { 3, 4, 5 };
+                OwnedArchive owned = OwnedArchive.prepare(root.resolve("staging"), new ByteArrayInputStream(bytes),
+                    bytes.length, AtomicRecord.hash(bytes), path -> {});
+                ProcessLocks.selection(root.resolve("selection.lock"), () -> owned.publish(root.resolve("accepted"), boundary -> {
+                    if (args[0].equals("publish-" + boundary)) Runtime.getRuntime().halt(73);
+                }));
             } else if (args[0].equals("increment")) {
                 for (int i = 0; i < 40; i++) ProcessLocks.selection(root.resolve("selection.lock"), () -> {
                     AtomicRecord record = new AtomicRecord(root.resolve("counter"));
@@ -135,5 +142,28 @@ public final class StorageTest {
         check(remove(published, Collections.emptySet(), root.resolve("a.lock")));
         check(!Files.exists(published.path));
         System.out.println("PASS owned archives: private copy, fake verification, read-only publication, bounds/corruption, protected/leased cleanup");
+        for (String boundary : Arrays.asList("before-publication", "archive-renamed", "archive-synced")) {
+            Path crashRoot = Files.createTempDirectory("publication-crash-");
+            Files.createDirectory(crashRoot.resolve("staging")); Files.createDirectory(crashRoot.resolve("accepted"));
+            AtomicRecord selection = new AtomicRecord(crashRoot.resolve("selection")); selection.write(new byte[] { 7 });
+            Process crash = child("publish-" + boundary, crashRoot);
+            try { check(crash.waitFor(10, TimeUnit.SECONDS)); check(crash.exitValue() == 73); }
+            finally { crash.destroyForcibly(); }
+            check(selection.read()[0] == 7); // Orphan publication never activates anything.
+            try (java.util.stream.Stream<Path> files = Files.list(crashRoot.resolve("accepted"))) {
+                List<Path> archives = files.collect(java.util.stream.Collectors.toList());
+                check(archives.size() == (boundary.equals("before-publication") ? 0 : 1));
+                for (Path archive : archives) check(Arrays.equals(Files.readAllBytes(archive), new byte[] {3,4,5}));
+            }
+        }
+        try { ProcessLocks.leaseForProcess(root.resolve("illegal.lock")); throw new AssertionError(); }
+        catch (IllegalStateException expected) { }
+        ProcessLocks.selection(root.resolve("selection.lock"), () -> {
+            try { published.reverify(fake); throw new AssertionError(); } catch (IllegalStateException expected) { }
+            try { ProcessLocks.selection(root.resolve("selection.lock"), () -> null); throw new AssertionError(); }
+            catch (IllegalStateException expected) { }
+            return null;
+        });
+        System.out.println("PASS publication death boundaries and enforced lock ordering");
     }
 }
