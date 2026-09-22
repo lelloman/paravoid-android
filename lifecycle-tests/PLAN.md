@@ -87,3 +87,33 @@ health and component behavior remain untested. No emulator or physical device ha
 been used in this preparatory slice. No main-checkout files or shared build wiring
 were changed. Next step requires the shared foundation commit and component-kind
 inventory from Track A; production integration is intentionally not invented here.
+
+## Foundation integration and admission (follow-up)
+
+Track A commit `7ace172` is now integrated as `486e69d`. Runtime's dependency on
+`:paravoid-contract` is added in this branch; A should retain that line on integration.
+No shared types or signatures were changed. Tests construct evidence only through
+`lifecycle-tests/TestEvidence.java`, never production constructors or a bypass.
+
+`AdmissionStore` consumes shared verified heads/releases and persists app-lineage
+identity mappings, contract/channel revision floors, request-body equality, credential
+epochs, admissions and authenticated/boot-relative time. Credential replacement
+invalidates admissions without clearing replay history. Non-available heads advance
+revision/time state. Invalid observations commit nothing. Repeated identical heads
+return the existing admission. Missing/corrupt established state fails closed.
+A final publication callback rechecks admission while holding the common selection
+lock, preventing credential/supersession races between checking and publication.
+No copy or signature verification is permitted in that callback.
+
+The admission helper remains package-private until the complete Lifecycle facade
+is assembled. Explicit new-store initialization rejects any existing directory,
+including an interrupted empty one; automatic repair/reset is intentionally absent.
+History capacity exhaustion fails rather than discarding identity mappings. State
+schema migration and user-visible repair routing remain integration requirements.
+The clock adapter must supply stable boot identity and boot elapsed time on Android.
+
+Host admission tests cover persisted reopen, equal revision/different device scopes,
+identity reuse, rejected input not poisoning floors, non-available heads, invalidation,
+wall/elapsed rollback, reboot, contract replacement and corrupt/missing state.
+APK-key tests cover replacement races, denied public fallback and grant expiration.
+These are fake-authenticated-object tests, not executable signature-vector evidence.

@@ -13,5 +13,6 @@ android {
 }
 dependencies {
     api project(':paravoid-api')
+    implementation project(':paravoid-contract')
     testImplementation 'junit:junit:4.13.2'
 }
