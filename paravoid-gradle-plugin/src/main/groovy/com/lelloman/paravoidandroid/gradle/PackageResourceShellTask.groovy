@@ -24,6 +24,7 @@ abstract class PackageResourceShellTask extends DefaultTask {
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getShellResources()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getPayloadResources()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getJavaResourceArchive()
+    @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getNativeResourceArchive()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getShellClasses()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getManifestFile()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getZipalign()
@@ -54,7 +55,8 @@ abstract class PackageResourceShellTask extends DefaultTask {
             throw new GradleException('Resource shells do not yet support directBootAware or isolatedProcess components.')
         new ZipFile(shellClasses.get().asFile).withCloseable {
             if (it.getEntry('com/lelloman/paravoidandroid/runtime/EmbeddedResources.class') == null ||
-                it.getEntry('com/lelloman/paravoidandroid/runtime/PayloadResourceClassLoader.class') == null)
+                it.getEntry('com/lelloman/paravoidandroid/runtime/PayloadResourceClassLoader.class') == null ||
+                it.getEntry('com/lelloman/paravoidandroid/runtime/EmbeddedNativeLibraries.class') == null)
                 throw new GradleException('Resource shell requires a matching runtime with EmbeddedResources support.')
         }
         List<File> apks = apkDirectory.get().asFile.listFiles().findAll { it.name.endsWith('.apk') && it.isFile() }
@@ -70,12 +72,14 @@ abstract class PackageResourceShellTask extends DefaultTask {
             throw new GradleException('Embedded resource archive exceeds the current 256 MiB profile.')
         if (javaResourceArchive.get().asFile.length() > 256L * 1024 * 1024)
             throw new GradleException('Java-resource archive exceeds 256 MiB.')
+        if (nativeResourceArchive.get().asFile.length() > 256L * 1024 * 1024)
+            throw new GradleException('Embedded native archive exceeds the current 256 MiB profile.')
         File unsigned = new File(temporaryDir, 'unsigned.apk')
         new ZipFile(input).withCloseable { original ->
             new ZipFile(shellResources.get().asFile).withCloseable { pinned ->
                 new ZipFile(javaResourceArchive.get().asFile).withCloseable { javaResources ->
                     writeShell(unsigned, original, pinned, payload.bytes, javaResourceArchive.get().asFile.bytes,
-                        javaResources.entries().collect { it.name }.toSet())
+                        javaResources.entries().collect { it.name }.toSet(), nativeResourceArchive.get().asFile.bytes)
                 }
             }
         }
@@ -100,12 +104,13 @@ abstract class PackageResourceShellTask extends DefaultTask {
         Files.copy(signed.toPath(), output.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
 
-    static void writeShell(File output, ZipFile original, ZipFile pinned, byte[] payload, byte[] javaResources = null, Set<String> javaPaths = []) {
+    static void writeShell(File output, ZipFile original, ZipFile pinned, byte[] payload, byte[] javaResources = null, Set<String> javaPaths = [], byte[] nativeResources = null) {
         if (!Arrays.equals(ResourceArchive.read(original, 'AndroidManifest.xml'), ResourceArchive.read(pinned, 'AndroidManifest.xml')))
             throw new GradleException('Resource shell manifest does not match the original APK.')
         Set<String> keep = original.entries().findAll { entry ->
             String name = entry.name
             !entry.directory && !javaPaths.contains(name) && name != 'resources.arsc' && !name.startsWith('res/') &&
+                (nativeResources == null || !name.startsWith('lib/')) &&
                 (!name.startsWith('assets/') || name == 'assets/paravoid/module.zip') &&
                 !(name.startsWith('META-INF/') && (name.toUpperCase(Locale.ROOT).endsWith('.SF') ||
                     name.toUpperCase(Locale.ROOT).endsWith('.RSA') || name.toUpperCase(Locale.ROOT).endsWith('.DSA') ||
@@ -127,6 +132,16 @@ abstract class PackageResourceShellTask extends DefaultTask {
             if (javaResources.length > 256L * 1024 * 1024) throw new GradleException('Java-resource archive exceeds 256 MiB.')
             replacements['assets/paravoid/java-resources.jar'] = javaResources
             replacements['assets/paravoid/java-resources.sha256'] = (MessageDigest.getInstance('SHA-256').digest(javaResources).encodeHex().toString() + '\n').getBytes('US-ASCII')
+        }
+        if (nativeResources != null) {
+            replacements['assets/paravoid/native-libraries.zip'] = nativeResources
+            replacements['assets/paravoid/native-libraries.sha256'] = (MessageDigest.getInstance('SHA-256').digest(nativeResources).encodeHex().toString() + '\n').getBytes('US-ASCII')
+            original.entries().findAll { !it.directory && it.name.startsWith('lib/') }.collect { it.name.split('/')[1] }.toSet().each { abi ->
+                String path = '/com/lelloman/paravoid/abi/' + abi + '.base64'
+                def marker = PackageResourceShellTask.getResourceAsStream(path)
+                if (marker == null) throw new GradleException('No shell ABI marker for ' + abi)
+                replacements['lib/' + abi + '/libparavoid_abi.so'] = marker.withCloseable { Base64.mimeDecoder.decode(it.readAllBytes()) }
+            }
         }
         ResourceArchive.write(output, original, keep, replacements)
     }

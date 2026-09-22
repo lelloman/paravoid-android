@@ -116,6 +116,10 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
                 it.javaResources.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/java-resources.jar"))
             }
+            def nativeResources = project.tasks.register("package${cap}ParavoidNativeResources", PackageNativeResourcesTask) {
+                apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
+                nativeArchive.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/native-libraries.zip"))
+            }
             project.tasks.register("package${cap}ParavoidResourceShell", PackageResourceShellTask) {
                 group = 'paravoid'
                 description = 'Signs an embedded-resource shell APK (not a complete VPK); leaves ordinary APK outputs unchanged.'
@@ -123,6 +127,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 shellResources.set(split.flatMap { it.shellResources })
                 payloadResources.set(split.flatMap { it.payloadResources })
                 javaResourceArchive.set(javaResources.flatMap { it.javaResources })
+                nativeResourceArchive.set(nativeResources.flatMap { it.nativeArchive })
                 shellClasses.set(pack.flatMap { it.shellClasses })
                 manifestFile.set(manifest.flatMap { it.outputManifest })
                 minSdk.set(variant.minSdk.apiLevel)
