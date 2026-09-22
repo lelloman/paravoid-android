@@ -52,7 +52,11 @@ final class CompleteRuntime {
                 return network == null || network.isActiveNetworkMetered();
             }, Executors.newSingleThreadScheduledExecutor(), main::post);
         if (policy.updatesEnabled) controller.refreshInstalledApk(environment.currentBaseApk());
-        if (shellOnly) ShellUpdatesActivity.installController(controller);
+        if (shellOnly) {
+            ShellUpdatesActivity.installController(controller);
+            ShellUpdatesActivity.installRestartAction(result -> ShellRestart.restart(app, result));
+        }
+        if (mainProcess || shellOnly) ShellControlShortcut.install(app);
         app.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
             public void onActivityCreated(Activity activity, Bundle state) {}
             public void onActivityStarted(Activity activity) {}

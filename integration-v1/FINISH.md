@@ -3,7 +3,8 @@
 Worktree `/tmp/paravoid-v1-integration-finish`, branch `v1/integration-finish`.
 Starts from Track A `da45412`, imports B `6208140`, `4b72682`, `f06cc5d`,
 `00a321f`, `bb8fb17`, `3a4610d`. B's `00a321f` is C's `3281e6e`; skip that
-duplicate when importing subsequent C work. C's uncommitted work is untouched.
+duplicate when importing subsequent C work. C's final `5ab835d` is now imported
+as `d76bade`; both original developer worktrees remain untouched.
 
 ## Cross-process delivery
 
@@ -24,6 +25,34 @@ busy retry not clearing denial, recovery throttling, cancellation from another J
 during blocked archive reads and retry delays, and cancellation of a saved retry
 whose owner is gone. These are not Android device claims.
 
-Remaining: storage coordination, shell-owned runnable-app controls access,
-quarantine device validation, current-APK refresh coordination and integration of
-Track C's pending work. Do not mark all finish gaps complete from this checkpoint.
+## Controls route
+
+Complete shells register the reserved dynamic launcher shortcut `paravoid.updates`.
+Long-press the app icon and select **App updates**. It targets the non-exported
+recovery Activity directly; the launcher grants access via Android's shortcut
+mechanism, rather than exposing the Activity or loading a payload Activity first.
+It preserves other shortcuts using addDynamicShortcuts. A launcher supporting
+dynamic shortcuts is required; downstream apps must not remove this reserved ID
+or exhaust its shortcut quota. Registration/rate-limit failures do not quarantine
+the app.
+
+The controls now also offer an explicitly confirmed **Restart app** action. It
+warns about loss of ongoing/unsaved work, stops only exclusively owned same-UID
+app processes other than recovery, waits for their disappearance and launches a
+fresh launcher Intent. It never clears journal state or releases leases early.
+Shared-UID ambiguity and inability to establish a cold boundary fail closed.
+This action compiles in the combined fixture but is not yet device-validated.
+
+API 30 evidence (dedicated `emulator-5594`): the production public bootstrap/control/
+offline suite passed, followed by `python3 integration-v1/controls-shortcut.py
+--serial emulator-5594`, proving runnable payload -> launcher shortcut -> private
+controls. The shortcut test used the build before C's second checkpoint. After
+importing that checkpoint and adding Restart app, the combined normal/public/
+controls/offline suite passed again on API 30. It still uses adb force-stop for
+cold activation and does not validate the new restart action. API 36.1 combined
+acceptance and a shortcut rerun on the final build remain pending.
+
+Remaining: storage coordination/reservation, validation of explicit cold-start recovery,
+cross-process cancellation/auth device coverage, quarantine controls device
+validation and current-APK refresh coordination. C's broader startup-failure and
+independent security-review gates remain open. Do not mark V1 complete here.

@@ -9,6 +9,8 @@ import com.lelloman.paravoidandroid.contract.Protocol.*;
 
 /** Shell-only screen. C must route here without loading payload classes or obtaining a lease. */
 public final class ShellUpdatesActivity extends Activity {
+    public interface RestartAction { void restart(java.util.function.Consumer<Boolean> result); }
+    private static volatile RestartAction installedRestart;
     private static volatile DeliveryController installedController;
     private DeliveryController controller;
     private LinearLayout content;
@@ -21,6 +23,7 @@ public final class ShellUpdatesActivity extends Activity {
 
     /** Shell bootstrap calls this in the recovery process; never obtain it from payload code. */
     public static void installController(DeliveryController controller) { installedController = controller; }
+    public static void installRestartAction(RestartAction action) { installedRestart = action; }
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -39,6 +42,18 @@ public final class ShellUpdatesActivity extends Activity {
         button("Check now", view -> controller.checkNow());
         button("Retry update access", view -> controller.retry());
         button("Cancel download", view -> controller.cancelDownload());
+        if (installedRestart != null) button("Restart app…", view ->
+            new AlertDialog.Builder(this).setTitle("Restart app now?")
+                .setMessage("This stops this app's running processes, including playback, jobs and other ongoing work. Unsaved changes may be lost. The next launch can activate a pending update; it does not roll back app data.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Stop and restart", (dialog, which) -> {
+                    view.setEnabled(false);
+                    installedRestart.restart(success -> {
+                        if (isFinishing() || isDestroyed()) return;
+                        if (success) finish();
+                        else { view.setEnabled(true); status.setText("Could not safely restart. Stop ongoing app work and try again, or force-stop the app in Android settings."); }
+                    });
+                }).show());
         checks = checkbox("Automatically check for updates");
         downloads = checkbox("Automatically download updates");
         unmetered = checkbox("Automatic downloads only on unmetered networks");
@@ -93,7 +108,7 @@ public final class ShellUpdatesActivity extends Activity {
                 text.append("Current: ").append(identity(lastLifecycle.active)).append("\nPending: ")
                         .append(identity(lastLifecycle.pending)).append("\nPayload storage: ")
                         .append(lastLifecycle.storageBytes / (1024 * 1024)).append(" MiB\n");
-                if (lastLifecycle.pending != null) text.append("Ready; activation waits for a coordinated cold start. Close and relaunch the app. Ongoing app services may delay activation.\n");
+                if (lastLifecycle.pending != null) text.append("Ready; activation waits for a coordinated cold start. Use Restart app when you are ready to stop ongoing app work.\n");
                 if (lastLifecycle.error != null) text.append("App state error: ").append(lastLifecycle.error.name()).append('\n');
                 retention.setSelection(lastLifecycle.retainedPrevious);
             }

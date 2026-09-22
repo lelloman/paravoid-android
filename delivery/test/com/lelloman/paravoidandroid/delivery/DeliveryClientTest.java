@@ -93,12 +93,16 @@ public final class DeliveryClientTest {
     }
     public static void main(String[] args) throws Exception {
         try (Setup s = new Setup(true)) {
+            s.metadata.grantExpiresAt = 0;
+            s.client.installedCredential(new byte[] {1});
             DeliveryClient peer = s.peer();
             s.f.responses.add(new Fake(403, new byte[0]));
             fails("http-status", () -> s.client.check(s.scope, false, false));
             s.clock.wall += 7 * 60 * 60; s.metadata.expiresAt = s.clock.wall + 100;
             contractFailure(ContractException.Code.CREDENTIAL_UNAVAILABLE, () -> peer.check(s.scope, false, false));
             check(s.f.requests == 1); // Shared denial, independent of six-hour controller throttle.
+            s.head(); peer.check(s.scope, false, true);
+            check(s.f.requests == 2); // Credential is still valid; denial was not grant expiry.
         }
         try (Setup s = new Setup(true)) {
             DeliveryClient peer = s.peer();
