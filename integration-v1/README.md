@@ -38,7 +38,22 @@ except for explicitly ephemeral keys/endpoint/head times.
 
 ## Remaining consolidated work
 
-- Complete Gradle DSL/tasks and embedding of the implemented installed-policy carrier.
+The plugin now exposes signed complete-VPK production, public-policy generation,
+reviewed complete-baseline export and compatibility checks. See
+[the producer guide](../paravoid-gradle-plugin/COMPLETE-VPK.md). A TestKit test
+builds a real app, verifies its VPK, changes payload resources under the accepted
+baseline, and rejects a changed endpoint without replacing the previous VPK.
+This caught and fixed support for Android zipalign's short zero-padding tails.
+Consolidated host/build regression evidence: 76 plugin tests, 25 shared-contract
+tests and 17 runtime unit tests pass. Delivery's 266 Java assertions and 12 Python
+tests, lifecycle subprocess tests (including installed-APK replacement races),
+and Android 36 delivery source compilation also passed during consolidation.
+These counts describe host/build checks, not new installed-device acceptance.
+
+Still required before calling the three-track implementation complete:
+
+- Embed the installed-policy carrier and wire complete-shell APK packaging into
+  the supported Gradle artifact workflow (the explicit VPK producer is implemented).
 - Android adapter for the implemented current-APK credential authority.
 - Early loader, boot-clock adapter, shell-only recovery process and controls wiring.
 - First-initialization recovery, storage admission and unavailable-component adapters.
