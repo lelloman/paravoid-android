@@ -14,9 +14,11 @@ abstract class ParavoidApplicationExtension {
         updates = objects.newInstance(ParavoidUpdatesExtension)
         signing = objects.newInstance(ParavoidSigningExtension)
         bootstrap.convention('embedded')
+        packaging.convention('dexOnly')
         releaseId.convention(payloadVersion.map { 'p' + it })
     }
     abstract Property<String> getBootstrap()
+    abstract Property<String> getPackaging()
     abstract Property<Long> getPayloadVersion()
     abstract Property<String> getReleaseId()
     void updates(Action<? super ParavoidUpdatesExtension> action) { action.execute(updates) }

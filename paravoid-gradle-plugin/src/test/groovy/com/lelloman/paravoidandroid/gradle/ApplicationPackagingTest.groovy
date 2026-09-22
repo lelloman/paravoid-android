@@ -16,6 +16,59 @@ import static org.junit.Assert.*
 class ApplicationPackagingTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder()
 
+    @Test void automaticallyAssemblesSignedCompleteEmbeddedAndEmptyShells() {
+        File root = fixture()
+        File build = new File(root, 'app/build.gradle')
+        build.text = build.text.replace('minSdk 28', 'minSdk 30')
+        def generator = java.security.KeyPairGenerator.getInstance('RSA'); generator.initialize(3072)
+        def release = generator.generateKeyPair(), head = generator.generateKeyPair()
+        write(root, 'app/trust.json', CanonicalJson.encode([
+            version: 1, applicationId: 'example.fixture.paravoid',
+            releaseKeys: [release: Base64.encoder.encodeToString(release.public.encoded)],
+            headKeys: [head: Base64.encoder.encodeToString(head.public.encoded)], grantKeys: [:],
+            minimumPayloadVersion: 1, minimumHeadRevision: 1]))
+        new File(root, 'app/release.der').bytes = release.private.encoded
+        build << '''
+            paravoid {
+                packaging = 'complete'; payloadVersion = 1L
+                updates { enabled = true; baseUrl = 'https://updates.example/'; trustPolicyFile = layout.projectDirectory.file('trust.json') }
+                signing { keyId = 'release'; privateKeyFile = layout.projectDirectory.file('release.der') }
+            }
+        '''
+        write(root, 'app/src/main/res/values/strings.xml', '<resources><string name="movable">Payload</string></resources>')
+        write(root, 'app/src/main/assets/content.txt', 'payload asset')
+        def result = run(root, ':app:assembleNormalDebug', ':app:assembleParavoidAndroidDebug').build()
+        assertNotNull(result.task(':app:packageParavoidAndroidDebugParavoidCompleteShell'))
+        File output = new File(root, 'app/build/outputs/paravoid/paravoidAndroidDebug')
+        File shell = new File(output, 'shell.apk')
+        assertTrue(new com.android.apksig.ApkVerifier.Builder(shell).build().verify().verified)
+        new ZipFile(shell).withCloseable { zip ->
+            assertNotNull(zip.getEntry('assets/paravoid/shell-policy.json'))
+            assertNotNull(zip.getEntry('assets/paravoid/payload.vpk'))
+            assertNull(zip.getEntry('assets/paravoid/module.zip'))
+            assertNull(zip.getEntry('assets/paravoid/resources.apk'))
+            assertNull(zip.getEntry('assets/content.txt'))
+            assertFalse(dexText(zip).contains('Lexample/MainActivity;'))
+            assertTrue(dexText(zip).contains('CompleteGenerationLoader'))
+        }
+        assertFalse(dumpResources(root, shell).contains('string/movable'))
+        File normal = new File(root, 'app/build/outputs/apk/normal/debug/app-normal-debug.apk')
+        byte[] normalBefore = normal.bytes
+        long embeddedSize = shell.length()
+        build << "\nparavoid.bootstrap = 'empty'\n"
+        assertTrue(new File(root, 'app/release.der').delete())
+        result = run(root, ':app:assembleParavoidAndroidDebug').build()
+        assertNull(result.task(':app:packageParavoidAndroidDebugParavoidVpk'))
+        assertTrue(shell.length() < embeddedSize)
+        new ZipFile(shell).withCloseable { zip ->
+            assertNull(zip.getEntry('assets/paravoid/payload.vpk'))
+            def policy = com.lelloman.paravoidandroid.contract.InstalledPolicyCodec.read(ResourceArchive.read(zip, 'assets/paravoid/shell-policy.json'), true)
+            assertEquals(com.lelloman.paravoidandroid.contract.Protocol.Bootstrap.EMPTY, policy.bootstrap)
+        }
+        assertArrayEquals(normalBefore, normal.bytes)
+        assertTrue(run(root, ':app:bundleParavoidAndroidDebug').buildAndFail().output.contains('standalone APK'))
+    }
+
     @Test void producesCompleteSignedVpkAndEnforcesInstalledPolicyBaseline() {
         File root = fixture()
         File build = new File(root, 'app/build.gradle')

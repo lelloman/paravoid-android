@@ -27,6 +27,23 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             if (android.buildTypes.getByName(variant.buildType).minifyEnabled) throw new GradleException('ParavoidAndroid application packaging does not yet support shrinking.')
             if (android.compileOptions.coreLibraryDesugaringEnabled) throw new GradleException('ParavoidAndroid application packaging does not yet support core library desugaring.')
             String cap = variant.name.capitalize()
+            String packaging = extension.packaging.get()
+            if (!(packaging in ['dexOnly', 'complete'])) throw new GradleException('paravoid.packaging must be dexOnly or complete.')
+            boolean complete = packaging == 'complete'
+            if (complete && variant.minSdk.apiLevel < 30) throw new GradleException('Complete packaging requires minSdk >= 30 on the paravoidAndroid flavor.')
+            def apkInputs = variant.artifacts.get(SingleArtifact.APK.INSTANCE)
+            if (complete) {
+                def snapshot = project.tasks.register("snapshot${cap}ParavoidInput", SnapshotApkTask) {
+                    snapshotDirectory.set(project.layout.buildDirectory.dir("intermediates/paravoid/${variant.name}/input-apk"))
+                }
+                def captureRequest = variant.artifacts.use(snapshot).wiredWithDirectories({ it.inputDirectory }, { it.outputDirectory })
+                    .toTransformMany(SingleArtifact.APK.INSTANCE)
+                snapshot.configure { transformation.set(captureRequest) }
+                apkInputs = snapshot.flatMap { it.snapshotDirectory }
+                project.tasks.matching { it.name == "bundle${cap}" }.configureEach {
+                    doFirst { throw new GradleException('Complete shell distribution requires a standalone APK; normal AABs are unchanged.') }
+                }
+            }
             def baseline = extension.baselineDirectory.file("${variant.name}/resource-ledger.json")
             if (extension.baselineDirectory.present) {
                 // AAPT's argument list tracks strings, not the bytes at a --stable-ids path.
@@ -49,7 +66,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             def ledger = project.tasks.register("export${cap}ParavoidResourceLedger", ExportResourceLedgerTask) {
                 group = 'paravoid'
                 description = 'Exports a reviewable resource ID ledger; does not modify the accepted baseline.'
-                apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
+                apkDirectory.set(apkInputs)
                 baselineFile.set(baseline)
                 applicationId.set(variant.applicationId)
                 aapt2.set(components.sdkComponents.sdkDirectory.map { it.file("build-tools/${android.buildToolsVersion}/aapt2") })
@@ -59,7 +76,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             def analysis = project.tasks.register("analyze${cap}ParavoidResources", AnalyzeResourcesTask) {
                 group = 'paravoid'
                 description = 'Computes manifest/explicit pinned-resource closure without changing APK contents.'
-                apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
+                apkDirectory.set(apkInputs)
                 applicationId.set(variant.applicationId)
                 pinnedResources.set(extension.pinnedResources)
                 aapt2.set(components.sdkComponents.sdkDirectory.map { it.file("build-tools/${android.buildToolsVersion}/aapt2") })
@@ -76,7 +93,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             def split = project.tasks.register("split${cap}ParavoidResources", SplitResourcesTask) {
                 group = 'paravoid'
                 description = 'Builds validated shell-only and complete payload resource containers without modifying the installed APK.'
-                apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
+                apkDirectory.set(apkInputs)
                 applicationId.set(variant.applicationId)
                 pinnedResources.set(extension.pinnedResources)
                 baselineFile.set(extension.baselineDirectory.file("${variant.name}/resource-boundary.json"))
@@ -92,6 +109,8 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 validationFile.set(project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/native-validation.txt"))
             }
             def manifest = project.tasks.register("prepare${cap}ParavoidManifest", ApplicationManifestTask) {
+                it.complete.set(complete)
+                debugHttpAllowed.set(complete ? extension.updates.debugHttpAllowed : project.providers.provider { false })
                 outputManifest.set(project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/AndroidManifest.xml"))
                 payloadMetadata.set(project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/payload.properties"))
             }
@@ -114,15 +133,15 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             }
             variant.sources.assets.addGeneratedSourceDirectory(embed) { it.outputDirectory }
             def javaResources = project.tasks.register("package${cap}ParavoidJavaResources", PackageJavaResourcesTask) {
-                apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
+                apkDirectory.set(apkInputs)
                 it.javaResources.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/java-resources.jar"))
             }
             def nativeResources = project.tasks.register("package${cap}ParavoidNativeResources", PackageNativeResourcesTask) {
-                apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
+                apkDirectory.set(apkInputs)
                 nativeArchive.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/native-libraries.zip"))
             }
             def contract = project.tasks.register("generate${cap}ParavoidContract", GenerateShellContractTask) {
-                apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
+                apkDirectory.set(apkInputs)
                 boundaryFile.set(analysis.flatMap { it.boundaryFile })
                 ledgerFile.set(ledger.flatMap { it.ledgerFile })
                 shellClasses.set(pack.flatMap { it.shellClasses })
@@ -131,7 +150,9 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 minSdk.set(variant.minSdk.apiLevel)
                 toolchain.set([agp: Version.ANDROID_GRADLE_PLUGIN_VERSION,
                     buildTools: android.buildToolsVersion.toString(), compileSdk: android.compileSdk.toString()])
-                contractFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/baseline-candidate/shell-contract.json"))
+                contractFile.set(project.layout.buildDirectory.file(complete
+                    ? "intermediates/paravoid/${variant.name}/embedded-boundary.json"
+                    : "outputs/paravoid/${variant.name}/baseline-candidate/shell-contract.json"))
             }
             project.tasks.register("export${cap}ParavoidBaseline") {
                 group = 'paravoid'
@@ -150,8 +171,11 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 debugHttpAllowed.set(extension.updates.debugHttpAllowed)
                 debuggable.set(android.buildTypes.getByName(variant.buildType).debuggable)
                 releaseBuild.set(variant.buildType == 'release')
-                policyFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/complete-policy/shell-policy.json"))
+                policyFile.set(project.layout.buildDirectory.file(complete
+                    ? "outputs/paravoid/${variant.name}/baseline-candidate/shell-contract.json"
+                    : "outputs/paravoid/${variant.name}/complete-policy/shell-policy.json"))
             }
+            if (complete) project.tasks.named("export${cap}ParavoidBaseline") { dependsOn(completePolicy) }
             project.tasks.register("export${cap}ParavoidCompleteBaseline", org.gradle.api.tasks.Sync) {
                 group = 'paravoid'
                 description = 'Exports complete-policy baseline candidates; never changes accepted baselines.'
@@ -167,7 +191,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 candidateFile.set(completePolicy.flatMap { it.policyFile })
                 reportFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/vpk-contract-check.txt"))
             }
-            project.tasks.register("package${cap}ParavoidVpk", PackageCompleteVpkTask) {
+            def completeVpk = project.tasks.register("package${cap}ParavoidVpk", PackageCompleteVpkTask) {
                 group = 'paravoid'
                 description = 'Produces a signed complete VPK; does not change shell startup or ordinary APK outputs.'
                 dependsOn(completeCheck)
@@ -188,17 +212,43 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 digestFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/payload.vpk.sha256"))
                 reportFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/vpk-report.json"))
             }
+            if (complete) {
+                def shell = project.tasks.register("package${cap}ParavoidCompleteShell", PackageCompleteShellTask) {
+                    group = 'paravoid'
+                    dependsOn(completeCheck)
+                    it.completePolicy.set(completePolicy.flatMap { it.policyFile })
+                    if (extension.bootstrap.get() == 'embedded') it.completeVpk.set(completeVpk.flatMap { it.vpkFile })
+                    shellResources.set(split.flatMap { it.shellResources })
+                    payloadResources.set(split.flatMap { it.payloadResources })
+                    javaResourceArchive.set(javaResources.flatMap { it.javaResources })
+                    nativeResourceArchive.set(nativeResources.flatMap { it.nativeArchive })
+                    shellClasses.set(pack.flatMap { it.shellClasses })
+                    manifestFile.set(manifest.flatMap { it.outputManifest })
+                    contractFile.set(completePolicy.flatMap { it.policyFile })
+                    minSdk.set(variant.minSdk.apiLevel)
+                    zipalign.set(components.sdkComponents.sdkDirectory.map { it.file("build-tools/${android.buildToolsVersion}/zipalign") })
+                    def signing = android.buildTypes.getByName(variant.buildType).signingConfig
+                    if (signing != null) {
+                        keyStoreFile.set(signing.storeFile); storePassword.set(signing.storePassword)
+                        keyPassword.set(signing.keyPassword); keyAlias.set(signing.keyAlias); storeType.set(signing.storeType)
+                    }
+                    shellApk.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/shell.apk"))
+                }
+                def shellRequest = variant.artifacts.use(shell).wiredWithDirectories({ it.apkDirectory }, { it.outputDirectory })
+                    .toTransformMany(SingleArtifact.APK.INSTANCE)
+                shell.configure { transformation.set(shellRequest) }
+            }
             def contractCheck = project.tasks.register("check${cap}ParavoidContract", CheckShellContractTask) {
                 group = 'verification'
                 baselineFile.set(extension.baselineDirectory.file("${variant.name}/shell-contract.json"))
-                candidateFile.set(contract.flatMap { it.contractFile })
+                candidateFile.set(complete ? completePolicy.flatMap { it.policyFile } : contract.flatMap { it.contractFile })
                 reportFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/shell-contract-check.txt"))
             }
             project.tasks.register("package${cap}ParavoidResourceShell", PackageResourceShellTask) {
                 dependsOn(contractCheck)
                 group = 'paravoid'
                 description = 'Signs an embedded-resource shell APK (not a complete VPK); leaves ordinary APK outputs unchanged.'
-                apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
+                apkDirectory.set(apkInputs)
                 shellResources.set(split.flatMap { it.shellResources })
                 payloadResources.set(split.flatMap { it.payloadResources })
                 javaResourceArchive.set(javaResources.flatMap { it.javaResources })

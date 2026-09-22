@@ -1,13 +1,19 @@
 # Complete VPK producer
 
-The consolidated plugin exposes an explicit complete-VPK producer. This is not yet
-the complete shell product: normal `assemble` and the experimental resource-shell
-task still use their existing startup paths. Do not publish the generated VPK for
-those older shells. APK policy embedding, complete-generation early loading and
-installed-device update/recovery validation remain integration gates.
+The plugin exposes a complete-VPK producer and opt-in automatic complete-shell
+assembly. Set `packaging = 'complete'` to make shell `assemble` consume the signed
+VPK, pin its policy in the APK, and select the verified-generation startup path.
+`bootstrap = 'empty'` omits the VPK and does not require its private signing key
+to assemble the shell. Normal APK/AAB variants and default `dexOnly` behavior are
+unchanged. Complete shell AAB output is rejected.
+
+Build-level tests cover signed embedded/empty output and absence of movable
+fallback content. Installed-device startup/update/recovery acceptance is still a
+separate gate; this is not yet a release-readiness claim.
 
 ```groovy
 paravoid {
+    packaging = 'complete'
     payloadVersion = 1L
     releaseId = 'release-1' // defaults to p<payloadVersion>
     bootstrap = 'embedded' // or empty; empty requires enabled updates
@@ -37,9 +43,16 @@ signs and verifies them with the shared complete-VPK verifier before publishing
 `build/outputs/paravoid/<variant>/payload.vpk`. Adjacent outputs are the exact
 signed `release.json`, `payload.vpk.sha256`, and a public `vpk-report.json`.
 
+Automatic output is `outputs/paravoid/<variant>/shell.apk`, also exposed through
+AGP's transformed APK artifact (used by its install tasks). The intermediate
+pre-transform APK is not the distribution artifact. The transform uses AGP's
+[multi-artifact API](https://developer.android.com/reference/tools/gradle-api/8.13/com/android/build/api/artifact/ArtifactTransformationRequest)
+to preserve output metadata and an independent analysis snapshot to avoid cycles.
+
 `generate<Variant>ParavoidCompletePolicy` produces the public shell policy.
 `export<Variant>ParavoidCompleteBaseline` exports review candidates into
-`complete-baseline-candidate/`. Copy the reviewed ledger, boundary and
+`complete-baseline-candidate/`. In complete mode, ordinary `export<Variant>ParavoidBaseline`
+also exports the complete contract in `baseline-candidate/`. Copy the reviewed ledger, boundary and
 `shell-contract.json` into `<baselineDirectory>/<variant>/` and configure
 `paravoid.baselineDirectory`. Subsequent VPK builds depend on
 `check<Variant>ParavoidVpkContract`: payload changes can proceed, but changes to
