@@ -72,7 +72,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 candidateFile.set(analysis.flatMap { it.boundaryFile })
                 reportFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/resource-boundary-check.txt"))
             }
-            project.tasks.register("split${cap}ParavoidResources", SplitResourcesTask) {
+            def split = project.tasks.register("split${cap}ParavoidResources", SplitResourcesTask) {
                 group = 'paravoid'
                 description = 'Builds validated shell-only and complete payload resource containers without modifying the installed APK.'
                 apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
@@ -112,6 +112,26 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 outputDirectory.set(project.layout.buildDirectory.dir("generated/paravoid/${variant.name}/assets"))
             }
             variant.sources.assets.addGeneratedSourceDirectory(embed) { it.outputDirectory }
+            project.tasks.register("package${cap}ParavoidResourceShell", PackageResourceShellTask) {
+                group = 'paravoid'
+                description = 'Signs an embedded-resource shell APK (not a complete VPK); leaves ordinary APK outputs unchanged.'
+                apkDirectory.set(variant.artifacts.get(SingleArtifact.APK.INSTANCE))
+                shellResources.set(split.flatMap { it.shellResources })
+                payloadResources.set(split.flatMap { it.payloadResources })
+                shellClasses.set(pack.flatMap { it.shellClasses })
+                manifestFile.set(manifest.flatMap { it.outputManifest })
+                minSdk.set(variant.minSdk.apiLevel)
+                zipalign.set(components.sdkComponents.sdkDirectory.map { it.file("build-tools/${android.buildToolsVersion}/zipalign") })
+                def signing = android.buildTypes.getByName(variant.buildType).signingConfig
+                if (signing != null) {
+                    keyStoreFile.set(signing.storeFile)
+                    storePassword.set(signing.storePassword)
+                    keyPassword.set(signing.keyPassword)
+                    keyAlias.set(signing.keyAlias)
+                    storeType.set(signing.storeType)
+                }
+                shellApk.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/resource-shell.apk"))
+            }
         }
     }
 }

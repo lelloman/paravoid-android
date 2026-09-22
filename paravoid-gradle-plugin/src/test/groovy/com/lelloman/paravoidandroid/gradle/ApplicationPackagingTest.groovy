@@ -16,6 +16,41 @@ import static org.junit.Assert.*
 class ApplicationPackagingTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder()
 
+    @Test void packagesSignedEmbeddedResourceShellWithoutChangingNormalOrDexOnlyApks() {
+        File root = fixture()
+        String task = ':app:packageParavoidAndroidDebugParavoidResourceShell'
+        assertTrue(run(root, task).buildAndFail().output.contains('requires minSdk >= 30'))
+        File build = new File(root, 'app/build.gradle')
+        build.text = build.text.replace('minSdk 28', 'minSdk 30')
+        File manifest = new File(root, 'app/src/main/AndroidManifest.xml')
+        manifest.text = manifest.text.replace('<application ', '<application android:label="@string/pinned" ')
+        write(root, 'app/src/main/res/values/strings.xml', '<resources><string name="pinned">Shell</string><string name="movable">Payload</string></resources>')
+        write(root, 'app/src/main/assets/content.txt', 'Movable asset')
+        run(root, ':app:assembleNormalDebug', ':app:assembleParavoidAndroidDebug').build()
+        File normal = new File(root, 'app/build/outputs/apk/normal/debug/app-normal-debug.apk')
+        File dexOnly = new File(root, 'app/build/outputs/apk/paravoidAndroid/debug/app-paravoidAndroid-debug.apk')
+        byte[] normalBefore = normal.bytes, dexBefore = dexOnly.bytes
+        run(root, task).build()
+        assertArrayEquals(normalBefore, normal.bytes)
+        assertArrayEquals(dexBefore, dexOnly.bytes)
+        File shell = new File(root, 'app/build/outputs/paravoid/paravoidAndroidDebug/resource-shell.apk')
+        assertTrue(new com.android.apksig.ApkVerifier.Builder(shell).build().verify().verified)
+        String resources = dumpResources(root, shell)
+        assertTrue(resources.contains('string/pinned'))
+        assertFalse(resources.contains('string/movable'))
+        new ZipFile(shell).withCloseable { zip ->
+            assertNull(zip.getEntry('assets/content.txt'))
+            assertNotNull(zip.getEntry('assets/paravoid/module.zip'))
+            byte[] payload = ResourceArchive.read(zip, 'assets/paravoid/resources.apk')
+            assertEquals(java.security.MessageDigest.getInstance('SHA-256').digest(payload).encodeHex().toString() + '\n',
+                new String(ResourceArchive.read(zip, 'assets/paravoid/resources.sha256')))
+            assertTrue(dexText(zip).contains('EmbeddedResources'))
+        }
+        assertTrue(run(root, ':app:packageParavoidAndroidReleaseParavoidResourceShell').buildAndFail().output.contains('requires the variant signingConfig'))
+        manifest.text = manifest.text.replace('<application ', '<application android:directBootAware="true" ')
+        assertTrue(run(root, task).buildAndFail().output.contains('do not yet support directBootAware or isolatedProcess'))
+    }
+
     @Test void analyzesAndChecksPinnedManifestLibraryXmlAndAllConfigurations() {
         File root = fixture()
         new File(root, 'settings.gradle') << "\ninclude ':resource-library'\n"
