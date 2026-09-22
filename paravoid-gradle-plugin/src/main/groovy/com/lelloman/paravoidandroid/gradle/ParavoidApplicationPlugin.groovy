@@ -138,6 +138,56 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 description = 'Exports ledger, resource boundary and embedded shell contract candidates for review.'
                 dependsOn(contract)
             }
+            def completePolicy = project.tasks.register("generate${cap}ParavoidCompletePolicy", GenerateCompletePolicyTask) {
+                group = 'paravoid'
+                installedBoundary.set(contract.flatMap { it.contractFile })
+                trustPolicyFile.set(extension.updates.trustPolicyFile)
+                bootstrap.set(extension.bootstrap)
+                updatesEnabled.set(extension.updates.enabled)
+                baseUrl.set(extension.updates.baseUrl)
+                channel.set(extension.updates.channel)
+                authentication.set(extension.updates.authentication)
+                debugHttpAllowed.set(extension.updates.debugHttpAllowed)
+                debuggable.set(android.buildTypes.getByName(variant.buildType).debuggable)
+                releaseBuild.set(variant.buildType == 'release')
+                policyFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/complete-policy/shell-policy.json"))
+            }
+            project.tasks.register("export${cap}ParavoidCompleteBaseline", org.gradle.api.tasks.Sync) {
+                group = 'paravoid'
+                description = 'Exports complete-policy baseline candidates; never changes accepted baselines.'
+                from(ledger.flatMap { it.ledgerFile })
+                from(ledger.flatMap { it.stableIds })
+                from(analysis.flatMap { it.boundaryFile })
+                from(completePolicy.flatMap { it.policyFile }) { rename { 'shell-contract.json' } }
+                into(project.layout.buildDirectory.dir("outputs/paravoid/${variant.name}/complete-baseline-candidate"))
+            }
+            def completeCheck = project.tasks.register("check${cap}ParavoidVpkContract", CheckShellContractTask) {
+                group = 'verification'
+                baselineFile.set(extension.baselineDirectory.file("${variant.name}/shell-contract.json"))
+                candidateFile.set(completePolicy.flatMap { it.policyFile })
+                reportFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/vpk-contract-check.txt"))
+            }
+            project.tasks.register("package${cap}ParavoidVpk", PackageCompleteVpkTask) {
+                group = 'paravoid'
+                description = 'Produces a signed complete VPK; does not change shell startup or ordinary APK outputs.'
+                dependsOn(completeCheck)
+                policyFile.set(completePolicy.flatMap { it.policyFile })
+                codeBundle.set(pack.flatMap { it.bundleFile })
+                resourcesApk.set(split.flatMap { it.payloadResources })
+                it.javaResources.set(javaResources.flatMap { it.javaResources })
+                nativeArchive.set(nativeResources.flatMap { it.nativeArchive })
+                ledgerFile.set(ledger.flatMap { it.ledgerFile })
+                payloadVersion.set(extension.payloadVersion)
+                releaseId.set(extension.releaseId)
+                keyId.set(extension.signing.keyId)
+                privateKeyFile.set(extension.signing.privateKeyFile)
+                minSdk.set(variant.minSdk.apiLevel)
+                debuggable.set(android.buildTypes.getByName(variant.buildType).debuggable)
+                vpkFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/payload.vpk"))
+                releaseFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/release.json"))
+                digestFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/payload.vpk.sha256"))
+                reportFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/vpk-report.json"))
+            }
             def contractCheck = project.tasks.register("check${cap}ParavoidContract", CheckShellContractTask) {
                 group = 'verification'
                 baselineFile.set(extension.baselineDirectory.file("${variant.name}/shell-contract.json"))

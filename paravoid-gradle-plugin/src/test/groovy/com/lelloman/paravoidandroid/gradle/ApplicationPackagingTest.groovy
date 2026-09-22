@@ -16,6 +16,74 @@ import static org.junit.Assert.*
 class ApplicationPackagingTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder()
 
+    @Test void producesCompleteSignedVpkAndEnforcesInstalledPolicyBaseline() {
+        File root = fixture()
+        File build = new File(root, 'app/build.gradle')
+        build.text = build.text.replace('minSdk 28', 'minSdk 30')
+        def generator = java.security.KeyPairGenerator.getInstance('RSA')
+        generator.initialize(3072)
+        def releaseKey = generator.generateKeyPair()
+        def headKey = generator.generateKeyPair()
+        def grantKey = generator.generateKeyPair()
+        def encoded = { key -> Base64.encoder.encodeToString(key.public.encoded) }
+        write(root, 'app/trust.json', CanonicalJson.encode([
+            version: 1, applicationId: 'example.fixture.paravoid',
+            releaseKeys: [release: encoded(releaseKey)], headKeys: [head: encoded(headKey)],
+            grantKeys: [grant: encoded(grantKey)], minimumPayloadVersion: 1, minimumHeadRevision: 1]))
+        new File(root, 'app/release.der').bytes = releaseKey.private.encoded
+        build << '''
+            paravoid {
+                payloadVersion = 1L
+                updates {
+                    enabled = true
+                    baseUrl = 'https://UPDATES.example:443/'
+                    trustPolicyFile = layout.projectDirectory.file('trust.json')
+                }
+                signing { keyId = 'release'; privateKeyFile = layout.projectDirectory.file('release.der') }
+            }
+        '''
+        write(root, 'app/src/main/res/values/strings.xml', '<resources><string name="movable">A</string></resources>')
+        String task = ':app:packageParavoidAndroidDebugParavoidVpk'
+        String export = ':app:exportParavoidAndroidDebugParavoidCompleteBaseline'
+        run(root, ':app:assembleNormalDebug', task, export).build()
+        File normal = new File(root, 'app/build/outputs/apk/normal/debug/app-normal-debug.apk')
+        byte[] normalBytes = normal.bytes
+        File output = new File(root, 'app/build/outputs/paravoid/paravoidAndroidDebug')
+        File policyFile = new File(output, 'complete-policy/shell-policy.json')
+        def policy = com.lelloman.paravoidandroid.contract.InstalledPolicyCodec.read(policyFile.bytes, true)
+        assertEquals('https://updates.example/', policy.baseUrl)
+        def scope = new com.lelloman.paravoidandroid.contract.Protocol.RequestScope(
+            policy.applicationId, policy.shellContractId, policy.channel, 30, ['x86_64'], 1)
+        File archive = new File(output, 'payload.vpk')
+        def first = new com.lelloman.paravoidandroid.contract.CompleteVpkVerifier().verifyEmbedded(archive, policy, scope)
+        assertEquals(1L, first.identity.payloadVersion)
+        assertArrayEquals(first.envelope(), new File(output, 'release.json').bytes)
+        assertEquals(first.identity.archiveSha256, new File(output, 'payload.vpk.sha256').text.trim())
+        new ZipFile(archive).withCloseable { zip ->
+            assertNotNull(zip.getEntry('code/classes.dex'))
+            assertNotNull(zip.getEntry('resources.apk'))
+            assertNull(zip.getEntry('release.der'))
+        }
+        File baseline = new File(root, 'app/accepted/paravoidAndroidDebug'); baseline.mkdirs()
+        ['resource-ledger.json', 'resource-boundary.json', 'shell-contract.json'].each { name ->
+            new File(baseline, name).bytes = new File(output, 'complete-baseline-candidate/' + name).bytes
+        }
+        byte[] accepted = new File(baseline, 'shell-contract.json').bytes
+        build << "\nparavoid { baselineDirectory = layout.projectDirectory.dir('accepted'); payloadVersion = 2L }\n"
+        write(root, 'app/src/main/res/values/strings.xml', '<resources><string name="movable">B</string><string name="new_entry">New</string></resources>')
+        run(root, task).build()
+        assertArrayEquals(accepted, policyFile.bytes)
+        def second = new com.lelloman.paravoidandroid.contract.CompleteVpkVerifier().verifyEmbedded(archive, policy, scope)
+        assertEquals(2L, second.identity.payloadVersion)
+        assertNotEquals(first.identity.archiveSha256, second.identity.archiveSha256)
+        assertArrayEquals(normalBytes, normal.bytes)
+        byte[] previousArchive = archive.bytes
+        build << "\nparavoid.updates.baseUrl = 'https://other.example/'\n"
+        assertTrue(run(root, task).buildAndFail().output.contains('distribution/baseUrl'))
+        assertArrayEquals(previousArchive, archive.bytes)
+        assertArrayEquals(accepted, new File(baseline, 'shell-contract.json').bytes)
+    }
+
     @Test void gatesEmbeddedShellAgainstReviewedContractWithoutFreezingPayload() {
         File root = fixture()
         File build = new File(root, 'app/build.gradle')

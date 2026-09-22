@@ -4,7 +4,7 @@ import groovy.json.JsonSlurper
 import org.gradle.api.GradleException
 import java.security.MessageDigest
 
-/** Build-time embedded-profile contract. Not the future signed full-VPK wire format. */
+/** Canonical build-time installed boundary, including the complete APK policy profile. */
 final class ShellContract {
     static final Set FIELDS = ['profile', 'applicationId', 'minSdk', 'manifestSha256', 'declarations',
         'pinnedResources', 'runtimeClasses', 'nativeAbis', 'ledgerReservations', 'apkSigners', 'distribution', 'toolchain'] as Set
@@ -20,6 +20,7 @@ final class ShellContract {
         Map current = ledger.entries.collectEntries { [(it.name): it.id] }
         if (accepted == null) return current
         validate(accepted)
+        if (accepted.profile == 'complete-apk-v1') accepted = accepted.installed
         if (accepted.applicationId != ledger.applicationId) throw new GradleException('Shell contract application ID changed')
         accepted.ledgerReservations.each { name, id ->
             if (current[name] != id) throw new GradleException('Installed shell resource reservation changed: ' + name)
@@ -44,6 +45,11 @@ final class ShellContract {
     }
 
     static void validate(Map descriptor) {
+        if (descriptor.profile == 'complete-apk-v1') {
+            def document = [version: 1, contractId: sha(CanonicalJson.encode(descriptor).getBytes('UTF-8')), descriptor: descriptor]
+            com.lelloman.paravoidandroid.contract.InstalledPolicyCodec.read(CanonicalJson.encode(document).getBytes('UTF-8'), true)
+            return
+        }
         if (descriptor.keySet() != FIELDS || descriptor.profile != 'embedded-apk-v1' ||
             descriptor.distribution != [bootstrap: 'embedded', updates: false] ||
             !(descriptor.applicationId instanceof String) || !(descriptor.minSdk instanceof Integer) || descriptor.minSdk < 30 ||
