@@ -221,7 +221,7 @@ public final class SignedMetadataVerifier implements MetadataVerifier {
         }
         return result;
     }
-    private static void ordinaryStrings(Object value) throws ContractException {
+    static void ordinaryStrings(Object value) throws ContractException {
         if (value instanceof String && ((String)value).getBytes(StandardCharsets.UTF_8).length > 4096)
             throw fail(LIMIT_EXCEEDED, "Ordinary string byte limit");
         if (value instanceof Map) for (Map.Entry<?,?> entry : ((Map<?,?>)value).entrySet()) { ordinaryStrings(entry.getKey()); ordinaryStrings(entry.getValue()); }

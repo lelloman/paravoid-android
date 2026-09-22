@@ -80,3 +80,30 @@ See `integration-v1/README.md` for real Android-content A/B fixtures and integra
 host delivery/lifecycle proof. Gradle complete-mode wiring and installed-app launch
 acceptance are separate remaining gates, not implied by a valid archive.
 The wire schemas remain V1.md; public interoperability/security freeze is pending.
+
+## Installed policy and credential authority
+
+The public carrier is `assets/paravoid/shell-policy.json` in the **base APK**.
+`InstalledPolicyCodec` writes/reads the versioned `complete-apk-v1` descriptor:
+installed boundary, runtime ABI, distribution settings and public trust policy.
+Its canonical descriptor hash is the shell contract ID. Grants/private keys are
+never fields. Debug-HTTP policy is rejected when the actual build/installed app is
+not debuggable. The original embedded-only boundary can be recovered for existing
+resource-ledger diagnostics without treating its old distribution identity as v1.
+
+`InstalledStateSource.read()` authenticates the current APK's public policy/grant
+outside selection locks; `isCurrent()` performs only a quick identity check at the
+transaction boundary. `ApkInstalledStateSource` reads base-APK ZIP entries directly,
+not payload-overridable assets. Its Android Location adapter must query current
+PackageManager state on each call. An invalid/missing grant produces a null update
+credential while retaining the readable installed policy for offline execution.
+
+Lifecycle rejects stale non-null **and null** credential assertions, rechecks the
+installed identity before admission/publication/user entry, and refuses an old
+instance whose installed contract changed. The complete APK profile requires this
+authority in `RuntimeLifecycle`'s constructor. The older constructor remains for
+non-APK host/experimental profiles only. OS installation and local filesystem
+integrity are trusted; this is not protection against root editing APKs in place.
+
+Codec, host APK readback/replacement and authority-race tests pass. Production
+Gradle embedding and Android PackageManager/startup wiring remain separate gates.
