@@ -43,6 +43,15 @@ example.app:style/Theme.App = 0x7f020000
         assertEquals(4, c.entries.size())
     }
 
+    @Test void preservesAaptGeneratedAnimatedVectorNamesAndTombstones() {
+        def ledger = ResourceLedger.fromDump(APP, dump('resource 0x7f010000 drawable/$avd_hide_password__0'))
+        assertEquals(ledger.toJson(), ResourceLedger.read(ledger.toJson()).toJson())
+        assertEquals('example.app:drawable/$avd_hide_password__0 = 0x7f010000\n', ledger.toStableIds())
+        def removed = ResourceLedger.fromDump(APP, dump(''), ledger)
+        assertTrue(removed.entries[0].removed)
+        assertEquals(ledger.toStableIds(), removed.toStableIds())
+    }
+
     @Test void rejectsChangedOrStolenIdsAndTypeIds() {
         [
             'resource 0x7f010002 string/title',

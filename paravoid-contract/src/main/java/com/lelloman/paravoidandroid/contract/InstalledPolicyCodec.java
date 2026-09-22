@@ -103,7 +103,7 @@ public final class InstalledPolicyCodec {
     private static Map<String,String> reservations(Map<String,Object> map) throws ContractException {
         Map<String,String> result = new LinkedHashMap<>(), types = new HashMap<>(), typeIds = new HashMap<>(); Set<String> ids = new HashSet<>();
         for (Map.Entry<String,Object> e : map.entrySet()) {
-            if (e.getKey().length() > 4096 || !e.getKey().matches("[a-z][a-z0-9_]*/[A-Za-z_][A-Za-z0-9_.]*")
+            if (e.getKey().length() > 4096 || !e.getKey().matches("[a-z][a-z0-9_]*/[A-Za-z_$][A-Za-z0-9_.$]*")
                     || !(e.getValue() instanceof String) || !((String)e.getValue()).matches("0x7f[0-9a-f]{6}")) throw fail(MALFORMED, "Invalid installed reservation");
             String id = (String)e.getValue(), type = e.getKey().substring(0, e.getKey().indexOf('/')), typeId = id.substring(4, 6);
             String previousType = types.put(type, typeId), previousId = typeIds.put(typeId, type);

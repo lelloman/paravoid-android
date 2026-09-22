@@ -93,6 +93,16 @@ public class CompleteVpkVerifierTest {
         c.put("java-resources.jar", nested);
         rejected(pack(c, Collections.emptyMap()));
     }
+    @Test public void acceptsGeneratedResourceNamesButNotPaths() throws Exception {
+        for (String name : Arrays.asList("drawable/$avd_hide_password__0", "drawable/../escape", "drawable/$bad/name")) {
+            Map<String,byte[]> c = components("A");
+            c.put("resource-ledger.json", ("{\"version\":1,\"applicationId\":\"" + f.policy.applicationId
+                + "\",\"entries\":[{\"name\":\"" + name + "\",\"id\":\"0x7f010000\",\"removed\":false}]}").getBytes(StandardCharsets.UTF_8));
+            File archive = pack(c, Collections.emptyMap());
+            if (name.equals("drawable/$avd_hide_password__0")) verifier.verifyEmbedded(archive, f.policy, f.scope);
+            else rejected(archive);
+        }
+    }
     @Test public void failedProducerNeverReplacesExistingOutput() throws Exception {
         File output = write(new byte[]{42});
         Map<String,byte[]> invalid = components("A"); invalid.put("unexpected", new byte[0]);

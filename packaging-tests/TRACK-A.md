@@ -64,3 +64,9 @@ From the isolated app's `android/`, use Gradle 9.1 with these arguments:
 Gradle 9's Groovy 4 exposed missing explicit `groovy.xml.XmlParser` imports in
 two packaging tasks. The fix compiles under Gradle 9; Gradle 8 shell-contract and
 resource-shell regression tests also pass. This is not device acceptance.
+
+The real app also exposed AAPT-generated names such as
+`drawable/$avd_hide_password__0`. Resource-ledger export, installed-policy decoding
+and VPK admission now preserve `$` in linked names. Regression tests cover exact
+stable-ID/tombstone preservation and continued rejection of path-like names;
+resource-ledger tests and the shared contract suite pass.

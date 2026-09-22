@@ -125,7 +125,7 @@ public final class CompleteVpkVerifier implements VpkVerifier {
         for (Object item : entries) {
             Map<String,Object> entry = object(item); fields(entry, "name id removed");
             String name = string(entry, "name"), id = string(entry, "id");
-            if (name.length() > 4096 || !name.matches("[a-z][a-z0-9_]*/[A-Za-z_][A-Za-z0-9_.]*")
+            if (name.length() > 4096 || !name.matches("[a-z][a-z0-9_]*/[A-Za-z_$][A-Za-z0-9_.$]*")
                     || !id.matches("0x7f[0-9a-f]{6}") || !(entry.get("removed") instanceof Boolean)
                     || names.put(name, id) != null || ids.put(id, name) != null) throw fail(MALFORMED, "Invalid ledger entry");
             String type = name.substring(0, name.indexOf('/')), typeId = id.substring(4, 6);

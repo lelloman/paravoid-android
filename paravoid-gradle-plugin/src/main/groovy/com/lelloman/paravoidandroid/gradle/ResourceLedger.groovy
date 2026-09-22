@@ -15,7 +15,8 @@ final class ResourceLedger {
         Map types = [:], typeIds = [:]
         List<Map> validated = entries.collect { entry ->
             require(entry.keySet() == ['name', 'id', 'removed'] as Set, 'Invalid resource entry fields')
-            require(entry.name instanceof String && entry.name ==~ /[a-z][a-z0-9_]*\/[A-Za-z_][A-Za-z0-9_.]*/, "Invalid resource name: ${entry.name}")
+            // AAPT-generated animated-vector resources contain '$'; preserve linked names exactly.
+            require(entry.name instanceof String && entry.name ==~ /[a-z][a-z0-9_]*\/[A-Za-z_$][A-Za-z0-9_.$]*/, "Invalid resource name: ${entry.name}")
             require(entry.id instanceof String && entry.id ==~ /0x7f[0-9a-f]{6}/, "Invalid resource ID: ${entry.id}")
             require(entry.removed instanceof Boolean, "Invalid tombstone: ${entry.name}")
             require(names.add(entry.name), "Duplicate resource name: ${entry.name}")

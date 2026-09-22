@@ -9,11 +9,14 @@ public class InstalledPolicyCodecTest {
     static MetadataTestSupport f;
     @BeforeClass public static void keys() throws Exception { f = new MetadataTestSupport(); }
     static byte[] boundary() throws Exception {
+        return boundary("string/title");
+    }
+    static byte[] boundary(String resourceName) throws Exception {
         Map<String,Object> d = new LinkedHashMap<>();
         d.put("profile", "embedded-apk-v1"); d.put("applicationId", f.policy.applicationId); d.put("minSdk", 30);
         d.put("manifestSha256", "b".repeat(64)); d.put("declarations", Collections.singletonMap("application", "example.App"));
         d.put("pinnedResources", Collections.emptyMap()); d.put("runtimeClasses", Collections.singletonMap("runtime.class", "c".repeat(64)));
-        d.put("nativeAbis", Collections.emptyMap()); d.put("ledgerReservations", Collections.singletonMap("string/title", "0x7f010000"));
+        d.put("nativeAbis", Collections.emptyMap()); d.put("ledgerReservations", Collections.singletonMap(resourceName, "0x7f010000"));
         d.put("apkSigners", Collections.singletonList("d".repeat(64))); d.put("toolchain", Collections.singletonMap("agp", "8.13.2"));
         Map<String,Object> distribution = new LinkedHashMap<>(); distribution.put("bootstrap", "embedded"); distribution.put("updates", false); d.put("distribution", distribution);
         Map<String,Object> wrapper = new LinkedHashMap<>(); wrapper.put("version", 1); wrapper.put("descriptor", d); wrapper.put("contractId", Digests.sha256(StrictJson.canonical(d)));
@@ -37,6 +40,15 @@ public class InstalledPolicyCodecTest {
         String b = InstalledPolicyCodec.read(create("https://other.example/", Bootstrap.EMBEDDED, true, false, false), false).shellContractId;
         String c = InstalledPolicyCodec.read(create(f.policy.baseUrl, Bootstrap.EMPTY, true, false, false), false).shellContractId;
         assertNotEquals(a, b); assertNotEquals(a, c);
+    }
+    @Test public void acceptsGeneratedResourceNamesButNotPaths() throws Exception {
+        String name = "drawable/$avd_hide_password__0";
+        byte[] policy = InstalledPolicyCodec.create(boundary(name), f.trustBytes(), Bootstrap.EMBEDDED,
+            false, "", "stable", Authentication.PUBLIC, false, false);
+        assertEquals("0x7f010000", InstalledPolicyCodec.read(policy, false).resourceReservations.get(name));
+        for (String invalid : Arrays.asList("drawable/../escape", "drawable/$bad/name", "drawable/$bad\nname"))
+            assertThrows(ContractException.class, () -> InstalledPolicyCodec.create(boundary(invalid), f.trustBytes(),
+                Bootstrap.EMBEDDED, false, "", "stable", Authentication.PUBLIC, false, false));
     }
     @Test public void releaseRejectsDebugHttpAndEmptyOffline() throws Exception {
         assertThrows(ContractException.class, () -> create("http://127.0.0.1/", Bootstrap.EMBEDDED, true, true, false));
