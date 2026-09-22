@@ -9,4 +9,4 @@ dependencyResolutionManagement {
 rootProject.name = 'automatic-resources'
 include ':paravoid-api', ':paravoid-runtime', ':resource-library'
 project(':paravoid-api').projectDir = file('../../paravoid-api')
-project(':paravoid-runtime').projectDir = file('fixture-runtime')
+project(':paravoid-runtime').projectDir = file(providers.gradleProperty('productionRuntime').present ? '../../paravoid-runtime' : 'fixture-runtime')

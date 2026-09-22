@@ -44,6 +44,8 @@ written to `build/validated/evidence-<serial>.json`. Host tests mutate probe evi
 to ensure assertions reject stale/wrong values and verify fixture ZIP assembly.
 
 Recorded results: [VALIDATION.md](VALIDATION.md).
+The separate [production gate](PRODUCTION.md) now verifies signed APK assembly and
+early loading without this fixture's repacker or injected runtime hook.
 
 ## Test-only scaffolding and remaining limits
 

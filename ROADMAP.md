@@ -61,8 +61,9 @@ not yet complete. The first [same-package fixture](compatibility/resource-split/
 now verifies stable linking, a pinned-only installed table and early runtime
 resource access. The plugin now implements explicit ownership/pruning tasks, and
 the [generated-pair gate](compatibility/automatic-resources/README.md) verifies
-their outputs on API 30/36.1, including named-process access. Production assembly,
-early-loader integration and the remaining contract-gate scenarios are pending.
+their outputs on API 30/36.1, including named-process access. An explicit production
+embedded-resource APK task and early loader are now implemented; complete-packaging
+integration and the remaining contract-gate scenarios are pending.
 
 - Inventory app and dependency outputs from AGP; define which artifacts belong to
   the shell and which belong to the payload. Preserve ordinary normal packaging.
@@ -256,12 +257,11 @@ document requirements and limitations, and make small commits. Add focused probe
 when a concrete risk or real-app failure warrants one. Do not restart an open-ended
 compatibility exploration phase before finishing packaging.
 
-**Immediate next task:** integrate the proven generated-resource assembly and early
-attachment into production packaging/runtime, bound to coherent payload metadata
-and validation. Extend the resource-boundary diff into the full shell contract and
-automatic packaging gates. The generated pair now passes the bounded API 30/36.1
-device gate with fixture-only assembly/loading; do not treat that as shipped
-full-VPK support.
+**Immediate next task:** extend the resource-boundary diff into the full shell
+contract and coherent payload packaging gates, then finish Java-resource/native
+relocation and full-VPK assembly/validation. The explicit embedded-resource APK
+task and production early loader now pass API 30/36.1 device tests. They do not
+enable `packaging = 'complete'` or downloaded full-VPK updates.
 Finish the [remaining contract-gate scenarios](PACKAGING.md#7-first-implementation-gate)
 alongside that implementation before advertising complete packaging support.
 
@@ -286,8 +286,8 @@ copies app/library assets only into the payload, aligns both containers and veri
 binary round trips. A configured resource-boundary baseline gates this task.
 Host/integration tests cover clean/incremental reproducibility, unchanged pinned
 output across movable updates, resource removals, empty tables and APK non-mutation.
-The two unsigned resource archives are not installable shells or full VPKs; production
-runtime attachment and installed-table replacement remain unimplemented.
+The two unsigned resource archives are not themselves installable shells or full
+VPKs. A separate production assembly task now consumes them as described below.
 
 The generated-pair device fixture now consumes those exact outputs and passes 19
 stages on each of API 30 and 36.1: normal control, pinned-only shell without movable
@@ -297,3 +297,14 @@ writable archive rejection. APK bytes and app data remain fixed through selectio
 Assembly and the early loader are test scaffolding; code stays at A, so coherent
 code/resource updates, Compose/system-resource cases and full contract validation
 remain separate gates.
+
+Fourth slice: `package<Variant>ParavoidResourceShell` now assembles and signs a
+pinned-only installed APK with embedded resources/assets, using the production
+early resource loader. APK-authenticated resources are materialized read-only in
+no-backup storage under an interprocess extraction lock and verified every startup.
+The [production gate](compatibility/automatic-resources/PRODUCTION.md) passes 22
+stages each on API 30/36.1, including named-worker startup, configurations, cold
+cache reuse, APK A/B/A replacement preserving data and corrupt/writable rejection.
+Normal and DEX-only assembly remain unchanged. This explicit embedded-only stage
+does not implement complete packaging, signed external VPKs or generation activation;
+Java/native files remain installed and cache retention/recovery is still pending.

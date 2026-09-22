@@ -184,6 +184,11 @@ It passes 19 stages on each API, including named-process access, recreation,
 day/night changes, assets and absent/removed resources. Its APK assembly and early
 loader remain fixture-only, and code stays fixed while resources change. Compose,
 system-consumed pinned resources and full contract checks remain outstanding.
+The separate [production gate](compatibility/automatic-resources/PRODUCTION.md)
+now verifies an explicit signed embedded-resource APK task and production early
+loading on both APIs (22 stages each). It replaces APKs to test embedded generations;
+it does not establish full-VPK activation or complete packaging. Native/Java content
+is still installed, and cache retention/recovery remains unfinished.
 Complete the gate before locking the strategy into a released format. If it fails, revise
 this document explicitly; do not quietly substitute unsupported APIs or require
 a manual downstream split.

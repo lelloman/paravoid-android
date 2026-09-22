@@ -452,9 +452,10 @@ produces these files under `build/outputs/paravoid/<variant>/resources/`:
 - `split-report.json`: resource/file ownership, asset paths and baseline-check status.
 
 These are **unsigned resource containers, not installable apps or complete VPKs**.
-The production installable APK is neither rewritten nor stripped yet. A dedicated
+The ordinary assemble APK is neither rewritten nor stripped by this split task. A dedicated
 [device gate](compatibility/automatic-resources/README.md) assembles a test-only
-shell and attaches the generated resources early; production integration remains.
+shell and attaches the generated resources early. The production counterpart is
+the explicit signed embedded-resource shell task described below.
 
 No downstream resource module or manually selected resource folders are needed.
 The existing `pinnedResources` declarations and computed graph drive the subset.
@@ -482,9 +483,45 @@ code stays fixed in this fixture; this is not yet full-VPK update validation.
 Current limits: standalone APKs and the analyzer's supported resource profile.
 Unknown reserved `assets/paravoid/` entries or unclassified `res/` files fail rather
 than silently disappear. Java resources/native payload splitting, signing the full
-VPK, full shell-contract validation and automatic installable-shell assembly are
+VPK, full shell-contract validation and complete-packaging assemble integration are
 still unfinished. See [AAPT2](https://developer.android.com/tools/aapt2) and
 [zipalign](https://developer.android.com/tools/zipalign) for the underlying tools.
+
+### Build a signed embedded-resource shell
+
+```sh
+./gradlew :app:packageParavoidAndroidDebugParavoidResourceShell
+```
+
+This explicit production task builds `outputs/paravoid/<variant>/resource-shell.apk`.
+It consumes the validated split outputs, replaces the installed table/files with
+the pinned subset, removes ordinary installed assets, embeds the complete resource
+container and its SHA-256 identity, aligns the APK and signs/verifies it with the
+build type's `signingConfig`. The certificate must match the input APK. Normal
+and existing DEX-only assemble outputs are unchanged; install this new APK explicitly.
+
+The production runtime loads this embedded container before constructing the user
+Application, component factory or providers. It materializes a content-addressed,
+read-only file under no-backup storage, serializes extraction across app processes,
+and checks size/hash on every process startup. Application/Activity and derived
+configuration resources receive the same loader. With no embedded resource pair,
+legacy DEX-only startup stays unchanged. Corrupt/writable caches fail closed; this
+slice has no automatic repair UI or external resource-selection API.
+
+Requirements: matching plugin/runtime, minSdk 30+, one unfiltered standalone APK,
+ordinary keystore signing configured on the build type, no direct-boot/isolated
+components, and at most 256 MiB of embedded resource archive. Existing shrinking
+and desugaring restrictions still apply. Custom signing/rotation pipelines are not
+supported by this task. Private signing credentials are excluded from task cache
+keys; signed output is always regenerated and never build-cached.
+
+This is **embedded code + resources/assets**, not `packaging = 'complete'` or a
+signed VPK. Native libraries and Java resources still live in the installed APK;
+there is no empty shell, downloaded update, version activation, generation retention
+or full shell-contract check. Accepted resource-boundary checks do apply when a
+baseline is configured. Cached resource generations currently remain until app
+data is cleared; lifecycle/retention work must precede enabling external updates.
+See the [production device gate](compatibility/automatic-resources/PRODUCTION.md).
 
 ## Verification
 
