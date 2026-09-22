@@ -51,6 +51,11 @@ public final class DeliveryController {
         if (attemptLock != null) return true;
         attemptChannel.close(); attemptChannel = null; return false;
     }
+    private Path retryFile() { return preferenceFile.resolveSibling(preferenceFile.getFileName() + ".retry"); }
+    private void clearRetry() {
+        try { Files.deleteIfExists(retryFile()); }
+        catch (IOException failure) { fail("PREFERENCES_IO"); }
+    }
     private void releaseAttempt() {
         try { if (attemptLock != null) attemptLock.release(); }
         catch (IOException failure) { fail("IO"); }
@@ -90,16 +95,12 @@ public final class DeliveryController {
             attempts.credentialsReplaced();
             operation = attempts.generation();
             try {
-                String previous = client.credentialPartition();
                 client.installedApk(baseApk);
-                preferences = DeliveryPreferences.read(preferenceFile);
-                // Initializing the same installed APK on every process start must not
-                // erase the durable six-hour interval.
-                if (previous != null && !previous.equals(client.credentialPartition())) {
-                    preferences = new DeliveryPreferences(preferences.automaticChecks, preferences.automaticDownloads,
-                            preferences.unmeteredOnly, 0);
-                    preferences.write(preferenceFile);
-                }
+                String partition = client.credentialPartition();
+                preferences = DeliveryPreferences.update(preferenceFile, saved ->
+                        new DeliveryPreferences(saved.automaticChecks, saved.automaticDownloads, saved.unmeteredOnly,
+                                saved.credentialPartition != null && !saved.credentialPartition.equals(partition)
+                                        ? 0 : saved.lastAutomaticCheckSeconds, partition));
                 applyPreferences();
                 activity = Activity.IDLE; error = null;
             } catch (ContractException failure) { fail(failure.code.name()); }
@@ -112,15 +113,18 @@ public final class DeliveryController {
         attempts.cancel(); client.cancelDownload();
         worker.execute(() -> {
             if (pendingRetry != null) pendingRetry.cancel(false);
-            attempts.finish(operation); releaseAttempt(); activity = Activity.CANCELLED; error = null; publish();
+            attempts.finish(operation); activity = Activity.CANCELLED; error = null;
+            if (attemptLock != null) clearRetry();
+            releaseAttempt(); publish();
         });
     }
     public void preferences(DeliveryPreferences value) {
         worker.execute(() -> {
             try {
-                DeliveryPreferences replacement = new DeliveryPreferences(value.automaticChecks, value.automaticDownloads,
-                        value.unmeteredOnly, preferences.lastAutomaticCheckSeconds);
-                replacement.write(preferenceFile); preferences = replacement; applyPreferences();
+                preferences = DeliveryPreferences.update(preferenceFile, saved ->
+                        new DeliveryPreferences(value.automaticChecks, value.automaticDownloads,
+                                value.unmeteredOnly, saved.lastAutomaticCheckSeconds, saved.credentialPartition));
+                applyPreferences();
             } catch (IOException failed) { fail("PREFERENCES_IO"); }
             publish();
         });
@@ -146,15 +150,18 @@ public final class DeliveryController {
             try { preferences = DeliveryPreferences.read(preferenceFile); applyPreferences(); }
             catch (IOException failure) { fail("PREFERENCES_IO"); publish(); return; }
             long now = clock.unixSeconds();
-            if (trigger == AttemptPolicy.Trigger.FOREGROUND && preferences.lastAutomaticCheckSeconds > 0
-                    && now >= preferences.lastAutomaticCheckSeconds
-                    && now - preferences.lastAutomaticCheckSeconds < 6 * 60 * 60) return;
             if (!attempts.begin(trigger, clock.elapsedMillis())) return;
             operation = attempts.generation();
+            PendingRetry resume;
+            boolean explicit = trigger == AttemptPolicy.Trigger.CHECK_NOW || trigger == AttemptPolicy.Trigger.RETRY;
             try {
                 if (!claimAttempt()) { attempts.finish(operation); return; }
                 preferences = DeliveryPreferences.read(preferenceFile); applyPreferences();
-                if (trigger == AttemptPolicy.Trigger.FOREGROUND && preferences.lastAutomaticCheckSeconds > 0
+                resume = PendingRetry.read(retryFile());
+                if (resume != null && (explicit || !resume.partition.equals(client.credentialPartition()))) {
+                    clearRetry(); resume = null;
+                }
+                if (resume == null && trigger == AttemptPolicy.Trigger.FOREGROUND && preferences.lastAutomaticCheckSeconds > 0
                         && now >= preferences.lastAutomaticCheckSeconds
                         && now - preferences.lastAutomaticCheckSeconds < 6 * 60 * 60) {
                     attempts.finish(operation); releaseAttempt(); return;
@@ -162,11 +169,25 @@ public final class DeliveryController {
             } catch (IOException failure) {
                 attempts.finish(operation); releaseAttempt(); fail("PREFERENCES_IO"); publish(); return;
             }
-            boolean explicit = trigger == AttemptPolicy.Trigger.CHECK_NOW || trigger == AttemptPolicy.Trigger.RETRY;
+            if (resume != null) {
+                if (resume.retries > 3) {
+                    attempts.finish(operation); clearRetry(); releaseAttempt(); fail("RETRY_EXHAUSTED"); publish(); return;
+                }
+                attempts.restoreRetries(resume.retries);
+                long delay = Math.max(0, Math.min(3600, resume.dueSeconds - now)) * 1000;
+                boolean resumedExplicit = resume.explicit;
+                long token = operation;
+                activity = Activity.WAITING_TO_RETRY;
+                pendingRetry = worker.schedule(() -> run(token, resumedExplicit), delay, TimeUnit.MILLISECONDS);
+                publish(); return;
+            }
             if (!explicit) {
-                preferences = new DeliveryPreferences(preferences.automaticChecks, preferences.automaticDownloads,
-                        preferences.unmeteredOnly, now);
-                try { preferences.write(preferenceFile); }
+                try {
+                    preferences = DeliveryPreferences.update(preferenceFile, saved ->
+                            new DeliveryPreferences(saved.automaticChecks, saved.automaticDownloads,
+                                    saved.unmeteredOnly, now, client.credentialPartition()));
+                    applyPreferences();
+                }
                 catch (IOException failure) { attempts.finish(operation); releaseAttempt(); fail("PREFERENCES_IO"); publish(); return; }
             }
             run(operation, explicit);
@@ -176,6 +197,13 @@ public final class DeliveryController {
         if (!attempts.current(token)) return;
         activity = Activity.CHECKING; error = null; publish();
         try {
+            if (attempts.retryCount() > 0) {
+                // Consume this retry durably before HTTP. Death during a request
+                // cannot replay the same retry indefinitely on each process restart.
+                new PendingRetry(client.credentialPartition(), clock.unixSeconds(),
+                        attempts.retryCount() + 1, explicit).write(retryFile());
+            }
+            preferences = DeliveryPreferences.read(preferenceFile); applyPreferences();
             DeliveryClient.Result result = client.check(scope, attempts.downloadAllowed(explicit, metered.getAsBoolean()), explicit);
             activity = result.stage == null ? Activity.IDLE : Activity.READY;
             if (result.status == HeadStatus.SHELL_UPDATE_REQUIRED) error = "SHELL_UPDATE_REQUIRED";
@@ -189,9 +217,15 @@ public final class DeliveryController {
                     || failure instanceof javax.net.ssl.SSLException;
             long delay = network ? attempts.retryDelay(failure, ThreadLocalRandom.current().nextDouble(), token) : -1;
             if (delay >= 0) {
-                activity = Activity.WAITING_TO_RETRY;
-                pendingRetry = worker.schedule(() -> run(token, explicit), delay, TimeUnit.MILLISECONDS);
-                publish(); return;
+                try {
+                    new PendingRetry(client.credentialPartition(), clock.unixSeconds() + (delay + 999) / 1000,
+                            attempts.retryCount(), explicit).write(retryFile());
+                    activity = Activity.WAITING_TO_RETRY;
+                    pendingRetry = worker.schedule(() -> run(token, explicit), delay, TimeUnit.MILLISECONDS);
+                    publish(); return;
+                } catch (IOException storageFailure) {
+                    fail("PREFERENCES_IO"); attempts.finish(token); releaseAttempt(); publish(); return;
+                }
             }
             if (failure instanceof HttpTransport.Failure) {
                 HttpTransport.Failure http = (HttpTransport.Failure) failure;
@@ -199,7 +233,7 @@ public final class DeliveryController {
                 else fail(http.status == 401 || http.status == 403 ? "CREDENTIAL_UNAVAILABLE" : http.code);
             } else fail("IO");
         }
-        attempts.finish(token); releaseAttempt(); publish();
+        attempts.finish(token); clearRetry(); releaseAttempt(); publish();
     }
     private void fail(String code) { activity = Activity.ERROR; error = code; }
     private void publish() {

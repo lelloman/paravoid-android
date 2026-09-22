@@ -62,6 +62,8 @@ final class AttemptPolicy {
         return Math.max(delay, Math.min(3600, retryAfter) * 1000);
     }
 
+    synchronized int retryCount() { return retries; }
+    synchronized void restoreRetries(int count) { retries = count; }
     synchronized long generation() { return credentialGeneration; }
     synchronized boolean current(long generation) { return generation == credentialGeneration && !cancelled; }
     synchronized void finish(long generation) { if (generation == credentialGeneration) busy = false; }

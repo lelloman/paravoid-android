@@ -114,6 +114,23 @@ public final class DeliveryControllerTest {
             c.controller.checkNow(); c.await(DeliveryController.Activity.READY);
             check(c.setup.f.requests == 3); // Cancellation releases it for another controller.
         }
+        try (Control c = new Control()) {
+            Path retry = c.preferences.resolveSibling(c.preferences.getFileName() + ".retry");
+            new PendingRetry(c.setup.client.credentialPartition(), c.setup.clock.wall + 3600, 2, false).write(retry);
+            c.controller.foreground(true); c.await(DeliveryController.Activity.WAITING_TO_RETRY);
+            check(c.setup.f.requests == 0); // Restart honors persisted Retry-After.
+            c.controller.cancelDownload(); c.await(DeliveryController.Activity.CANCELLED); c.barrier();
+            check(!Files.exists(retry));
+            new PendingRetry(c.setup.client.credentialPartition(), 0, 3, false).write(retry);
+            c.setup.f.responses.add(new Fake(503, new byte[0]));
+            c.controller.foreground(true); c.await(DeliveryController.Activity.ERROR); c.barrier();
+            check(c.setup.f.requests == 1 && c.worker.getQueue().isEmpty());
+            check(!Files.exists(retry)); // A restart does not reset the retry budget.
+            new PendingRetry(c.setup.client.credentialPartition(), 0, 4, false).write(retry);
+            c.controller.foreground(true);
+            check(c.await(DeliveryController.Activity.ERROR).errorCode.equals("RETRY_EXHAUSTED"));
+            check(c.setup.f.requests == 1); // Death during the last retry cannot replay it.
+        }
         System.out.println("DeliveryControllerTest: " + TransportTest.assertions + " assertions passed");
     }
 }
