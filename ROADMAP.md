@@ -258,7 +258,7 @@ when a concrete risk or real-app failure warrants one. Do not restart an open-en
 compatibility exploration phase before finishing packaging.
 
 **Immediate next task:** extend the resource-boundary diff into the full shell
-contract and coherent payload packaging gates, then finish Java-resource/native
+contract and coherent payload packaging gates, then finish native
 relocation and full-VPK assembly/validation. The explicit embedded-resource APK
 task and production early loader now pass API 30/36.1 device tests. They do not
 enable `packaging = 'complete'` or downloaded full-VPK updates.
@@ -308,3 +308,13 @@ cache reuse, APK A/B/A replacement preserving data and corrupt/writable rejectio
 Normal and DEX-only assembly remain unchanged. This explicit embedded-only stage
 does not implement complete packaging, signed external VPKs or generation activation;
 Java/native files remain installed and cache retention/recovery is still pending.
+
+Fifth slice: the embedded-resource shell now relocates final merged Java resources
+into an authenticated embedded JAR, removes the installed copies and exposes them
+through a resource-only parent of the in-memory DEX loader. App/library service
+descriptor merging, excludes, resource streams/enumeration and escaped URLs pass
+in constructors/providers/Application/Activities and a named worker. The extended
+production gate passes 25 stages each on API 30/36.1, including independent Java
+archive corruption/writability rejection. Binder-thread default ServiceLoader is
+not promised; the normal control also requires an explicit loader there. Native
+relocation, full contract/VPK integration, activation and retention remain pending.

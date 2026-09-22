@@ -36,6 +36,9 @@ public final class ProbeActivity extends Activity {
             String marker = prefs.getString("marker", null);
             if (marker == null) { marker = UUID.randomUUID().toString(); prefs.edit().putString("marker", marker).commit(); }
             JSONObject result = new JSONObject().put("run", getIntent().getStringExtra("run"))
+                .put("java", JavaProbe.verify()).put("constructorJava", ProbeApplication.constructorJava)
+                .put("applicationJava", ProbeApplication.applicationJava).put("earlyJava", EarlyProvider.earlyJava)
+                .put("javaUrl", JavaProbe.class.getClassLoader().getResource("probe/value.txt").toString())
                 .put("pid", android.os.Process.myPid()).put("processToken", processToken).put("creations", ++creations)
                 .put("marker", marker).put("title", title).put("shell", shell)
                 .put("shellLabel", getString(R.string.shell_label)).put("pinnedTheme", pinnedTheme)

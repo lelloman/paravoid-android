@@ -10,6 +10,12 @@ public final class WorkerProvider extends EarlyProvider {
             if (!ProbeApplication.started.await(5, java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("Worker startup timed out");
         } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException(error); }
         Bundle result = new Bundle();
+        // Android's pre-existing Binder threads do not inherit the app context loader,
+        // even in normal packaging; use an explicit defining loader here.
+        result.putString("java", JavaProbe.verify(false));
+        result.putString("earlyJava", earlyJava);
+        result.putString("constructorJava", ProbeApplication.constructorJava);
+        result.putString("applicationJava", ProbeApplication.applicationJava);
         result.putString("title", ProbeActivity.title(getContext()));
         result.putString("early", earlyTitle);
         result.putString("application", ProbeApplication.applicationTitle);

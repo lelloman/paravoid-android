@@ -482,7 +482,7 @@ code stays fixed in this fixture; this is not yet full-VPK update validation.
 
 Current limits: standalone APKs and the analyzer's supported resource profile.
 Unknown reserved `assets/paravoid/` entries or unclassified `res/` files fail rather
-than silently disappear. Java resources/native payload splitting, signing the full
+than silently disappear. Native payload splitting, signing the full
 VPK, full shell-contract validation and complete-packaging assemble integration are
 still unfinished. See [AAPT2](https://developer.android.com/tools/aapt2) and
 [zipalign](https://developer.android.com/tools/zipalign) for the underlying tools.
@@ -500,6 +500,15 @@ container and its SHA-256 identity, aligns the APK and signs/verifies it with th
 build type's `signingConfig`. The certificate must match the input APK. Normal
 and existing DEX-only assemble outputs are unchanged; install this new APK explicitly.
 
+The task also relocates merged Java resources into `java-resources.jar`, preserving
+the final AGP merge/exclude/pickFirst result and removing the installed copies.
+APK signatures and reserved Android build metadata are not Java payload content.
+A resource-only parent of the in-memory DEX loader provides class resource URLs,
+streams/enumeration and service descriptors before user constructors/providers run.
+The JAR uses the same read-only, hash-checked no-backup cache rules as resources.
+On pre-existing Binder threads, use an explicit loader for `ServiceLoader`; those
+threads do not inherit the app context loader even in normal Android packaging.
+
 The production runtime loads this embedded container before constructing the user
 Application, component factory or providers. It materializes a content-addressed,
 read-only file under no-backup storage, serializes extraction across app processes,
@@ -516,7 +525,7 @@ supported by this task. Private signing credentials are excluded from task cache
 keys; signed output is always regenerated and never build-cached.
 
 This is **embedded code + resources/assets**, not `packaging = 'complete'` or a
-signed VPK. Native libraries and Java resources still live in the installed APK;
+signed VPK. Native libraries still live in the installed APK;
 there is no empty shell, downloaded update, version activation, generation retention
 or full shell-contract check. Accepted resource-boundary checks do apply when a
 baseline is configured. Cached resource generations currently remain until app

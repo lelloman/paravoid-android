@@ -7,8 +7,10 @@ import android.net.Uri;
 
 public class EarlyProvider extends ContentProvider {
     static String earlyTitle;
+    static String earlyJava;
     static boolean beforeApplication;
     @Override public boolean onCreate() {
+        earlyJava = JavaProbe.verify();
         earlyTitle = ProbeActivity.title(getContext());
         beforeApplication = !ProbeApplication.created;
         return true;

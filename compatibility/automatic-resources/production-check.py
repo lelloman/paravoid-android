@@ -2,6 +2,7 @@
 """Build/test production embedded resource-shell tasks; no fixture runtime or repacking."""
 import importlib.util
 import json
+import io
 import os
 from pathlib import Path
 import shutil
@@ -52,6 +53,12 @@ def assemble():
             import hashlib
             assert archive.read('assets/paravoid/resources.sha256').decode() == hashlib.sha256(payload).hexdigest() + '\n'
             assert 'assets/content.txt' not in archive.namelist()
+            assert 'probe/value.txt' not in archive.namelist()
+            java = archive.read('assets/paravoid/java-resources.jar')
+            assert archive.read('assets/paravoid/java-resources.sha256').decode() == hashlib.sha256(java).hexdigest() + '\n'
+            with zipfile.ZipFile(io.BytesIO(java)) as resources:
+                assert resources.read('probe/value.txt').decode().strip() == 'Java ' + version
+                assert 'probe/excluded.txt' not in resources.namelist()
             assert not any(name.startswith('res/') for name in archive.namelist())
             dex = b''.join(archive.read(name) for name in archive.namelist() if name.endswith('.dex'))
             assert b'EmbeddedResources' in dex and b'SplitResources' not in dex
@@ -72,6 +79,13 @@ def test_device():
     if not serial.startswith('emulator-'): raise SystemExit('Use a dedicated ANDROID_SERIAL=emulator-...')
     night = adb('shell', 'cmd', 'uimode', 'night').split()[-1]
     history = []
+    original_validate = device.validate
+    def validate(mode, version, result):
+        original_validate(mode, version, result)
+        for field in ('java', 'constructorJava', 'applicationJava', 'earlyJava'):
+            assert result[field] == result['worker'][field] == 'Java ' + version, result
+        if mode == 'shell': assert '/no_backup/paravoid-java-resources/' in result['javaUrl'], result
+    device.validate = validate
     try:
         adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
         adb('shell', 'wm', 'dismiss-keyguard')
@@ -109,31 +123,34 @@ def test_device():
                     assert result['processToken'] == previous['processToken'] and result['worker']['pid'] == previous['worker']['pid']
                 history.append({'event': version + '/' + event, 'report': result})
                 print('PASS production ' + version + '/' + event, flush=True)
-        with zipfile.ZipFile(OUT / 'A.apk') as archive:
-            content = archive.read('assets/paravoid/resources.apk')
-            identity = archive.read('assets/paravoid/resources.sha256').decode().strip()
-        cache = 'no_backup/paravoid-resources/' + identity + '.apk'
-        for reason, data, mode in [('hash mismatch', bytes([content[0] ^ 1]) + content[1:], '444'),
-                                   ('writable', content, '600')]:
+        def check_cache(name, suffix):
+            with zipfile.ZipFile(OUT / 'A.apk') as archive:
+                content = archive.read('assets/paravoid/' + name + suffix)
+                identity = archive.read('assets/paravoid/' + name + '.sha256').decode().strip()
+            cache = 'no_backup/paravoid-' + name + '/' + identity + suffix
+            for reason, data, mode in [('hash mismatch', bytes([content[0] ^ 1]) + content[1:], '444'),
+                                       ('writable', content, '600')]:
+                adb('shell', 'am', 'force-stop', APP)
+                adb('shell', '-T', 'run-as', APP, 'tee', cache + '.probe', data=data, binary=True)
+                adb('shell', 'run-as', APP, 'chmod', mode, cache + '.probe')
+                adb('shell', 'run-as', APP, 'mv', cache + '.probe', cache)
+                old = prefs().get('report')
+                adb('logcat', '-c')
+                adb('shell', 'am', 'start', '-n', APP + '/com.lelloman.paravoidandroid.runtime.LauncherActivity')
+                wait_for(reason, lambda: reason in adb('logcat', '-d', 'ParavoidAndroid:E', '*:S'))
+                assert prefs().get('report') == old
+                history.append({'event': 'rejected-cache', 'component': name, 'reason': reason})
+                print('PASS production rejects ' + name + ' cached ' + reason, flush=True)
+            # Test-only byte repair, not an automatic runtime recovery feature.
             adb('shell', 'am', 'force-stop', APP)
-            adb('shell', '-T', 'run-as', APP, 'tee', cache + '.probe', data=data, binary=True)
-            adb('shell', 'run-as', APP, 'chmod', mode, cache + '.probe')
+            adb('shell', '-T', 'run-as', APP, 'tee', cache + '.probe', data=content, binary=True)
+            adb('shell', 'run-as', APP, 'chmod', '444', cache + '.probe')
             adb('shell', 'run-as', APP, 'mv', cache + '.probe', cache)
-            old = prefs().get('report')
-            adb('logcat', '-c')
-            adb('shell', 'am', 'start', '-n', APP + '/com.lelloman.paravoidandroid.runtime.LauncherActivity')
-            wait_for(reason, lambda: reason in adb('logcat', '-d', 'ParavoidAndroid:E', '*:S'))
-            assert prefs().get('report') == old
-            history.append({'event': 'rejected-cache', 'reason': reason})
-            print('PASS production rejects cached ' + reason, flush=True)
-        # Leave the fixture usable after the negative controls.
-        adb('shell', 'am', 'force-stop', APP)
-        adb('shell', '-T', 'run-as', APP, 'tee', cache + '.probe', data=content, binary=True)
-        adb('shell', 'run-as', APP, 'chmod', '444', cache + '.probe')
-        adb('shell', 'run-as', APP, 'mv', cache + '.probe', cache)
-        _, result = launch()
-        device.validate('shell', 'A', result)
-        history.append({'event': 'cache-repaired', 'report': result})
+            _, result = launch()
+            device.validate('shell', 'A', result)
+            history.append({'event': 'cache-repaired', 'component': name, 'report': result})
+        check_cache('resources', '.apk')
+        check_cache('java-resources', '.jar')
         evidence = dict(sdk=adb('shell', 'getprop', 'ro.build.version.sdk'), sdkFull=adb('shell', 'getprop', 'ro.build.version.sdk_full'),
                         fingerprint=adb('shell', 'getprop', 'ro.build.fingerprint'), checks=history)
         (OUT / f'evidence-{serial}.json').write_text(json.dumps(evidence, indent=2) + '\n')

@@ -20,6 +20,10 @@ tasks.register('resourcePacks') {
 android {
     namespace 'com.lelloman.paravoidcompat.automaticresources'
     compileSdk 36
+    packaging.resources {
+        merges += 'META-INF/services/com.lelloman.paravoidcompat.automaticresources.JavaProbe$Greeting'
+        excludes += 'probe/excluded.txt'
+    }
     defaultConfig {
         applicationId 'com.lelloman.paravoidcompat.automaticresources'
         minSdk 30

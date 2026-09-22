@@ -56,7 +56,30 @@ The driver deliberately repairs cache bytes for a negative-control recovery test
 the runtime does not provide that repair mechanism to users yet.
 
 This implements production assembly/loading for an explicit embedded-resource APK
-stage, not the full v1 packaging contract. Native/Java resources remain installed;
+stage, not the full v1 packaging contract. Native resources remain installed;
 standalone VPK signing, external activation/leases, empty-shell adapters, cache
 retention and recovery UI are unfinished. No ARM64, release-device, R8, direct-boot,
 isolated-process or broader AGP compatibility claim follows from these runs.
+
+## Java-resource relocation — 2026-09-22
+
+The extended production gate passed **25/25 stages on both API 30 and API 36.1**.
+All positive stages now check Java-resource lookup from Application constructors,
+providers, Application.onCreate, Activities and the named worker. App/library
+service descriptors are merged by AGP and discovered with ServiceLoader; class
+resource streams and enumeration, one-result lookup, excluded resources and paths
+containing spaces, `#` and `%` are verified. A/B APKs carry different Java-resource
+bytes, and successful shell lookups must point into the private Java-resource JAR,
+not the installed APK. The extra three stages reject same-length JAR corruption,
+reject writable JARs, and verify test-only byte repair.
+
+64 plugin tests and 17 runtime tests passed, including final-APK merge/exclude
+preservation and escaped JAR URL unit coverage. Normal/shell lint passed. The
+AGP 8.13.2 public scoped JAVA_RES inputs were empty in this pipeline, so production
+selection uses the final standalone APK's non-Android entries rather than private
+intermediate paths. Reserved Android metadata/signature entries are not relocated.
+
+The normal control exposed a Binder-thread assumption: default ServiceLoader sees
+no app providers on pre-existing Binder threads. Startup tests retain default
+discovery; Binder-call tests explicitly supply the defining loader in both modes.
+No global Binder-thread mutation is introduced by Paravoid.
