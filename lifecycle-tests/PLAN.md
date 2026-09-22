@@ -149,3 +149,45 @@ publication; startup/main-frame adapter and unavailable component inventory/rout
 Android tests; capacity reservation and bounded orphan cleanup. In particular the
 journal's identical-selected staging result is not yet the corrupted-byte repair
 path, and its health helper relies on the future facade to enforce callback order.
+
+## Shared Lifecycle facade and materialization
+
+Track A metadata commit `d58457f` is integrated as `d304816`. Signed checked-in
+head/grant vectors now pass through real `SignedMetadataVerifier` into admission,
+including A-to-B replay and expiry checks. No fixture head is treated as a real VPK.
+
+`RuntimeLifecycle` implements the exact shared `Lifecycle` and returns shared
+`GenerationLease` handles without a close operation. Its constructor requires a
+`VpkVerifier`; there is no default or permissive production implementation. B can
+inject this implementation when A supplies the archive verifier and installed
+policy. The explicit `initializeNew` method is only for known first-install state;
+opening a damaged or missing established store never calls it automatically.
+
+`GenerationStore` copies source bytes, invokes that verifier, materializes only the
+verified inventory, hashes each output, syncs/seals files and directories, and
+publishes unique generation directories. Reopening reauthenticates the archive
+and rehashes every materialized component. DEX paths come only from signed inventory;
+resources, Java resources and one process-compatible native directory share a root.
+Preparation has a separate OS lock, outside selection; final publication rechecks
+admission under selection. Embedded publication now uses the same transaction to
+avoid a newer observation racing between its floor check and publication.
+
+The facade enforces onCreate before main-process first-frame health. Other processes
+can record background progress without declaring UI health. Caught failures persist
+safe codes and quarantine; an explicit retry refuses while any lease remains.
+Corrupt pending bytes are rejected before selection. Identical-byte repair of a
+selected integrity failure gets a new immutable directory; intact startup failures
+still require explicit retry, never implicit redownload execution.
+
+Cleanup serializes with preparation using an OS lock, moves only unprotected and
+exclusively unleased directories into trash under selection, then recursively
+deletes outside selection. Abandoned staging is reclaimed only while holding that
+preparation lock, never by PID/age. Space checks include two archive sizes plus
+64 MiB before copy and verified materialization plus headroom before extraction.
+
+Host facade tests use an explicitly test-only inventory verifier and small ZIPs,
+not signed executable VPK fixtures. They exercise caller-source ownership, pending
+staging, coherent paths, callbacks, offline execution after credential removal,
+leased cleanup, corruption rejection and re-download. Real VPK integration remains
+blocked on A's implementation/fixtures; loader/factory and Android UI-component
+adapters remain unwired pending installed policy/inventory and recovery routing.

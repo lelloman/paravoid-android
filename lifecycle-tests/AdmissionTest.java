@@ -101,5 +101,26 @@ public final class AdmissionTest {
         fails(Code.EXPIRED, () -> keyed.resolve(bAdmission.admission));
         fails(Code.EXPIRED, () -> keyed.observeHead(TestEvidence.head(scope("contract", 30), 3, 10099, 11000, release(3), "fresh-head-expired-grant"), b));
         System.out.println("PASS admission: credential replacement races, no public fallback, grant expiry on admission/staging resolution");
+        SignedMetadataVerifier verifier = new SignedMetadataVerifier();
+        Path vectors = Paths.get("paravoid-contract/src/test/resources/metadata-vectors");
+        TrustPolicy trust = verifier.readTrustPolicy(Files.readAllBytes(vectors.resolve("trust.json")));
+        ShellPolicy signedPolicy = new ShellPolicy(trust.applicationId, "a".repeat(64), trust,
+            "https://updates.example.test/", "stable", Authentication.APK_KEY, Bootstrap.EMBEDDED,
+            true, false, 1, Collections.emptyMap(), new byte[0]);
+        RequestScope signedScope = new RequestScope(trust.applicationId, signedPolicy.shellContractId,
+            "stable", 30, Collections.singletonList("x86_64"), 1);
+        CredentialScope signedCredential = CredentialScope.provisioned(verifier.verifyGrant(Files.readAllBytes(vectors.resolve("grant.json")), signedPolicy));
+        VerifiedHead signedA = verifier.verifyHead(Files.readAllBytes(vectors.resolve("head-a.json")), signedPolicy, signedScope);
+        VerifiedHead signedB = verifier.verifyHead(Files.readAllBytes(vectors.resolve("head-b.json")), signedPolicy, signedScope);
+        clock.wall = 1800000000L; clock.elapsed = 500; clock.boot = "signed-boot";
+        AdmissionStore signed = new AdmissionStore(parent.resolve("signed"), signedPolicy, clock);
+        signed.initializeNew(); signed.setCredentialScope(signedCredential);
+        AdmissionResult signedAdmission = signed.observeHead(signedA, signedCredential);
+        check(signed.resolve(signedAdmission.admission).equals(signedA.release));
+        signed.observeHead(signedB, signedCredential);
+        fails(Code.REPLAY, () -> signed.observeHead(signedA, signedCredential));
+        clock.wall = 1800003600L;
+        fails(Code.EXPIRED, () -> signed.observeHead(signedB, signedCredential));
+        System.out.println("PASS shared signed head/grant vectors through durable admission: A-to-B, replay rejection, expiration");
     }
 }

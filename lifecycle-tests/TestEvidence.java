@@ -12,6 +12,10 @@ public final class TestEvidence {
             release == null ? HeadStatus.NO_COMPATIBLE_RELEASE : HeadStatus.AVAILABLE,
             release, "test", bytes, bytes);
     }
+    public static VerifiedRelease release(ExpectedArchive identity, java.util.List<InventoryEntry> inventory) {
+        return new VerifiedRelease("app", "contract", "test", "a".repeat(64), identity, 1, 30, 0,
+            java.util.Collections.emptyList(), inventory, new byte[] {1});
+    }
     public static CredentialScope credential(String id, long issued, long expires) {
         return CredentialScope.provisioned(new VerifiedGrant("app", "contract", "https://test/", "grant", "key",
             "test", "TEST-ONLY", issued, expires, id.getBytes(StandardCharsets.UTF_8)));

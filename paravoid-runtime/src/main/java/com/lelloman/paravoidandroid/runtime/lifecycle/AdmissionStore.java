@@ -143,11 +143,14 @@ final class AdmissionStore {
 
     /** Embedded authorization still obeys lineage knowledge and never resets it. */
     void observeEmbedded(VerifiedRelease release) throws ContractException {
-        transaction(state -> {
+        authorizeEmbedded(release, identity -> null);
+    }
+    <T> T authorizeEmbedded(VerifiedRelease release, Publication<T> publication) throws ContractException {
+        return transaction(state -> {
             if (!policy.applicationId.equals(release.applicationId) || !policy.shellContractId.equals(release.shellContractId))
                 throw failure(Code.INCOMPATIBLE);
             rememberIdentity(state, release.identity);
-            record.write(encode(state)); return null;
+            record.write(encode(state)); return publication.run(release.identity);
         });
     }
 

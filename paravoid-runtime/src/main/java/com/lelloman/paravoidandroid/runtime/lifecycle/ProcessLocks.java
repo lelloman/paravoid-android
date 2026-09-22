@@ -27,6 +27,16 @@ final class ProcessLocks {
         return entry;
     }
 
+    /** Long disk preparation is serialized separately and never holds the registry/selection monitor. */
+    static <T> T preparation(Path path, Operation<T> operation) throws IOException {
+        requireOutsideSelection();
+        Entry entry;
+        synchronized (ProcessLocks.class) { entry = entry(path); }
+        synchronized (entry) {
+            try (FileLock lock = entry.channel.lock()) { return operation.run(); }
+        }
+    }
+
     static synchronized <T> T selection(Path path, Operation<T> operation) throws IOException {
         if (selecting) throw new IllegalStateException("Nested selection transaction");
         Entry entry = entry(path);

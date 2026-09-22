@@ -20,6 +20,7 @@ final class SelectionJournal {
     private static final class State {
         Generation selected, pending, healthy;
         boolean trial, quarantined;
+        Code failure = Code.UNAVAILABLE;
         int incomplete, retained = 1;
         final List<Generation> history = new ArrayList<>();
         final Set<String> rejected = new LinkedHashSet<>();
@@ -46,12 +47,14 @@ final class SelectionJournal {
 
     StageResult pending(Generation generation) throws ContractException {
         State s = read();
-        if (s.selected != null && s.selected.identity.equals(generation.identity))
+        boolean byteRepair = s.selected != null && s.selected.identity.equals(generation.identity)
+            && s.quarantined && s.failure == Code.INTEGRITY;
+        if (s.selected != null && s.selected.identity.equals(generation.identity) && !byteRepair)
             return new StageResult(StageStatus.ALREADY_SELECTED, generation.identity);
         if (s.pending != null && s.pending.identity.equals(generation.identity))
             return new StageResult(StageStatus.ALREADY_PENDING, generation.identity);
         // Defense in depth. Durable admission is responsible for lineage-wide floors.
-        if (s.selected != null && generation.identity.payloadVersion <= s.selected.identity.payloadVersion)
+        if (!byteRepair && s.selected != null && generation.identity.payloadVersion <= s.selected.identity.payloadVersion)
             throw fail(Code.REPLAY);
         s.pending = generation;
         write(s);
@@ -126,7 +129,15 @@ final class SelectionJournal {
         write(s);
     }
     void failed(Generation generation) throws ContractException {
-        State s = forHandle(generation); quarantine(s); write(s);
+        failed(generation, Code.UNAVAILABLE);
+    }
+    void failed(Generation generation, Code reason) throws ContractException {
+        State s = forHandle(generation); quarantine(s); s.failure = reason; write(s);
+    }
+    void rejectedBytes(Generation generation) throws ContractException {
+        State s = read();
+        if (s.selected != null && same(s.selected, generation)) failed(generation, Code.INTEGRITY);
+        else rejectPending(generation);
     }
     private static void quarantine(State s) {
         s.quarantined = true;
@@ -138,6 +149,14 @@ final class SelectionJournal {
         if (s.selected == null || !s.selected.directory.equals(generation.directory)
                 || !s.selected.identity.equals(generation.identity)) throw fail(Code.UNAVAILABLE);
         return s;
+    }
+    void checkEntry(Generation generation) throws ContractException {
+        if (forHandle(generation).quarantined) throw fail(Code.UNAVAILABLE);
+    }
+    Generation selectedForRetry(ExpectedArchive identity) throws ContractException {
+        State s = read();
+        if (!s.quarantined || s.selected == null || !s.selected.identity.equals(identity)) throw fail(Code.UNAVAILABLE);
+        return s.selected;
     }
     /** Facade must reverify intact bytes outside selection and obtain explicit user confirmation first. */
     void retry(Generation generation) throws ContractException {
@@ -174,7 +193,7 @@ final class SelectionJournal {
         Availability availability = s.quarantined ? Availability.RECOVERY : s.selected == null ? Availability.EMPTY
             : s.trial ? Availability.TRIAL : Availability.RUNNABLE;
         return new LifecycleSnapshot(availability, identity(s.selected), identity(s.pending), identity(s.healthy),
-            waiting, s.retained, storageBytes, s.quarantined ? Code.UNAVAILABLE : null);
+            waiting, s.retained, storageBytes, s.quarantined ? s.failure : null);
     }
     private static ExpectedArchive identity(Generation g) { return g == null ? null : g.identity; }
     private static ContractException fail(Code code) { return new ContractException(code, "Lifecycle selection: " + code.name()); }
@@ -190,17 +209,17 @@ final class SelectionJournal {
     }
     private static byte[] encode(State s) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream(); DataOutputStream out = new DataOutputStream(bytes);
-        out.writeInt(1); generation(out, s.selected); generation(out, s.pending); generation(out, s.healthy);
-        out.writeBoolean(s.trial); out.writeBoolean(s.quarantined); out.writeInt(s.incomplete); out.writeInt(s.retained);
+        out.writeInt(2); generation(out, s.selected); generation(out, s.pending); generation(out, s.healthy);
+        out.writeBoolean(s.trial); out.writeBoolean(s.quarantined); out.writeUTF(s.failure.name()); out.writeInt(s.incomplete); out.writeInt(s.retained);
         out.writeInt(s.history.size()); for (Generation generation : s.history) generation(out, generation);
         out.writeInt(s.rejected.size()); for (String rejected : s.rejected) out.writeUTF(rejected);
         return bytes.toByteArray();
     }
     private static State decode(byte[] bytes) throws IOException {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes)); State s = new State();
-        if (in.readInt() != 1) throw new IOException("Unknown selection version");
+        if (in.readInt() != 2) throw new IOException("Unknown selection version");
         s.selected = generation(in); s.pending = generation(in); s.healthy = generation(in);
-        s.trial = in.readBoolean(); s.quarantined = in.readBoolean(); s.incomplete = in.readInt(); s.retained = in.readInt();
+        s.trial = in.readBoolean(); s.quarantined = in.readBoolean(); s.failure = Code.valueOf(in.readUTF()); s.incomplete = in.readInt(); s.retained = in.readInt();
         int history = in.readInt(); if (history < 0 || history > 3) throw new IOException("Invalid history count");
         for (int n = 0; n < history; n++) s.history.add(Objects.requireNonNull(generation(in)));
         int rejected = in.readInt(); if (rejected < 0 || rejected > 64) throw new IOException("Invalid rejected count");
