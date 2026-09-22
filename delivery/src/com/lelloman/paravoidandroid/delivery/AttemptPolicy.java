@@ -28,6 +28,7 @@ final class AttemptPolicy {
                 && elapsedMs - lastCheckElapsedMs < FOREGROUND_INTERVAL_MS) return false;
         if (explicit) authSuppressed = false;
         lastCheckElapsedMs = elapsedMs; hasChecked = true;
+        credentialGeneration++; // Also distinguishes callbacks from prior attempts with the same grant.
         busy = true; cancelled = false; retries = 0;
         return true;
     }
