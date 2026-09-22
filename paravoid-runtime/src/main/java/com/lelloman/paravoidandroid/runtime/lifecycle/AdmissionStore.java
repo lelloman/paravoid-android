@@ -40,6 +40,11 @@ final class AdmissionStore {
         } catch (IOException e) { throw failure(Code.IO); }
     }
 
+    static byte[] initialState(String applicationId) throws IOException {
+        State state = new State(); state.applicationId = applicationId;
+        return encode(state);
+    }
+
     private interface Transaction<T> { T run(State state) throws ContractException, IOException; }
     private <T> T transaction(Transaction<T> operation) throws ContractException {
         return transaction(operation, false, null, false);

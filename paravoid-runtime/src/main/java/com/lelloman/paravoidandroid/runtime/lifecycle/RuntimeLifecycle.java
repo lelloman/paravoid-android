@@ -46,12 +46,13 @@ public final class RuntimeLifecycle implements Lifecycle {
 
     /** Explicit first-install operation; fails if any store directory already exists, even partially. */
     public void initializeNew() throws ContractException {
-        admission.initializeNew();
-        try {
-            Files.createDirectory(root.resolve("staging")); Files.createDirectory(root.resolve("generations"));
-            Files.createDirectory(root.resolve("trash")); AtomicRecord.syncDirectory(root);
-            selection(j -> { j.initializeNew(); return null; });
-        } catch (IOException e) { throw fail(Code.IO); }
+        try { StoreBootstrap.open(root, policy.applicationId, true, boundary -> {}); }
+        catch (IOException e) { throw fail(Code.IO); }
+    }
+    /** Serialized first-install recovery; damaged/missing established state never resets replay history. */
+    public void openOrInitialize() throws ContractException {
+        try { StoreBootstrap.open(root, policy.applicationId, false, boundary -> {}); }
+        catch (IOException e) { throw fail(Code.CORRUPT_STATE); }
     }
     @Override public void setCredentialScope(CredentialScope scope) throws ContractException { admission.setCredentialScope(scope); }
     @Override public AdmissionResult observeHead(VerifiedHead head, CredentialScope scope) throws ContractException {

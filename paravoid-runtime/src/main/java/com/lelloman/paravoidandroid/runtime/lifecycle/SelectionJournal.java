@@ -34,6 +34,7 @@ final class SelectionJournal {
         if (Files.exists(root.resolve("selection"))) throw new IOException("Selection already initialized");
         record.write(encode(new State()));
     }
+    static byte[] initialState() throws IOException { return encode(new State()); }
     private Path lease(Generation generation) { return root.resolve("lease-" + generation.directory); }
     private State read() throws ContractException {
         ProcessLocks.requireSelection();

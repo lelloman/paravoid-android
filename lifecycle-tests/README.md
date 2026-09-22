@@ -1,5 +1,13 @@
 # Track C lifecycle handoff
 
+Consolidated follow-up: `RuntimeLifecycle.openOrInitialize()` now publishes first
+state atomically under a permanent parent lock. A checksummed parent anchor
+distinguishes unfinished first setup from an established store that disappeared;
+it never resets established replay state. Host subprocess tests cover five crash
+boundaries and four simultaneous first launches, plus missing/corrupt established
+state. This replaces the old partially-created-directory startup failure; Android
+filesystem/device validation is still required.
+
 Branch `v1/lifecycle`; isolated worktree `/tmp/paravoid-v1-lifecycle`.
 Main checkout unchanged. Shared foundation commits `7ace172` and `d58457f` are
 cherry-picked as `486e69d` and `d304816`; do not reapply both copies on integration.
