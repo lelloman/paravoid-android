@@ -18,6 +18,7 @@ public final class DeliveryClientTest {
         int observations, stages, credentialDenials;
         Clock clock;
         VerifiedHead last;
+        Action duringStage;
         public void setCredentialScope(CredentialScope scope) { credential = scope; if (scope == null) credentialDenials++; }
         public AdmissionResult observeHead(VerifiedHead head, CredentialScope scope) throws ContractException {
             if (credential == null || !scope.id.equals(credential.id)) throw new ContractException(ContractException.Code.CREDENTIAL_CHANGED, "changed");
@@ -26,8 +27,10 @@ public final class DeliveryClientTest {
             return new AdmissionResult(head.status, head.release == null ? null : new AdmissionId("test-admission"), head.release);
         }
         public StageResult stageDownloaded(File archive, AdmissionId admission) throws ContractException {
-            try { check(Arrays.equals(ARCHIVE, Files.readAllBytes(archive.toPath()))); }
-            catch (IOException e) { throw new AssertionError(e); }
+            try {
+                if (duringStage != null) duringStage.run();
+                check(Arrays.equals(ARCHIVE, Files.readAllBytes(archive.toPath())));
+            } catch (Exception e) { throw new AssertionError(e); }
             check(admission.value.equals("test-admission")); stages++;
             return new StageResult(StageStatus.PENDING, last.release);
         }
@@ -123,7 +126,9 @@ public final class DeliveryClientTest {
             check(!Files.exists(s.f.partial));
         }
         try (Setup s = new Setup(true)) {
+            Files.write(s.f.partial, new byte[] {1});
             contractFailure(ContractException.Code.CREDENTIAL_UNAVAILABLE, () -> s.client.installedCredential(null));
+            check(!Files.exists(s.f.partial));
             check(s.life.credential == null);
             contractFailure(ContractException.Code.CREDENTIAL_UNAVAILABLE, () -> s.client.check(s.scope, false, true));
             check(s.f.requests == 0);
@@ -144,6 +149,15 @@ public final class DeliveryClientTest {
                     .put("ETag", "\"" + HttpTransport.hash(new byte[] {0}) + "\""));
             contractFailure(ContractException.Code.INVALID_SIGNATURE, () -> s.client.check(s.scope, true, false));
             check(s.life.observations == 0);
+        }
+        try (Setup s = new Setup(true)) {
+            s.head(); s.f.responses.add(new Fake(200, ARCHIVE));
+            s.life.duringStage = () -> s.client.installedCredential(new byte[] {2});
+            s.client.check(s.scope, true, false);
+            check(s.life.stages == 1); // Borrowed source survives refresh until stage returns.
+            try (DirectoryStream<Path> files = Files.newDirectoryStream(s.f.dir, "*.part")) {
+                check(!files.iterator().hasNext());
+            }
         }
         System.out.println("DeliveryClientTest: " + TransportTest.assertions + " assertions passed");
     }

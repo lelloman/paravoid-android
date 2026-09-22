@@ -88,17 +88,15 @@ public final class DeliveryClient {
             // Isolated B-only directory: credential replacement removes all abandoned partials.
             // An active old worker owns its open file until its finally block; its scope cannot be reused.
             if (!partition.equals(readMarker("credential-scope"))) {
-                try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "*.part")) {
-                    for (Path file : files) Files.deleteIfExists(file);
-                }
-                Files.deleteIfExists(directory.resolve("auth-denied"));
                 writeMarker("credential-scope", partition);
+                cleanupIdlePartials();
+                Files.deleteIfExists(directory.resolve("auth-denied"));
             }
             lifecycle.setCredentialScope(credential);
             authSuppressed = partition.equals(readMarker("auth-denied"));
             session = new Session(credential, transport, partition);
         } catch (IOException | ContractException | RuntimeException failed) {
-            lifecycle.setCredentialScope(null);
+            denyCredential();
             throw failed;
         }
     }
@@ -109,8 +107,33 @@ public final class DeliveryClient {
         try {
             installedCredential(policy.authentication == Authentication.PUBLIC ? null : ApkGrantReader.read(installedBaseApk));
         } catch (IOException | ContractException | RuntimeException failed) {
-            lifecycle.setCredentialScope(null);
+            denyCredential();
             throw failed;
+        }
+    }
+
+    private void denyCredential() throws ContractException, IOException {
+        lifecycle.setCredentialScope(null);
+        Files.createDirectories(directory);
+        writeMarker("credential-scope", "0".repeat(64));
+        cleanupIdlePartials();
+        Files.deleteIfExists(directory.resolve("auth-denied"));
+    }
+
+    // Never unlink the file synchronously borrowed by stageDownloaded, including
+    // when another process refreshes its installed grant. Its owner cleans up on return.
+    private void cleanupIdlePartials() throws IOException {
+        try (FileChannel channel = FileChannel.open(directory.resolve("transfer.lock"),
+                StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
+            FileLock lock;
+            try { lock = channel.tryLock(); }
+            catch (OverlappingFileLockException busy) { return; }
+            if (lock == null) return;
+            try {
+                try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "*.part")) {
+                    for (Path file : files) Files.deleteIfExists(file);
+                }
+            } finally { lock.release(); }
         }
     }
 
@@ -152,6 +175,9 @@ public final class DeliveryClient {
             try { lock = lockChannel.tryLock(); }
             catch (OverlappingFileLockException busy) { /* Same-JVM second controller. */ }
             if (lock == null) throw new ContractException(ContractException.Code.UNAVAILABLE, "Another process is checking updates");
+            current(captured, cancel);
+            if (!explicitRetry && captured.partition.equals(readMarker("auth-denied")))
+                throw new ContractException(ContractException.Code.CREDENTIAL_UNAVAILABLE, "Update access unavailable");
             HttpTransport transport = captured.transport;
             URI headUri = transport.headUri(scope.applicationId, scope.shellContractId, scope.channel, scope.sdk, scope.abis, scope.runtimeAbi);
             HttpTransport.HeadBytes response = transport.head(headUri, cached == null ? null : "\"" + cached.head.envelopeSha256 + "\"", cancel);
@@ -186,7 +212,7 @@ public final class DeliveryClient {
             return new Result(admission.status, staged);
         } catch (HttpTransport.Failure failure) {
             if (failure.status == 401 || failure.status == 403) synchronized (this) {
-                if (session == captured) {
+                if (session == captured && captured.partition.equals(readMarker("credential-scope"))) {
                     authSuppressed = true;
                     writeMarker("auth-denied", captured.partition);
                 }
@@ -195,7 +221,8 @@ public final class DeliveryClient {
         } finally {
             synchronized (this) {
                 try {
-                    if (partial != null && (handedOff || session != captured)) Files.deleteIfExists(partial);
+                    if (partial != null && (handedOff || session != captured
+                            || !captured.partition.equals(readMarker("credential-scope")))) Files.deleteIfExists(partial);
                 } finally {
                     try { if (lock != null) lock.release(); }
                     finally {
@@ -232,7 +259,7 @@ public final class DeliveryClient {
         } finally { Files.deleteIfExists(temporary); }
     }
     private synchronized void current(Session captured, HttpTransport.Cancellation cancel) throws ContractException, IOException {
-        if (session != captured) throw new ContractException(ContractException.Code.CREDENTIAL_CHANGED, "Installed credential changed");
+        if (session != captured || !captured.partition.equals(readMarker("credential-scope"))) throw new ContractException(ContractException.Code.CREDENTIAL_CHANGED, "Installed credential changed");
         cancel.check();
     }
     private void validCredential(CredentialScope credential) throws ContractException {
