@@ -87,8 +87,13 @@ final class CompleteRuntime {
         if (policy.bootstrap == Bootstrap.EMBEDDED && state.active == null && state.pending == null) stageEmbedded();
         try { lease = lifecycle.acquireForProcess(); }
         catch (ContractException error) {
-            // A new installed contract may supply a forward, APK-authorized replacement.
-            if (error.code != ContractException.Code.INCOMPATIBLE || policy.bootstrap != Bootstrap.EMBEDDED) throw error;
+            // A repair APK can carry a higher release under the same contract too.
+            // Admission still enforces lineage floors and immutable identities;
+            // staging an intact quarantined release never clears its quarantine.
+            if (policy.bootstrap != Bootstrap.EMBEDDED ||
+                    (error.code != ContractException.Code.INCOMPATIBLE &&
+                     error.code != ContractException.Code.UNAVAILABLE &&
+                     error.code != ContractException.Code.INTEGRITY)) throw error;
             stageEmbedded(); lease = lifecycle.acquireForProcess();
         }
         return CompleteGenerationLoader.load(app, lease, parent);

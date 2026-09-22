@@ -3,7 +3,8 @@ import android.content.*;
 import android.database.*;
 import android.net.Uri;
 
-public final class ProbeProvider extends ContentProvider {
+public class ProbeProvider extends ContentProvider {
+    public static final class Worker extends ProbeProvider {}
     static boolean created;
     public boolean onCreate() {
         getContext().getString(R.string.generation);
