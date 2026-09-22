@@ -1,0 +1,16 @@
+plugins { id 'java-library' }
+
+group = 'com.lelloman.paravoid'
+version = '0.1.0-dev'
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+dependencies { testImplementation 'junit:junit:4.13.2' }
+
+tasks.register('generateMetadataVectors', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.lelloman.paravoidandroid.contract.MetadataVectorGenerator'
+    args layout.buildDirectory.dir('metadata-vectors').get().asFile.absolutePath
+}

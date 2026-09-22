@@ -18,6 +18,11 @@ public final class LauncherActivity extends Activity {
             startActivity(launch);
             finish();
         } catch (Exception | LinkageError failure) {
+            if (((ShellApplication) getApplication()).completeUnavailable()) {
+                startActivity(new Intent(this, com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity.class));
+                finish();
+                return;
+            }
             TextView error = new TextView(this);
             error.setText("Unable to initialize application: " + failure.getMessage());
             setContentView(error);

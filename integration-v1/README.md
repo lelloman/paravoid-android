@@ -1,0 +1,72 @@
+# Consolidated complete-VPK handoff gate
+
+Build the ordinary production fixture first, then run the cross-track test:
+
+```sh
+ANDROID_HOME=/path/to/sdk python3 compatibility/automatic-resources/production-check.py
+bash integration-v1/run.sh
+```
+
+Do not run the fixture rebuild concurrently with this consumer. The test uses
+real AGP/D8-generated A/B payload DEX, compiled Android resources/assets, Java
+resources and exported ledgers. It produces new complete, release-signed VPKs and
+head envelopes using fresh throwaway RSA-3072 keys; private keys are not retained.
+The integration-only policy binds the fixture installed contract, trust and local
+endpoint under a new fixture identity. It is not the production APK policy carrier.
+
+No archive verifier, metadata verifier, HTTP transport or lifecycle fake is used:
+
+1. Verify/materialize embedded A using `VpkWriter`/`CompleteVpkVerifier` and C.
+2. Acquire A in a fresh JVM and report startup health through the shared lease.
+3. B downloads an actual VPK B from its Python reference server, authenticates the
+   head and hands off to C. Assert it remains pending, with A still selected.
+4. A fresh JVM verifies/selects B and checks all component paths belong to it.
+5. Reject signed A discovery after B advanced the lineage/revision history.
+6. Stop the server and reopen verified B offline in another JVM.
+
+All six stages pass on the Linux host, 2026-09-22. This is genuine signed-content
+and process/storage integration but **not execution of Android DEX on the host**,
+an installed shell's Application/provider lifecycle, or Android sandbox/lease
+proof. Existing API 36.1 primitive tests and historical embedded loader tests do
+not substitute for that end-to-end device gate. No phone is used by this script.
+
+The test creates its own `/tmp/paravoid-full-vpk.*` directory and removes it on
+exit, restoring write permission only on its own intentionally immutable fixture
+tree for cleanup. Metadata-only shared vectors remain a separate stable input
+set; these real VPK fixtures are generated reproducibly from the build inputs,
+except for explicitly ephemeral keys/endpoint/head times.
+
+## Remaining consolidated work
+
+The plugin now exposes signed complete-VPK production, public-policy generation,
+reviewed complete-baseline export and compatibility checks. See
+[the producer guide](../paravoid-gradle-plugin/COMPLETE-VPK.md). A TestKit test
+builds a real app, verifies its VPK, changes payload resources under the accepted
+baseline, and rejects a changed endpoint without replacing the previous VPK.
+This caught and fixed support for Android zipalign's short zero-padding tails.
+Consolidated host/build regression evidence: 76 plugin tests, 25 shared-contract
+tests and 17 runtime unit tests pass. Delivery's 266 Java assertions and 12 Python
+tests, lifecycle subprocess tests (including installed-APK replacement races),
+and Android 36 delivery source compilation also passed during consolidation.
+These counts describe host/build checks, not new installed-device acceptance.
+
+Still required before calling the three-track implementation complete:
+
+- Validate the now-implemented automatic complete-shell APK/policy assembly,
+  Android authority/clock adapters, early loader and recovery routing on devices.
+- Harden controls/scheduling, storage admission and unavailable-component behavior.
+- Installed-app API 30/36.1 fault/repair tests; real-app, signed-release and physical
+  ARM64 acceptance; independent format/security review and grant-block ID review.
+
+Automatic embedded/empty shell assembly passes its build integration test. Atomic
+first initialization now passes five host process-death boundaries and a concurrent
+first-start test without resetting established history. The initial installed-device
+fixture and its outstanding startup failure are documented in
+[complete-v1](../compatibility/complete-v1/README.md). These additions do not yet
+satisfy the installed-app acceptance gates.
+
+Track B/C handoff notes remain accurate about their narrower evidence. The imported
+branches are preserved. The user requested integrating the consolidated checkpoint
+into the repository's primary branch, `main` (there is no `master` branch), with
+shared foundation commits included only once. This is an in-progress integration,
+not a v1 release or wire freeze.

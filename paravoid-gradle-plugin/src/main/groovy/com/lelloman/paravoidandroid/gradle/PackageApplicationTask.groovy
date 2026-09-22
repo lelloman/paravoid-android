@@ -89,9 +89,14 @@ abstract class PackageApplicationTask extends DefaultTask {
         shell.parentFile.mkdirs()
         File payload = new File(temporaryDir, 'payload.jar')
         new ZipOutputStream(new FileOutputStream(shell)).withCloseable { host ->
+            if (info.getProperty('complete') == 'true') {
+                if (classes.containsKey(DeclaredServices.NAME + '.class')) throw new GradleException('DeclaredServices class name is reserved.')
+                PackageApplicationTask.write(host, DeclaredServices.NAME + '.class', DeclaredServices.generate(classes, info.getProperty('services', '').tokenize(';')))
+            }
             new ZipOutputStream(new FileOutputStream(payload)).withCloseable { module ->
                 classes.each { name, bytes ->
-                    if (name.startsWith('com/lelloman/paravoidandroid/runtime/') || name.startsWith('com/lelloman/paravoidandroid/api/')) {
+                    if (name.startsWith('com/lelloman/paravoidandroid/runtime/') || name.startsWith('com/lelloman/paravoidandroid/api/') ||
+                        name.startsWith('com/lelloman/paravoidandroid/contract/') || name.startsWith('com/lelloman/paravoidandroid/delivery/')) {
                         PackageApplicationTask.write(host, name, bytes)
                     } else {
                         ClassWriter writer = new ClassWriter(0)

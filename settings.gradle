@@ -8,5 +8,6 @@ dependencyResolutionManagement {
 }
 rootProject.name = 'paravoid-android'
 include ':paravoid-api', ':paravoid-runtime', ':sample-app', ':sample-library'
+include ':paravoid-contract'
 includeBuild('paravoid-hilt')
 includeBuild('paravoid-work')

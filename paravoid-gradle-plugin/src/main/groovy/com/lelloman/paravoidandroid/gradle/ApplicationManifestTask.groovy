@@ -4,6 +4,7 @@ import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.tasks.*
+import org.gradle.api.provider.Property
 import javax.xml.parsers.DocumentBuilderFactory
 import javax.xml.transform.TransformerFactory
 import javax.xml.transform.dom.DOMSource
@@ -16,6 +17,9 @@ abstract class ApplicationManifestTask extends DefaultTask {
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getInputManifest()
     @OutputFile abstract RegularFileProperty getOutputManifest()
     @OutputFile abstract RegularFileProperty getPayloadMetadata()
+    @Input abstract Property<Boolean> getComplete()
+    @Input abstract Property<Boolean> getDebugHttpAllowed()
+    ApplicationManifestTask() { complete.convention(false); debugHttpAllowed.convention(false) }
 
     @TaskAction void rewrite() {
         def factory = DocumentBuilderFactory.newInstance()
@@ -32,6 +36,26 @@ abstract class ApplicationManifestTask extends DefaultTask {
             throw new GradleException('ParavoidAndroid supports the default or AndroidX CoreComponentFactory only; custom Application/classloader factory hooks are not supported.')
         }
         String pkg = document.documentElement.getAttribute('package')
+        if (complete.get()) {
+            def existingMetadata = app.getElementsByTagName('meta-data')
+            if ((0..<existingMetadata.length).any { existingMetadata.item(it).getAttributeNS(ANDROID, 'name').startsWith('paravoid.') })
+                throw new GradleException('paravoid.* application metadata is reserved in complete packaging.')
+            def allNodes = document.getElementsByTagName('*')
+            (0..<allNodes.length).each { index ->
+                def node = allNodes.item(index)
+                String process = node.getAttributeNS(ANDROID, 'process')
+                if (process in [':paravoid_recovery', pkg + ':paravoid_recovery'])
+                    throw new GradleException('The :paravoid_recovery process is reserved for shell-only controls.')
+            }
+            ['android.permission.INTERNET', 'android.permission.ACCESS_NETWORK_STATE'].each { permission ->
+                def permissions = document.getElementsByTagName('uses-permission')
+                if (!(0..<permissions.length).any { permissions.item(it).getAttributeNS(ANDROID, 'name') == permission }) {
+                    def node = document.createElement('uses-permission'); node.setAttributeNS(ANDROID, 'android:name', permission)
+                    document.documentElement.insertBefore(node, app)
+                }
+            }
+            if (debugHttpAllowed.get()) app.setAttributeNS(ANDROID, 'android:usesCleartextTraffic', 'true')
+        }
         def activityNames = (0..<activities.length).collect { index ->
             def activity = (Element) activities.item(index)
             String name = ApplicationManifestTask.qualify(pkg, activity.getAttributeNS(ANDROID, 'name'))
@@ -65,6 +89,17 @@ abstract class ApplicationManifestTask extends DefaultTask {
         String activityName = ((Element) launcherFilters[0].parentNode).getAttributeNS(ANDROID, 'name')
         launcherFilters.each { launcher.appendChild(it) }
         app.appendChild(launcher)
+        if (complete.get()) {
+            def recovery = document.createElement('activity')
+            recovery.setAttributeNS(ANDROID, 'android:name', 'com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity')
+            recovery.setAttributeNS(ANDROID, 'android:process', ':paravoid_recovery')
+            recovery.setAttributeNS(ANDROID, 'android:exported', 'false')
+            recovery.setAttributeNS(ANDROID, 'android:theme', '@android:style/Theme.Material.Light.NoActionBar')
+            app.appendChild(recovery)
+            def marker = document.createElement('meta-data')
+            marker.setAttributeNS(ANDROID, 'android:name', 'paravoid.complete'); marker.setAttributeNS(ANDROID, 'android:value', 'true')
+            app.appendChild(marker)
+        }
         app.setAttributeNS(ANDROID, 'android:name', 'com.lelloman.paravoidandroid.runtime.ShellApplication')
         app.setAttributeNS(ANDROID, 'android:appComponentFactory', 'com.lelloman.paravoidandroid.runtime.ParavoidComponentFactory')
         ['paravoid.activity': activityName, 'paravoid.application': applicationName,
@@ -81,7 +116,7 @@ abstract class ApplicationManifestTask extends DefaultTask {
         TransformerFactory.newInstance().newTransformer().transform(new DOMSource(document), new StreamResult(output))
         def metadata = payloadMetadata.get().asFile
         metadata.parentFile.mkdirs()
-        metadata.text = "activity=${activityName}\nactivities=${activityNames.join(';')}\napplication=${applicationName}\nservices=${services.join(';')}\n"
+        metadata.text = "activity=${activityName}\nactivities=${activityNames.join(';')}\napplication=${applicationName}\nservices=${services.join(';')}\ncomplete=${complete.get()}\n"
     }
 
     private static String qualify(String pkg, String name) {

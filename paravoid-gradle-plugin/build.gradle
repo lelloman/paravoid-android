@@ -17,6 +17,9 @@ java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
 }
+// The plugin and Android runtime compile the same dependency-free verification sources.
+// Separate output directories avoid sharing compiled classes between these builds.
+sourceSets.main.java.srcDir('../paravoid-contract/src/main/java')
 tasks.named('test') {
     systemProperty 'paravoid.repo', rootProject.projectDir.parentFile.absolutePath
     systemProperty 'paravoid.gradleUserHome', gradle.gradleUserHomeDir.absolutePath

@@ -28,6 +28,8 @@ abstract class PackageResourceShellTask extends DefaultTask {
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getShellClasses()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getManifestFile()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getContractFile()
+    @InputFile @Optional @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getCompletePolicy()
+    @InputFile @Optional @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getCompleteVpk()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getZipalign()
     @Input abstract Property<Integer> getMinSdk()
     @Internal abstract RegularFileProperty getKeyStoreFile()
@@ -79,8 +81,13 @@ abstract class PackageResourceShellTask extends DefaultTask {
         new ZipFile(input).withCloseable { original ->
             new ZipFile(shellResources.get().asFile).withCloseable { pinned ->
                 new ZipFile(javaResourceArchive.get().asFile).withCloseable { javaResources ->
-                    writeShell(unsigned, original, pinned, payload.bytes, javaResourceArchive.get().asFile.bytes,
-                        javaResources.entries().collect { it.name }.toSet(), nativeResourceArchive.get().asFile.bytes, contractFile.get().asFile.bytes)
+                    writeShell(unsigned, original, pinned, completePolicy.present ? null : payload.bytes,
+                        completePolicy.present ? null : javaResourceArchive.get().asFile.bytes,
+                        javaResources.entries().collect { it.name }.toSet(),
+                        completePolicy.present ? null : nativeResourceArchive.get().asFile.bytes,
+                        completePolicy.present ? null : contractFile.get().asFile.bytes,
+                        completePolicy.present ? completePolicy.get().asFile.bytes : null,
+                        completeVpk.present ? completeVpk.get().asFile : null)
                 }
             }
         }
@@ -105,20 +112,29 @@ abstract class PackageResourceShellTask extends DefaultTask {
         Files.copy(signed.toPath(), output.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
 
-    static void writeShell(File output, ZipFile original, ZipFile pinned, byte[] payload, byte[] javaResources = null, Set<String> javaPaths = [], byte[] nativeResources = null, byte[] contract = null) {
+    static void writeShell(File output, ZipFile original, ZipFile pinned, byte[] payload, byte[] javaResources = null, Set<String> javaPaths = [], byte[] nativeResources = null, byte[] contract = null, byte[] policy = null, File vpk = null) {
         if (!Arrays.equals(ResourceArchive.read(original, 'AndroidManifest.xml'), ResourceArchive.read(pinned, 'AndroidManifest.xml')))
             throw new GradleException('Resource shell manifest does not match the original APK.')
         Set<String> keep = original.entries().findAll { entry ->
             String name = entry.name
             !entry.directory && !javaPaths.contains(name) && name != 'resources.arsc' && !name.startsWith('res/') &&
-                (nativeResources == null || !name.startsWith('lib/')) &&
-                (!name.startsWith('assets/') || name == 'assets/paravoid/module.zip') &&
+                ((nativeResources == null && policy == null) || !name.startsWith('lib/')) &&
+                (!name.startsWith('assets/') || (policy == null && name == 'assets/paravoid/module.zip')) &&
                 !(name.startsWith('META-INF/') && (name.toUpperCase(Locale.ROOT).endsWith('.SF') ||
                     name.toUpperCase(Locale.ROOT).endsWith('.RSA') || name.toUpperCase(Locale.ROOT).endsWith('.DSA') ||
                     name.toUpperCase(Locale.ROOT).endsWith('.EC') || name == 'META-INF/MANIFEST.MF'))
         }.collect { it.name }.toSet()
-        if (!keep.contains('assets/paravoid/module.zip')) throw new GradleException('Embedded code bundle is missing.')
+        if (policy == null && !keep.contains('assets/paravoid/module.zip')) throw new GradleException('Embedded code bundle is missing.')
         Map<String, byte[]> replacements = [:]
+        Map<String, File> files = [:]
+        if (policy != null) {
+            Map document = ShellContract.read(policy)
+            if (document.descriptor.profile != 'complete-apk-v1') throw new GradleException('Complete shell requires the complete APK policy.')
+            boolean embedded = document.descriptor.distribution.bootstrap == 'embedded'
+            if (embedded != (vpk != null)) throw new GradleException('Embedded/empty shell VPK configuration mismatch.')
+            replacements['assets/paravoid/shell-policy.json'] = policy
+            if (embedded) files['assets/paravoid/payload.vpk'] = vpk
+        }
         if (contract != null) {
             ShellContract.read(contract)
             replacements['assets/paravoid/shell-contract.json'] = contract
@@ -131,16 +147,20 @@ abstract class PackageResourceShellTask extends DefaultTask {
             }
         }
         if (!replacements.containsKey('resources.arsc')) throw new GradleException('Pinned resource table is missing.')
-        replacements['assets/paravoid/resources.apk'] = payload
-        replacements['assets/paravoid/resources.sha256'] = (MessageDigest.getInstance('SHA-256').digest(payload).encodeHex().toString() + '\n').getBytes('US-ASCII')
+        if (policy == null) {
+            replacements['assets/paravoid/resources.apk'] = payload
+            replacements['assets/paravoid/resources.sha256'] = (MessageDigest.getInstance('SHA-256').digest(payload).encodeHex().toString() + '\n').getBytes('US-ASCII')
+        }
         if (javaResources != null) {
             if (javaResources.length > 256L * 1024 * 1024) throw new GradleException('Java-resource archive exceeds 256 MiB.')
             replacements['assets/paravoid/java-resources.jar'] = javaResources
             replacements['assets/paravoid/java-resources.sha256'] = (MessageDigest.getInstance('SHA-256').digest(javaResources).encodeHex().toString() + '\n').getBytes('US-ASCII')
         }
-        if (nativeResources != null) {
-            replacements['assets/paravoid/native-libraries.zip'] = nativeResources
-            replacements['assets/paravoid/native-libraries.sha256'] = (MessageDigest.getInstance('SHA-256').digest(nativeResources).encodeHex().toString() + '\n').getBytes('US-ASCII')
+        if (nativeResources != null || policy != null) {
+            if (nativeResources != null) {
+                replacements['assets/paravoid/native-libraries.zip'] = nativeResources
+                replacements['assets/paravoid/native-libraries.sha256'] = (MessageDigest.getInstance('SHA-256').digest(nativeResources).encodeHex().toString() + '\n').getBytes('US-ASCII')
+            }
             original.entries().findAll { !it.directory && it.name.startsWith('lib/') }.collect { it.name.split('/')[1] }.toSet().each { abi ->
                 String path = '/com/lelloman/paravoid/abi/' + abi + '.base64'
                 def marker = PackageResourceShellTask.getResourceAsStream(path)
@@ -148,6 +168,6 @@ abstract class PackageResourceShellTask extends DefaultTask {
                 replacements['lib/' + abi + '/libparavoid_abi.so'] = marker.withCloseable { Base64.mimeDecoder.decode(it.readAllBytes()) }
             }
         }
-        ResourceArchive.write(output, original, keep, replacements)
+        ResourceArchive.write(output, original, keep, replacements, files)
     }
 }

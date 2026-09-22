@@ -13,6 +13,7 @@ public final class ShellApplication extends Application {
     private PayloadApplication application;
     private Throwable failure;
     private android.os.Bundle metadata;
+    private CompleteRuntime complete;
     private AppComponentFactory componentFactory = new AppComponentFactory();
 
     static ShellApplication requireInstance() {
@@ -24,15 +25,23 @@ public final class ShellApplication extends Application {
         super.attachBaseContext(base);
         instance = this;
         try {
-            EmbeddedResources.install(this);
-            ModuleBundle bundle = ModuleBundle.read(getAssets().open("paravoid/module.zip"), Build.VERSION.SDK_INT);
-            payloadLoader = bundle.createClassLoader(super.getClassLoader(),
-                EmbeddedNativeLibraries.path(this),
-                EmbeddedArchive.materialize(this, "java-resources", ".jar"));
+            metadata = getPackageManager().getApplicationInfo(getPackageName(), android.content.pm.PackageManager.GET_META_DATA).metaData;
+            if (metadata == null) metadata = new android.os.Bundle();
+            if (metadata.getBoolean("paravoid.complete", false)) {
+                if (Build.VERSION.SDK_INT < 30) throw new IllegalStateException("Complete packaging requires API 30");
+                complete = new CompleteRuntime(this);
+                if (complete.shellOnly) return;
+                payloadLoader = complete.load(super.getClassLoader());
+            } else {
+                EmbeddedResources.install(this);
+                ModuleBundle bundle = ModuleBundle.read(getAssets().open("paravoid/module.zip"), Build.VERSION.SDK_INT);
+                payloadLoader = bundle.createClassLoader(super.getClassLoader(),
+                    EmbeddedNativeLibraries.path(this),
+                    EmbeddedArchive.materialize(this, "java-resources", ".jar"));
+            }
             // Library discovery defaults to this loader; newly created threads inherit it.
             // Set it before user constructors and provider initialization, not just onCreate.
             Thread.currentThread().setContextClassLoader(payloadLoader);
-            metadata = getPackageManager().getApplicationInfo(getPackageName(), android.content.pm.PackageManager.GET_META_DATA).metaData;
             String name = metadata.getString("paravoid.application");
             if (name != null) {
                 Class<?> type = payloadLoader.loadClass(name);
@@ -45,6 +54,7 @@ public final class ShellApplication extends Application {
                     .getConstructor().newInstance();
             }
         } catch (Exception | LinkageError error) {
+            if (complete != null) complete.failed();
             failure = error;
             android.util.Log.e("ParavoidAndroid", "Payload initialization failed", error);
         }
@@ -52,10 +62,12 @@ public final class ShellApplication extends Application {
 
     @Override public void onCreate() {
         super.onCreate();
-        if (failure == null && application != null) {
+        if (failure == null) {
             try {
-                application.onCreate();
+                if (application != null) application.onCreate();
+                if (complete != null) complete.applicationCreated();
             } catch (Exception | LinkageError error) {
+                if (complete != null) complete.failed();
                 failure = error;
                 android.util.Log.e("ParavoidAndroid", "Payload onCreate failed", error);
             }
@@ -74,6 +86,15 @@ public final class ShellApplication extends Application {
     }
 
     public String getPayloadActivity() { return metadata.getString("paravoid.activity"); }
+    boolean completeUnavailable() {
+        return metadata != null && metadata.getBoolean("paravoid.complete", false) && (failure != null || payloadLoader == null);
+    }
+    boolean isDeclaredJob(String name) {
+        try {
+            return (Boolean) super.getClassLoader().loadClass("com.lelloman.paravoidandroid.runtime.DeclaredServices")
+                .getMethod("isJobService", String.class).invoke(null, name);
+        } catch (ReflectiveOperationException error) { throw new IllegalStateException("Shell service-kind dispatch missing", error); }
+    }
 
     /** Available to providers after attachment; does not imply onCreate has run. */
     public PayloadApplication requirePayloadApplication() {

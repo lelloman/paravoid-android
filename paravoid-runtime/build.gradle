@@ -2,6 +2,7 @@ plugins { id 'com.android.library' }
 android {
     namespace 'com.lelloman.paravoidandroid.runtime'
     compileSdk 36
+    sourceSets.main.java.srcDirs('../delivery/src', '../delivery/android/src')
     defaultConfig {
         minSdk 26
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
@@ -13,5 +14,6 @@ android {
 }
 dependencies {
     api project(':paravoid-api')
+    implementation project(':paravoid-contract')
     testImplementation 'junit:junit:4.13.2'
 }

@@ -1,0 +1,193 @@
+# Track C lifecycle work
+
+Worktree: `/tmp/paravoid-v1-lifecycle`, branch `v1/lifecycle`, baseline `8c40885`.
+Read PARALLEL-IMPLEMENTATION.md, V1.md and PACKAGING.md, and inspected existing
+ShellApplication, factory, embedded materializers and resource/class loaders.
+
+## Slices
+
+1. Private bounded checksummed atomic records, directory durability and OS leases;
+   standalone host subprocess tests, independent of shared Gradle/plugin outputs.
+2. Owned immutable publication, interrupted-publication retry and protected cleanup.
+3. After Track A foundation: durable authenticated time/revision/version admission,
+   selection/trials and shared snapshots/actions. No duplicate signed-object parser.
+4. Integrate one leased, reverified complete generation before user constructors;
+   coordinate loader/factory edits and component inventory with A/B.
+5. Unavailable adapters and health hooks; dedicated API 30/36.1 emulator tests,
+   migration/forward repair and failure injection. Never target a physical phone.
+
+## Coordination required
+
+Track A's shared compilable foundation commit is not present at baseline. Please
+supply its hash and fixtures before production integration. Internals here are
+package-private, have no public admission/verification/lifecycle contract, and are
+not yet wired into startup. Track B owns UI and transfer files; successful staging
+will only publish pending state.
+
+Need foundation decisions for verified metadata exact body/scope identities,
+credential replacement epochs, boot/elapsed clock evidence, component-kind
+inventory (JobService and foreground-service adapters), recovery-process routing,
+and full generation materialization verifier outputs. These are interface questions,
+not proposed alternative security semantics.
+
+Lock order: JVM registry monitor -> selection OS exclusive lock -> nonblocking
+exclusive generation lease (activation/cleanup), or shared generation lease
+(startup). Verification and copying must happen outside selection. Lease files
+are permanent, separate from deletable generation directories. One channel per
+lock inode per process avoids POSIX close-of-another-descriptor lock release.
+All runtime users must share this registry/classloader. No PID/time heuristic.
+
+Durable records are private local storage framing, not signed metadata parsers.
+Missing established records must fail closed; initialization is an explicit caller
+operation, never a read fallback. Root initialization and APK-pinned floors remain
+foundation integration work. Checksums detect damage, not malicious local tampering.
+
+Host process tests do not prove Android lock/filesystem behavior or power-loss
+semantics. Android adapters, admission, health, unavailable behavior and acceptance
+remain unimplemented until subsequent slices. Runtime state must live under Android
+noBackupFilesDir. Physical ARM64/release acceptance remains an external final gate.
+
+## Implemented private slices and evidence
+
+`AtomicRecord`: bounded versioned SHA-256 framing; missing/corrupt records throw;
+file force, atomic replacement and parent-directory force. Caller serializes writes.
+No logical selection or anti-replay schema exists yet. Do not treat opaque record
+storage as implemented durable admission.
+
+`ProcessLocks`: process-wide registry, exclusive selection transactions, shared
+process-lifetime leases, nonblocking exclusive cleanup checks. Nested selection
+and lease access outside selection are rejected. Channels/lease files remain
+permanent; never close a second descriptor for the same lock inode. Requires one
+runtime classloader and exclusive use of these lock files. Registry resource bounds
+for a long-lived recovery process still need integration review.
+
+`OwnedArchive`: bounded private copy, size/digest checks, injected verification,
+read-only atomic publication to unique names, full recheck before use and protected
+cleanup. The injected test verifier is a private fake, not release authentication.
+Publication does not update selection. Production materialization, signed identity
+retry/deduplication, orphan enumeration, reservation accounting and retention policy
+are pending. An interrupted publication may leave an unreferenced owned archive;
+that must never become selected merely because it exists. No production caller is
+wired to these primitives.
+
+Run `bash lifecycle-tests/run.sh` (JDK 21.0.12, compiled with `--release 11`).
+Passing on Linux host:
+- Child-process halt before rename, after rename and after directory sync.
+- Every-byte corruption and every-prefix truncation of a framed record; missing
+  record, oversized write, missing directory and injected pre-rename I/O failure.
+- Two independent shared lease holders, forced death of one then both; repeated
+  same-process lease acquisition; exclusive operations remain blocked appropriately.
+- Four processes racing 160 serialized read/modify/fsync/rename transactions.
+- Mutable download source isolation; wrong digest, overlong/truncated input,
+  fake verification rejection, writable/corrupt owned bytes, protected/leased cleanup.
+
+These tests use subprocess death, not machine power loss. ENOSPC/device EIO,
+Android directory-force support, API 30/36.1 process races and all actual startup,
+health and component behavior remain untested. No emulator or physical device has
+been used in this preparatory slice. No main-checkout files or shared build wiring
+were changed. Next step requires the shared foundation commit and component-kind
+inventory from Track A; production integration is intentionally not invented here.
+
+## Foundation integration and admission (follow-up)
+
+Track A commit `7ace172` is now integrated as `486e69d`. Runtime's dependency on
+`:paravoid-contract` is added in this branch; A should retain that line on integration.
+No shared types or signatures were changed. Tests construct evidence only through
+`lifecycle-tests/TestEvidence.java`, never production constructors or a bypass.
+
+`AdmissionStore` consumes shared verified heads/releases and persists app-lineage
+identity mappings, contract/channel revision floors, request-body equality, credential
+epochs, admissions and authenticated/boot-relative time. Credential replacement
+invalidates admissions without clearing replay history. Non-available heads advance
+revision/time state. Invalid observations commit nothing. Repeated identical heads
+return the existing admission. Missing/corrupt established state fails closed.
+A final publication callback rechecks admission while holding the common selection
+lock, preventing credential/supersession races between checking and publication.
+No copy or signature verification is permitted in that callback.
+
+The admission helper remains package-private until the complete Lifecycle facade
+is assembled. Explicit new-store initialization rejects any existing directory,
+including an interrupted empty one; automatic repair/reset is intentionally absent.
+History capacity exhaustion fails rather than discarding identity mappings. State
+schema migration and user-visible repair routing remain integration requirements.
+The clock adapter must supply stable boot identity and boot elapsed time on Android.
+
+Host admission tests cover persisted reopen, equal revision/different device scopes,
+identity reuse, rejected input not poisoning floors, non-available heads, invalidation,
+wall/elapsed rollback, reboot, contract replacement and corrupt/missing state.
+APK-key tests cover replacement races, denied public fallback and grant expiration.
+These are fake-authenticated-object tests, not executable signature-vector evidence.
+
+## Selection/trial journal (follow-up)
+
+`SelectionJournal` uses the same selection lock as admission publication. It records
+selected/pending/last-healthy identities, trial attempt count, quarantine, bounded
+rejection references and retention preferences. Staging never changes selected.
+A candidate is snapshotted, verified outside selection, then identity-rechecked
+under selection before a lifetime lease and durable trial can be returned. A stale
+verification requires a retry; a rejected pending candidate leaves selected intact.
+The eventual facade must protect/reverify every materialized component, not just
+pass these references as proof. Directory identities must never be reused.
+
+Subprocess tests prove joining a leased generation, activation only after both
+processes exit, background progress remaining trial, two incomplete cold attempts,
+caught failure not undone by later success callbacks, explicit retry and newer
+forward repair. Retention protects selected/pending and configured healthy history.
+Quarantine never selects a retained older archive. Corrupt journals fail closed.
+
+New archive-publication death tests cover before rename, after rename and after
+parent-directory force. Orphan archives leave the independent selection unchanged.
+Lock-order assertions reject leases outside selection, nested selection and long
+reverification under selection.
+
+`ANDROID_HOME=/home/lelloman/Android/Sdk ./gradlew :paravoid-runtime:testDebugUnitTest
+--offline --no-daemon` passes in this worktree with its own plugin build output.
+
+Still pending: complete Lifecycle/GenerationLease facade; signed archive verifier
+and real release fixtures from A; materialized component storage and byte-repair
+publication; startup/main-frame adapter and unavailable component inventory/routing;
+Android tests; capacity reservation and bounded orphan cleanup. In particular the
+journal's identical-selected staging result is not yet the corrupted-byte repair
+path, and its health helper relies on the future facade to enforce callback order.
+
+## Shared Lifecycle facade and materialization
+
+Track A metadata commit `d58457f` is integrated as `d304816`. Signed checked-in
+head/grant vectors now pass through real `SignedMetadataVerifier` into admission,
+including A-to-B replay and expiry checks. No fixture head is treated as a real VPK.
+
+`RuntimeLifecycle` implements the exact shared `Lifecycle` and returns shared
+`GenerationLease` handles without a close operation. Its constructor requires a
+`VpkVerifier`; there is no default or permissive production implementation. B can
+inject this implementation when A supplies the archive verifier and installed
+policy. The explicit `initializeNew` method is only for known first-install state;
+opening a damaged or missing established store never calls it automatically.
+
+`GenerationStore` copies source bytes, invokes that verifier, materializes only the
+verified inventory, hashes each output, syncs/seals files and directories, and
+publishes unique generation directories. Reopening reauthenticates the archive
+and rehashes every materialized component. DEX paths come only from signed inventory;
+resources, Java resources and one process-compatible native directory share a root.
+Preparation has a separate OS lock, outside selection; final publication rechecks
+admission under selection. Embedded publication now uses the same transaction to
+avoid a newer observation racing between its floor check and publication.
+
+The facade enforces onCreate before main-process first-frame health. Other processes
+can record background progress without declaring UI health. Caught failures persist
+safe codes and quarantine; an explicit retry refuses while any lease remains.
+Corrupt pending bytes are rejected before selection. Identical-byte repair of a
+selected integrity failure gets a new immutable directory; intact startup failures
+still require explicit retry, never implicit redownload execution.
+
+Cleanup serializes with preparation using an OS lock, moves only unprotected and
+exclusively unleased directories into trash under selection, then recursively
+deletes outside selection. Abandoned staging is reclaimed only while holding that
+preparation lock, never by PID/age. Space checks include two archive sizes plus
+64 MiB before copy and verified materialization plus headroom before extraction.
+
+Host facade tests use an explicitly test-only inventory verifier and small ZIPs,
+not signed executable VPK fixtures. They exercise caller-source ownership, pending
+staging, coherent paths, callbacks, offline execution after credential removal,
+leased cleanup, corruption rejection and re-download. Real VPK integration remains
+blocked on A's implementation/fixtures; loader/factory and Android UI-component
+adapters remain unwired pending installed policy/inventory and recovery routing.

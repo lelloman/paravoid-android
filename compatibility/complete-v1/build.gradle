@@ -1,0 +1,29 @@
+plugins { id 'com.lelloman.paravoid' }
+android {
+    namespace 'com.lelloman.paravoidcompat.complete'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.lelloman.paravoidcompat.complete'
+        minSdk 30
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+        resValue 'string', 'generation', providers.gradleProperty('generation').getOrElse('A')
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
+}
+paravoid {
+    packaging = 'complete'
+    bootstrap = providers.gradleProperty('bootstrap').getOrElse('embedded')
+    payloadVersion = providers.gradleProperty('payloadVersion').map { Long.valueOf(it) }.getOrElse(1L)
+    if (providers.gradleProperty('baseline').present) baselineDirectory = layout.projectDirectory.dir('build/accepted')
+    updates {
+        enabled = true
+        baseUrl = 'http://127.0.0.1:18765/'
+        debugHttpAllowed = true
+        authentication = providers.gradleProperty('authentication').getOrElse('public')
+        trustPolicyFile = layout.projectDirectory.file('build/keys/trust.json')
+    }
+    signing { keyId = 'release'; privateKeyFile = layout.projectDirectory.file('build/keys/release.der') }
+}
+dependencies { implementation project(':paravoid-runtime') }
