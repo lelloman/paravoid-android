@@ -5,15 +5,15 @@ Builds genuine complete VPKs with the production plugin; never supplies a verifi
 or loader substitute. Fault injection mutates only this fixture's private data.
 """
 import argparse
+import base64
 import hashlib
-import json
-import os
 from pathlib import Path
 import shutil
 import struct
 import subprocess
 import time
 import xml.etree.ElementTree as ET
+import zipfile
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent.parent
@@ -21,6 +21,21 @@ PACKAGE = 'com.lelloman.paravoidcompat.complete'
 SHELL = PACKAGE + '.paravoid'
 LAUNCHER = 'com.lelloman.paravoidandroid.runtime.LauncherActivity'
 ARTIFACTS = ROOT / 'build/device-cases'
+
+
+def check_shell(path, bootstrap):
+    with zipfile.ZipFile(path) as apk:
+        names = apk.namelist()
+        assert 'assets/paravoid/shell-policy.json' in names
+        assert ('assets/paravoid/payload.vpk' in names) == (bootstrap == 'embedded')
+        assert 'assets/probe.txt' not in names and 'fixture.txt' not in names
+        for name in names:
+            if not name.startswith('lib/'):
+                continue
+            _, abi, library = name.split('/')
+            assert library == 'libparavoid_abi.so', 'Movable native fallback in shell'
+            marker = REPO / 'paravoid-gradle-plugin/src/main/resources/com/lelloman/paravoid/abi' / (abi + '.base64')
+            assert apk.read(name) == base64.b64decode(marker.read_bytes()), 'Unexpected shell ABI marker'
 
 
 def command(args, *, binary=False, check=True, timeout=180, **kwargs):
@@ -40,14 +55,20 @@ def build():
         args = [REPO / 'gradlew', '-p', ROOT, 'assembleNormalDebug', 'assembleParavoidAndroidDebug',
                 '--offline', '--no-daemon', '--max-workers=2', f'-Pgeneration={generation}',
                 f'-PpayloadVersion={version}', f'-Pbootstrap={bootstrap}']
+        if generation not in ('A', 'empty'):
+            args.append('-Pbaseline')
         output = command(args, cwd=REPO, timeout=600)
         (ARTIFACTS / f'{generation}-build.log').write_text(output)
         source = ROOT / 'build/outputs/paravoid/paravoidAndroidDebug'
         shutil.copyfile(source / 'shell.apk', ARTIFACTS / f'{generation}.apk')
+        check_shell(ARTIFACTS / f'{generation}.apk', bootstrap)
         if bootstrap == 'embedded':
             shutil.copyfile(source / 'payload.vpk', ARTIFACTS / f'{generation}.vpk')
         if generation == 'A':
             shutil.copyfile(ROOT / 'build/outputs/apk/normal/debug/complete-v1-normal-debug.apk', ARTIFACTS / 'normal.apk')
+            # Fixture-only promotion: subsequent variants must satisfy the actual
+            # fixed installed baseline, not merely happen to allocate identical IDs.
+            shutil.copytree(source / 'baseline-candidate', ROOT / 'build/accepted/paravoidAndroidDebug', dirs_exist_ok=True)
         print(f'BUILT {generation}', flush=True)
 
 
@@ -91,6 +112,9 @@ class Device:
         self.adb = ['adb', '-s', serial]
         assert self.run('shell', 'getprop', 'ro.kernel.qemu').strip() == '1'
         assert self.run('emu', 'avd', 'name').splitlines()[0] == avd, 'AVD identity mismatch'
+        # Let Android terminate deliberately crashing fixture processes without
+        # waiting for a human to dismiss its crash dialog on this disposable AVD.
+        self.run('shell', 'settings', 'put', 'global', 'hide_error_dialogs', '1')
         self.run('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
         self.run('shell', 'wm', 'dismiss-keyguard')
 
@@ -114,12 +138,23 @@ class Device:
         # security unchanged while allowing adb to trigger a background-only start.
         self.run('shell', 'cmd', 'deviceidle', 'tempwhitelist', '-d', '60000', package)
 
-    def launch(self, package=SHELL, **extras):
+    def launch(self, package=SHELL, wait=True, **extras):
         component = LAUNCHER if package == SHELL else PACKAGE + '.MainActivity'
-        args = ['shell', 'am', 'start', '-W', '-n', package + '/' + component]
+        args = ['shell', 'am', 'start', '-n', package + '/' + component]
+        if wait:
+            args.append('-W')
         for key, value in extras.items():
             args.extend(['--ez', key, str(value).lower()])
         return self.run(*args)
+
+    def failed_application(self):
+        self.launch(wait=False)
+        self.await_(lambda: self.run('shell', 'run-as', SHELL, 'ls',
+                    'no_backup/paravoid-v1/selection', check=False).strip().endswith('/selection'), 'initial journal')
+        self.await_(lambda: self.state()['quarantined'], 'Application startup quarantine')
+        self.await_(lambda: not self.run('shell', 'pidof', SHELL, check=False).strip(), 'failed Application process exits')
+        self.launch()
+        self.recovery()
 
     def stop(self):
         self.run('shell', 'am', 'force-stop', SHELL)
@@ -135,6 +170,15 @@ class Device:
     def healthy(self, version):
         self.await_(lambda: self.state()['healthy'] is not None and self.state()['healthy']['version'] == version,
                     f'healthy generation {version}')
+
+    def native_generation(self):
+        pid = self.run('shell', 'pidof', SHELL).strip()
+        assert pid.isdecimal()
+        maps = self.run('shell', 'run-as', SHELL, 'cat', f'/proc/{pid}/maps')
+        libraries = [line for line in maps.splitlines() if 'libprobe_' in line or 'libc++_shared.so' in line]
+        assert libraries and any('libprobe_dep.so' in line for line in libraries)
+        root = '/generations/' + self.state()['active']['directory'] + '/components/native/'
+        assert all(root in line for line in libraries), libraries
 
     def recovery(self):
         self.await_(lambda: 'com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity' in
@@ -164,6 +208,7 @@ def test(d):
     d.healthy(1)
     assert d.markers()['activity'] == 'generation=A;asset=payload-asset;java=payload-java-resource'
     first = d.state()['active']
+    d.native_generation()
     d.stop()
     d.launch()
     d.healthy(1)
@@ -197,8 +242,7 @@ def test(d):
     print('PASS empty launcher recovery, receiver/service no payload execution, provider no success', flush=True)
 
     d.install('broken')
-    d.launch()
-    d.recovery()
+    d.failed_application()
     assert d.state()['quarantined'] and d.state()['active']['version'] == 2
     assert d.state()['healthy'] is None and not d.markers()
     d.stop()

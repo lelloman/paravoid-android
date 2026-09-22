@@ -26,4 +26,7 @@ paravoid {
     }
     signing { keyId = 'release'; privateKeyFile = layout.projectDirectory.file('build/keys/release.der') }
 }
-dependencies { implementation project(':paravoid-runtime') }
+dependencies {
+    implementation project(':paravoid-runtime')
+    implementation project(':native-probe')
+}

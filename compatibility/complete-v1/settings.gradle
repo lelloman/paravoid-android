@@ -8,6 +8,8 @@ dependencyResolutionManagement {
 }
 rootProject.name = 'complete-v1'
 include ':paravoid-api', ':paravoid-contract', ':paravoid-runtime'
+include ':native-probe'
+project(':native-probe').projectDir = file('../jni/native-library')
 project(':paravoid-api').projectDir = file('../../paravoid-api')
 project(':paravoid-contract').projectDir = file('../../paravoid-contract')
 project(':paravoid-runtime').projectDir = file('../../paravoid-runtime')

@@ -27,7 +27,7 @@ public final class ParavoidComponentFactory extends AppComponentFactory {
     @Override public Service instantiateService(ClassLoader loader, String name, Intent intent)
             throws InstantiationException, IllegalAccessException, ClassNotFoundException {
         if (ShellApplication.requireInstance().completeUnavailable()) return ShellApplication.requireInstance().isDeclaredJob(name)
-            ? new UnavailableComponents.Job() : new UnavailableComponents.StartedOrBound();
+            ? new UnavailableComponents.Job() : new UnavailableComponents.StartedOrBound(name);
         return ShellApplication.requireInstance().requireComponentFactory()
             .instantiateService(payloadLoader(intent), name, intent);
     }

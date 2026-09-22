@@ -70,6 +70,11 @@ public final class ShellApplication extends Application {
                 if (complete != null) complete.failed();
                 failure = error;
                 android.util.Log.e("ParavoidAndroid", "Payload onCreate failed", error);
+                // Providers are already published at this point. Keeping this
+                // failed process alive would leave their payload implementations
+                // callable despite quarantine. Preserve Android's startup-failure
+                // termination; the next entry constructs unavailable adapters.
+                if (complete != null) throw new IllegalStateException("Payload Application failed to start", error);
             }
         }
     }

@@ -10,6 +10,7 @@ import com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity;
 import java.io.FileNotFoundException;
 
 /** No payload loading, network work, input replay, or fabricated application responses. */
+@android.annotation.TargetApi(30)
 public final class UnavailableComponents {
     private UnavailableComponents() {}
     public static final class Screen extends Activity {
@@ -20,10 +21,32 @@ public final class UnavailableComponents {
         }
     }
     public static final class StartedOrBound extends Service {
+        private final String declaredName;
+        public StartedOrBound(String declaredName) { this.declaredName = declaredName; }
         @Override public IBinder onBind(Intent intent) { return null; }
         @Override public int onStartCommand(Intent intent, int flags, int id) {
-            // Stop synchronously, including a pending startForegroundService start;
-            // no payload work or notification-backed long-running service is begun.
+            // stopSelf alone need not clear a foreground-start deadline while a
+            // service is bound or another start is queued. Honor the actual
+            // installed type and let Android enforce its permissions normally.
+            try {
+                android.content.pm.ServiceInfo info = getPackageManager().getServiceInfo(
+                    new ComponentName(this, declaredName), 0);
+                int foregroundType = info.getForegroundServiceType();
+                if (foregroundType != 0) {
+                    String channel = "paravoid-unavailable";
+                    NotificationManager notifications = getSystemService(NotificationManager.class);
+                    notifications.createNotificationChannel(new NotificationChannel(channel,
+                        "App recovery", NotificationManager.IMPORTANCE_LOW));
+                    Notification notification = new Notification.Builder(this, channel)
+                        .setSmallIcon(android.R.drawable.stat_notify_error)
+                        .setContentTitle("App unavailable")
+                        .setContentText("Open the app to recover.").build();
+                    startForeground(0x5056, notification, foregroundType);
+                    stopForeground(STOP_FOREGROUND_REMOVE);
+                }
+            } catch (android.content.pm.PackageManager.NameNotFoundException impossible) {
+                throw new IllegalStateException("Declared service unavailable");
+            }
             stopSelf(id);
             return START_NOT_STICKY;
         }

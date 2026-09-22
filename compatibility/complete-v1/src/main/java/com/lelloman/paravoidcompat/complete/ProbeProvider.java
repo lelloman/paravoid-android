@@ -5,6 +5,7 @@ import android.net.Uri;
 
 public class ProbeProvider extends ContentProvider {
     public static final class Worker extends ProbeProvider {}
+    public static final class Private extends ProbeProvider {}
     static boolean created;
     public boolean onCreate() {
         getContext().getString(R.string.generation);
