@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 import unittest
 
-from apk_personalize import GRANT_ID, developer_signatures, inspect, insert, personalize, verify_grant
+from apk_personalize import GRANT_ID, developer_signatures, inspect, insert, personalize, verify_grant, verify_pinned_grant
 
 
 class PersonalizeTest(unittest.TestCase):
@@ -40,6 +40,16 @@ class PersonalizeTest(unittest.TestCase):
         ]
         for command in commands:
             subprocess.run(command, check=True, capture_output=True, timeout=60)
+        cls.pinned = cls.root / "pinned.apk"
+        cls.pinned_grant = cls.root / "pinned-grant.json"
+        subprocess.run(["java", "-cp", cls.classes, "com.lelloman.paravoidandroid.contract.PolicyFixtures",
+                        str(cls.root / "assets"), str(cls.pinned_grant)], check=True, capture_output=True, timeout=60)
+        subprocess.run([str(aapt), "link", "--manifest", str(manifest), "-I", str(sdk / "platforms/android-36/android.jar"),
+                        "-A", str(cls.root / "assets"), "-o", str(cls.root / "pinned-unsigned.apk")], check=True, capture_output=True, timeout=60)
+        subprocess.run([str(cls.apksigner), "sign", "--ks", str(cls.root / "test.p12"), "--ks-key-alias", "test",
+                        "--ks-pass", "pass:testpassword", "--key-pass", "pass:testpassword", "--v1-signing-enabled", "false",
+                        "--v2-signing-enabled", "true", "--v3-signing-enabled", "true", "--v4-signing-enabled", "false",
+                        "--out", str(cls.pinned), str(cls.root / "pinned-unsigned.apk")], check=True, capture_output=True, timeout=60)
 
     @classmethod
     def tearDownClass(cls):
@@ -85,6 +95,18 @@ class PersonalizeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             personalize(duplicate, output, self.vectors / "grant.json", self.apksigner, self.verifier)
         self.assertFalse(output.exists())
+
+    def test_production_cli_uses_only_apk_pinned_policy(self):
+        output = self.root / "pinned-personalized.apk"
+        env = dict(os.environ, PARAVOID_GRANT_TOOL_CLASSES=self.classes)
+        result = subprocess.run(["python3", "tools/apk_personalize.py", str(self.pinned), str(output),
+                                 "--grant", str(self.pinned_grant), "--apksigner", str(self.apksigner)],
+                                env=env, capture_output=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        verify_pinned_grant(self.classes, self.pinned, "apk", output)
+        self.assertEqual(developer_signatures(self.apksigner, self.pinned), developer_signatures(self.apksigner, output))
+        with self.assertRaises(ValueError):
+            verify_pinned_grant(self.classes, self.source, "envelope", self.pinned_grant)
 
 
 if __name__ == "__main__":

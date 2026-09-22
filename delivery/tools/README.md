@@ -1,8 +1,6 @@
 # APK grant personalization
 
 `bash delivery/tools/personalize.sh INPUT.apk OUTPUT.apk --grant /private/grant.json
---trust shell-trust.json --contract CONTRACT_SHA256
---audience https://updates.example.test/ --channel stable
 --apksigner /path/to/Android/Sdk/build-tools/36.0.0/apksigner`
 
 Run as one command. The grant is read from a file, never a command-line token.
@@ -28,14 +26,18 @@ here**. An adjacent input `.idsig` is rejected, stale output sidecars are refuse
 and no `.idsig` is copied. Distributors must never pair the output with an existing
 v4 sidecar; v4-required delivery remains blocked until regeneration is integrated.
 
-Supply the **APK-pinned** trust/contract/audience exported by packaging. Automatic
-extraction of that policy awaits A's final shell policy carrier; the tool cannot
-yet prove the externally supplied policy equals the APK's pinned policy. Signatures
-prove byte preservation, not that an operator chose the correct shell policy.
-It authenticates grant schema/signature/scope, not distributor entitlement or
-wall-clock admission. The runtime checks issuedAt/expiry and C checks them again.
+The CLI now reads trust/contract/audience from `assets/paravoid/shell-policy.json`
+inside the developer-signature-verified APK, using `InstalledPolicyCodec`. It does
+not accept an operator-supplied replacement policy. Missing/malformed policy fails
+closed. This tool path supports HTTPS policies, not debug-HTTP personalization.
+It checks grant issuedAt/expiry at personalization time as well as signature/scope;
+delivery and lifecycle check time again later. It does not determine distributor
+entitlement. The old six-argument Java verifier is retained only for isolated
+stateless signature-vector tests, not used by the production CLI.
 
 Host tests construct an ephemeral minimal Android APK, sign it with a throwaway
 RSA-3072 key, personalize with A's checked-in grant vector, verify v2/v3 signatures,
-and authenticate Java installed-carrier readback. They do not install the APK or
+and authenticate Java installed-carrier readback. An additional real CLI test uses
+an embedded complete policy and freshly signed matching grant, proving the policy
+is obtained from the APK rather than an operator argument. They do not install the APK or
 claim Android package-replacement/v4 acceptance. Keys and APKs live only in `/tmp`.
