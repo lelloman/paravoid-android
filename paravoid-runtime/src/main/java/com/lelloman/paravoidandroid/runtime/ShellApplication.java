@@ -86,6 +86,15 @@ public final class ShellApplication extends Application {
     }
 
     public String getPayloadActivity() { return metadata.getString("paravoid.activity"); }
+    boolean completeUnavailable() {
+        return metadata != null && metadata.getBoolean("paravoid.complete", false) && (failure != null || payloadLoader == null);
+    }
+    boolean isDeclaredJob(String name) {
+        try {
+            return (Boolean) super.getClassLoader().loadClass("com.lelloman.paravoidandroid.runtime.DeclaredServices")
+                .getMethod("isJobService", String.class).invoke(null, name);
+        } catch (ReflectiveOperationException error) { throw new IllegalStateException("Shell service-kind dispatch missing", error); }
+    }
 
     /** Available to providers after attachment; does not imply onCreate has run. */
     public PayloadApplication requirePayloadApplication() {

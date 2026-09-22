@@ -10,6 +10,28 @@ import static org.junit.Assert.*
 class ApplicationManifestTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder()
 
+    @Test void completeProfileAddsPrivateRecoveryProcessWithoutChangingPayloadDeclarations() {
+        def task = fixture('<service android:name="example.Work" android:process=":worker" />')
+        task.complete.set(true)
+        task.rewrite()
+        String output = task.outputManifest.get().asFile.text
+        assertTrue(output.contains('paravoid.complete'))
+        assertTrue(output.contains('com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity'))
+        assertTrue(output.contains('android:process=":paravoid_recovery"'))
+        assertTrue(output.contains('android:process=":worker"'))
+        assertTrue(output.contains('android.permission.ACCESS_NETWORK_STATE'))
+        assertFalse(output.contains('usesCleartextTraffic'))
+        assertTrue(task.payloadMetadata.get().asFile.text.contains('complete=true'))
+    }
+
+    @Test void completeProfileRejectsReservedMetadataAndProcess() {
+        [ '<meta-data android:name="paravoid.complete" android:value="false" />',
+          '<service android:name="example.Work" android:process=":paravoid_recovery" />'].each { source ->
+            def task = fixture(source); task.complete.set(true)
+            assertThrows(GradleException) { task.rewrite() }
+        }
+    }
+
     @Test void preservesReceiverAndServiceDeclarationsAndAttributes() {
         def task = fixture('''
             <receiver android:name="example.Receiver" android:exported="false" android:permission="example.PRIVATE" />
