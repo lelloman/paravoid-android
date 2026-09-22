@@ -131,6 +131,13 @@ public final class DeliveryControllerTest {
             check(c.await(DeliveryController.Activity.ERROR).errorCode.equals("RETRY_EXHAUSTED"));
             check(c.setup.f.requests == 1); // Death during the last retry cannot replay it.
         }
+        try (Control c = new Control()) {
+            c.setup.f.responses.add(new Fake(429, new byte[0]));
+            c.controller.foreground(true); c.await(DeliveryController.Activity.WAITING_TO_RETRY);
+            c.controller.preferences(new DeliveryPreferences(false, true, false)); c.barrier();
+            c.await(DeliveryController.Activity.CANCELLED);
+            check(c.setup.f.requests == 1); // Disabling automatic checks stops delayed automatic retries.
+        }
         System.out.println("DeliveryControllerTest: " + TransportTest.assertions + " assertions passed");
     }
 }

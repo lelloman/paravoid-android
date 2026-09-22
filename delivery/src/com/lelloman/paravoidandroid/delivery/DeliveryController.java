@@ -204,6 +204,9 @@ public final class DeliveryController {
                         attempts.retryCount() + 1, explicit).write(retryFile());
             }
             preferences = DeliveryPreferences.read(preferenceFile); applyPreferences();
+            if (!explicit && !preferences.automaticChecks) {
+                activity = Activity.CANCELLED; attempts.finish(token); clearRetry(); releaseAttempt(); publish(); return;
+            }
             DeliveryClient.Result result = client.check(scope, attempts.downloadAllowed(explicit, metered.getAsBoolean()), explicit);
             activity = result.stage == null ? Activity.IDLE : Activity.READY;
             if (result.status == HeadStatus.SHELL_UPDATE_REQUIRED) error = "SHELL_UPDATE_REQUIRED";
