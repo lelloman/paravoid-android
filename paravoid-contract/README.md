@@ -61,7 +61,22 @@ security sandbox against app code already executing in the same process.
 Implemented: compilable interfaces/value types, immutable-value tests, strict
 bounded JSON and `SignedMetadataVerifier` for head/grant/trust metadata. Checked-in
 positive/negative signed metadata vectors are under `src/test/resources/metadata-vectors`.
-They include two head versions, not complete A/B VPK archives. Full archive
-verification and executable VPK vectors follow in separate commits. No stub
-archive verifier is shipped, and metadata authentication alone does not authorize downloads.
+They include two head versions, not complete A/B VPK archives.
+
+`CompleteVpkVerifier` now authenticates complete signed archives, checks installed
+scope/SDK/ABI/floors, exact inventory coverage/hashes, resource-ID reservations,
+DEX headers/checksums and ELF ABI headers. Its bounded ZIP reader checks local and
+central records, CRCs, ranges, compression, nested APK/JAR content and expanded
+limits without extracting. `VpkWriter` produces deterministic STORED archives,
+verifies a private candidate, then atomically replaces the output. Failed builds
+do not publish an unverified candidate. It is a build-side API, not a runtime
+signing facility. Production signing private keys are never archived.
+
+These checks do not constitute bytecode/ELF semantic verification or recompilation
+of resource tables; Android still validates components at load time. The publisher
+build gate is responsible for producing the declared installed resource boundary.
+Admission, current-credential authority and coordinated execution remain separate.
+See `integration-v1/README.md` for real Android-content A/B fixtures and integrated
+host delivery/lifecycle proof. Gradle complete-mode wiring and installed-app launch
+acceptance are separate remaining gates, not implied by a valid archive.
 The wire schemas remain V1.md; public interoperability/security freeze is pending.
