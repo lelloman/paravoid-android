@@ -182,10 +182,13 @@ public final class DeliveryClient {
             current(captured, cancel); checkpoint.check();
             AdmissionResult admission = lifecycle.observeHead(head, captured.credential);
             synchronized (this) {
-                current(captured, cancel); checkpoint.check();
+                current(captured, cancel);
                 // Preserve original elapsed deadline on 304; never extend cache freshness.
                 cache = response.notModified ? cached : new Cache(captured, scope, head, clock.unixSeconds(), clock.elapsedMillis());
             }
+            // Controller cancellation takes its operation lock before the client
+            // monitor. Never invoke its checkpoint while holding this monitor.
+            checkpoint.check();
             if (!download || admission.status != HeadStatus.AVAILABLE) return new Result(admission.status, null);
             ExpectedArchive expected = admission.release;
             validCredential(captured.credential);

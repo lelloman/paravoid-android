@@ -114,6 +114,7 @@ public final class DeliveryClientTest {
             // No polling watcher: change the epoch after transport verified the complete
             // archive but before the synchronous stage handoff checkpoint.
             fails("cancelled", () -> s.client.check(s.scope, true, false, () -> {
+                check(!Thread.holdsLock(s.client)); // Avoid client -> operation vs watcher operation -> client inversion.
                 if (!before.equals(signal.read())) throw new HttpTransport.Failure("cancelled");
             }));
             check(s.f.requests == 2 && s.life.stages == 0);
