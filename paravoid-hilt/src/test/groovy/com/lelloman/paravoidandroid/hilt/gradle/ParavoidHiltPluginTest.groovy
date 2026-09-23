@@ -69,12 +69,15 @@ class ParavoidHiltPluginTest {
             pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
             dependencyResolutionManagement { repositories { google(); mavenCentral() } }
             rootProject.name = 'hilt-compatibility'
-            include ':paravoid-api', ':paravoid-runtime'
+            include ':paravoid-api', ':paravoid-runtime', ':paravoid-contract'
         """)
-        ['paravoid-api', 'paravoid-runtime'].each { module ->
+        ['paravoid-api', 'paravoid-runtime', 'paravoid-contract'].each { module ->
             write(root, "${module}/build.gradle", new File(repo, "${module}/build.gradle").text)
             copy(new File(repo, "${module}/src/main"), new File(root, "${module}/src/main"))
         }
+        write(root, 'gradle/local-publication.gradle', new File(repo, 'gradle/local-publication.gradle').text)
+        copy(new File(repo, 'delivery/src'), new File(root, 'delivery/src'))
+        copy(new File(repo, 'delivery/android/src'), new File(root, 'delivery/android/src'))
         return root
     }
 

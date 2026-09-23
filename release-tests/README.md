@@ -1,5 +1,10 @@
 # Local release staging
 
+`bash release-tests/regression.sh` runs the plugin, optional Hilt/Work, contract,
+runtime, lifecycle and delivery host suites plus Android delivery compilation.
+It accepts the Gradle/cache/offline variables below and deliberately does not
+select a connected device. Installed/physical and real-app gates remain separate.
+
 `bash release-tests/local-publication.sh` publishes all six projects to a fresh
 local Maven directory and builds a standalone consumer against those artifacts.
 The consumer has no included build, source dependency or project substitution.
@@ -31,3 +36,14 @@ publication/consumer and the complete script with coordinated version
 `/tmp/paravoid-local-publication.Kis5Iu`; log `/tmp/paravoid-publication-script.log`.
 This establishes marker resolution, version alignment, transitive AAR/JAR metadata
 and normal/shell/VPK builds, not device execution or remote publishing acceptance.
+
+The combined regression run on 2026-09-23 passed 85 plugin, 10 Hilt, 9 Work,
+32 contract and 17 runtime tests (153 total, no failures/errors/skips), plus
+lifecycle and delivery host suites. Logs: `/tmp/paravoid-release-regression.log`,
+`/tmp/paravoid-release-lifecycle.log`, `/tmp/paravoid-release-delivery.log`.
+Source-copy TestKit fixtures now include the shared publication script; Hilt/Work
+fixtures also copy current contract/delivery sources. The first broad run exposed
+those missing fixture inputs; results above are the corrected full rerun.
+This is not the remaining final device/security/real-app acceptance matrix.
+The checked-in `regression.sh` itself also passed end-to-end, including Android
+source compilation (`/tmp/paravoid-release-bundle.log`).

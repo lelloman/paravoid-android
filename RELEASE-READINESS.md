@@ -47,3 +47,7 @@ choices. Do not claim these gates complete if no answer is available.
   guard probe, 4,096/4,097 entries, 255/256-byte names and 1 MiB/+1 envelope reads.
   Sparse size rejection is not verification/loading of a valid 1 GiB payload;
   structural envelope reads are not acceptance of unsigned metadata.
+- Combined regression: 153 plugin/Hilt/Work/contract/runtime tests passed, plus
+  lifecycle/delivery host suites. Fixture dependency gaps found by the initial
+  run were corrected and rerun; see `release-tests/README.md`. This is current
+  build/host evidence, not completion of open device/security/real-app gates.

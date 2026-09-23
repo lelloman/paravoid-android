@@ -799,6 +799,7 @@ class ApplicationPackagingTest {
                 if (file.isFile()) write(root, "${module}/src/main/" + source.toPath().relativize(file.toPath()), file.text)
             }
         }
+        write(root, 'gradle/local-publication.gradle', new File(repo, 'gradle/local-publication.gradle').text)
         ['delivery/src', 'delivery/android/src'].each { path ->
             File source = new File(repo, path)
             source.eachFileRecurse { file ->
