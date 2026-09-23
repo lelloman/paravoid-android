@@ -1,6 +1,7 @@
 """Fixed-shell A-to-B delivery and user-confirmed restart with an A worker lease."""
 import base64
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import subprocess
@@ -44,7 +45,7 @@ def run(args, app, adb, nodes, tap, old_main, old_worker):
     abis = adb('shell', 'getprop', 'ro.product.cpu.abilist64').strip().split(',')
     now = int(time.time())
     head = dict(version=1, applicationId=app, shellContractId=policy['contractId'], channel='stable',
-                sdk=sdk, abis=abis, runtimeAbi=1, formatVersion=1, headRevision=2,
+                sdk=sdk, abis=abis, runtimeAbi=1, formatVersion=1, headRevision=args.head_revision,
                 issuedAt=now, expiresAt=now + 3600, status='available',
                 release=dict(releaseId=release['releaseId'], payloadVersion=2,
                              manifestSha256=hashlib.sha256(envelope).hexdigest(),
@@ -60,9 +61,78 @@ def run(args, app, adb, nodes, tap, old_main, old_worker):
     server = Server(('127.0.0.1', args.server_port), catalog)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     recovery = adb('shell', 'pidof', app + ':paravoid_recovery').strip()
+    gate = None
+    forward = None
     try:
         adb('reverse', 'tcp:18765', 'tcp:' + str(args.server_port))
+        if args.journal_death:
+            record = ROOT / 'paravoid-runtime/src/main/java/com/lelloman/paravoidandroid/runtime/lifecycle/AtomicRecord.java'
+            lines = [number for number, line in enumerate(record.read_text().splitlines(), 1)
+                     if 'fault.at("' + args.journal_death + '")' in line]
+            assert len(lines) == 1, 'Journal boundary source changed'
+            forward = adb('forward', 'tcp:0', 'jdwp:' + recovery).strip()
+            assert forward.isdigit()
+            gate_dir = tempfile.TemporaryDirectory(prefix='paravoid-journal-death-')
+            markers = Path(gate_dir.name)
+            subprocess.run(['javac', '--add-modules', 'jdk.jdi', '-d', gate_dir.name,
+                            str(ROOT / 'integration-v1/JournalDeathGate.java')], check=True, timeout=45)
+            gate_log = (markers / 'log').open('w')
+            gate = subprocess.Popen(['java', '--add-modules', 'jdk.jdi', '-cp', gate_dir.name,
+                                     'JournalDeathGate', forward, gate_dir.name,
+                                     args.journal_death, str(lines[0])], stdout=gate_log, stderr=gate_log)
+            def wait_marker(name):
+                deadline = time.monotonic() + 90
+                while time.monotonic() < deadline:
+                    if (markers / name).exists(): return
+                    if gate.poll() is not None:
+                        raise AssertionError('Journal gate exited: ' + (markers / 'log').read_text())
+                    time.sleep(.1)
+                raise AssertionError('Journal gate timed out: ' + (markers / 'log').read_text())
+            wait_marker('ready')
+            store = 'no_backup/paravoid-v1/'
+            decoder_spec = importlib.util.spec_from_file_location('fixture_device_check',
+                           ROOT / 'compatibility/complete-v1/device-check.py')
+            decoder = importlib.util.module_from_spec(decoder_spec)
+            decoder_spec.loader.exec_module(decoder)
+            def selection_state():
+                raw = subprocess.check_output(['adb', '-s', args.serial, 'exec-out', 'run-as', app,
+                                               'cat', store + 'selection'], timeout=45)
+                return decoder.Record(raw).selection()
+            state_before = selection_state()
+            assert state_before['active']['version'] == 1 and state_before['pending'] is None
+            selection_before = adb('shell', 'run-as', app, 'sha256sum', store + 'selection').split()[0]
+            security_before = adb('shell', 'run-as', app, 'sha256sum', store + 'security').split()[0]
+            active = store + 'generations/' + state_before['active']['directory'] + '/archive.vpk'
+            active_before = adb('shell', 'run-as', app, 'sha256sum', active).split()[0]
         tap('Check now')
+        if args.journal_death:
+            wait_marker('reached')
+            assert gate.wait(timeout=15) == 0, (markers / 'log').read_text()
+            server.shutdown(); server.server_close()
+            for _ in range(30):
+                current = subprocess.run(['adb', '-s', args.serial, 'shell', 'pidof',
+                                          app + ':paravoid_recovery'], text=True, capture_output=True,
+                                         timeout=10).stdout.strip()
+                if current != recovery: break
+                time.sleep(.2)
+            else: raise AssertionError('Original recovery process survived debugger exit')
+            selection_after = adb('shell', 'run-as', app, 'sha256sum', store + 'selection').split()[0]
+            committed = args.journal_death != 'content-synced'
+            assert (selection_after != selection_before) == committed, 'Wrong atomic-selection side'
+            state_after = selection_state()
+            assert state_after['active'] == state_before['active']
+            assert (state_after['pending'] is not None) == committed
+            if committed: assert state_after['pending']['release'] == release['releaseId']
+            security_after = adb('shell', 'run-as', app, 'sha256sum', store + 'security').split()[0]
+            assert security_after != security_before, 'Signed head admission should advance security before publication'
+            assert adb('shell', 'run-as', app, 'sha256sum', active).split()[0] == active_before
+            assert adb('shell', 'pidof', app).strip() == old_main
+            assert adb('shell', 'pidof', app + ':worker').strip() == old_worker
+            assert 'generation=A' in adb('shell', 'content', 'query', '--uri', 'content://' + app + '.worker')
+            print('PASS: installed signed B journal process death at ' + args.journal_death
+                  + '; selection ' + ('committed' if committed else 'unchanged')
+                  + ', admitted security floor and active A bytes/processes preserved', args.serial, flush=True)
+            return
         state = wait_text('Pending: ' + release['releaseId'])
         assert 'payload 2' in state
         assert adb('shell', 'pidof', app).strip() == old_main
@@ -97,3 +167,8 @@ def run(args, app, adb, nodes, tap, old_main, old_worker):
     finally:
         server.shutdown(); server.server_close()
         adb('reverse', '--remove', 'tcp:18765')
+        if gate is not None and gate.poll() is None:
+            gate.terminate(); gate.wait(timeout=10)
+        if forward is not None: adb('forward', '--remove', 'tcp:' + forward)
+        if args.journal_death:
+            gate_log.close(); gate_dir.cleanup()

@@ -17,6 +17,10 @@ parser.add_argument('--sticky-worker', action='store_true', help='Exercise Andro
 parser.add_argument('--shared-uid', action='store_true', help='Require shared-UID build; verify dormant/live peer rejection')
 parser.add_argument('--restart-timeout', action='store_true', help='Debugger-scheduled real worker forces restart polling timeout')
 parser.add_argument('--pending-update', type=Path, help='Immutable generation B/version 2 output directory; requires --restart-worker')
+parser.add_argument('--journal-death', choices=('content-synced', 'renamed', 'directory-synced'),
+                    help='Terminate the installed recovery process at this pending-selection write boundary')
+parser.add_argument('--head-revision', type=int, default=2,
+                    help='Monotonic signed head revision for repeated B delivery attempts')
 parser.add_argument('--server-port', type=int, default=18765)
 args = parser.parse_args()
 if args.restart_timeout and (not args.restart_worker or args.shared_uid or args.sticky_worker or args.pending_update):
@@ -27,6 +31,10 @@ if args.sticky_worker and not args.restart_worker:
     parser.error('--sticky-worker requires --restart-worker')
 if args.pending_update and not args.restart_worker:
     parser.error('--pending-update requires --restart-worker')
+if args.journal_death and not args.pending_update:
+    parser.error('--journal-death requires --pending-update')
+if args.head_revision < 2:
+    parser.error('--head-revision must be at least 2')
 if not 1 <= args.server_port <= 65535:
     parser.error('invalid host port')
 if not re.fullmatch(r'emulator-\d+', args.serial):
