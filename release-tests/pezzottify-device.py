@@ -139,6 +139,27 @@ def main():
         logs = adb('logcat', '-d', '--pid=' + pid, '-s', 'ParavoidAcceptance:I', '*:S')
         assert re.search(r'ParavoidAcceptance: ' + re.escape(name) + r'\s*$', logs, re.MULTILINE), logs
 
+    retained_host = 'http://127.0.0.1:1'
+
+    def retained_preference():
+        xml = adb('exec-out', 'run-as', APP, 'cat', 'shared_prefs/ConfigStore.xml', check=False)
+        if not xml.startswith('<?xml'):
+            return False
+        return any(n.get('name') == 'HostUrl' and n.text == retained_host for n in ET.fromstring(xml))
+
+    def seed_preference():
+        field = next(n for n in nodes() if n.get('class') == 'android.widget.EditText')
+        adb('shell', 'input', 'tap', *point(field))
+        adb('shell', 'input', 'keyevent', 'KEYCODE_MOVE_END')
+        if field.get('text'):
+            adb('shell', 'input', 'keyevent', *(['KEYCODE_DEL'] * len(field.get('text'))))
+        adb('shell', 'input', 'text', retained_host)
+        adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+        # Login's normal setHost path commits ConfigStore before attempting empty
+        # credentials. The loopback port cannot contact any production backend.
+        tap('Login')
+        wait(retained_preference, 'App-owned host preference not committed')
+
     def controls():
         adb('shell', 'am', 'start', '-W', '-n',
             APP + '/com.lelloman.paravoidandroid.runtime.UpdatesLauncher')
@@ -201,10 +222,14 @@ def main():
         adb('shell', 'wm', 'dismiss-keyguard')
         assert 'Success' in adb('install', args.a / 'shell.apk')
         installed = adb('shell', 'pm', 'path', APP).strip()
+        assert installed.startswith('package:') and '\n' not in installed
+        installed_hash = adb('shell', 'sha256sum', installed.removeprefix('package:')).split()[0]
+        assert installed_hash == hashlib.sha256((args.a / 'shell.apk').read_bytes()).hexdigest()
         adb('shell', 'am', 'start', '-W', '-n', APP + '/com.lelloman.paravoidandroid.runtime.LauncherActivity')
         login()
         generation_marker('A')
         wait(lambda: state()['healthy'] is not None, 'A not healthy')
+        seed_preference()
         original = databases()
         adb('shell', 'am', 'start', '-W', '-n', APP + '/com.lelloman.paravoidandroid.runtime.LauncherActivity')
         login()
@@ -224,12 +249,23 @@ def main():
                 generation_marker(output.name)
                 wait(lambda: state()['healthy'] is not None and state()['healthy']['version'] == version, 'New payload not healthy')
                 assert databases() == original
+                assert retained_preference(), 'Application-owned ConfigStore preference lost'
                 adb('shell', 'am', 'start', '-W', '-n', APP + '/com.lelloman.paravoidandroid.runtime.LauncherActivity')
                 login()
                 print(f'PASS payload {version}: fixed-shell download/activation and Room identity/integrity retained', flush=True)
                 if output == args.b:
                     incompatible()
         assert any('/payloads/' in path or '/releases/' in path for path in requests), requests
+        server.shutdown()
+        adb('reverse', '--remove', f'tcp:{args.port}')
+        assert databases() == original
+        assert retained_preference()
+        adb('shell', 'am', 'start', '-W', '-n', APP + '/com.lelloman.paravoidandroid.runtime.LauncherActivity')
+        login()
+        generation_marker('repair' if args.repair else 'B')
+        assert state()['healthy']['version'] == (4 if args.repair else 2)
+        assert adb('shell', 'sha256sum', installed.removeprefix('package:')).split()[0] == installed_hash
+        print('PASS offline final cold relaunch; UI-created preference, Room integrity/identity and shell SHA-256 retained', flush=True)
         print('PASS logged-out scope only; no account, playback, browser login, or JNI execution claim', flush=True)
     finally:
         server.shutdown()

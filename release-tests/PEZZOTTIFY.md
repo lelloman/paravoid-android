@@ -46,8 +46,11 @@ the producer's manifest-change baseline gate (which has separate plugin tests).
 
 Assertions include actual logged-out Compose UI, payload Application generation
 markers, production healthy/pending/quarantine state, unchanged installed APK
-path, downloaded B activation, signed incompatible refusal, broken startup and
-forward repair. Room checks are SQLite integrity and retained Room identity for
+path and SHA-256, downloaded B activation, signed incompatible refusal, broken
+startup and forward repair. A real UI login attempt saves the app's server-host
+preference to loopback `127.0.0.1:1` with empty credentials; that app-owned
+preference must survive every healthy update and final offline cold relaunch.
+No production server or account is contacted. Room checks are SQLite integrity and retained Room identity for
 `StaticsDb` and `user_content`; these are **not** proof of populated account data
 or arbitrary migrations. A helper reads copied databases after stopping the app;
 it does not rewrite those databases or mutate the lifecycle journal.
@@ -66,3 +69,11 @@ Initial production `3b163a1` build passed normal and complete shell packaging in
 `/tmp/paravoid-realapp-build.log`. The normal app's logged-out Compose login UI
 was observed on API 30. Final update artifacts and matrix results must be recorded
 separately; this initial diagnostic build is not the fixed-shell acceptance run.
+
+On 2026-09-23, final-runtime A-to-B, signed wrong-contract rejection and offline
+cold relaunch passed on Restart30 / API 30 x86_64. Both Room databases retained
+their identities and passed integrity checks; the UI-created ConfigStore
+preference and exact installed-shell SHA-256 were retained. Production includes
+`3b163a1` plus `ad982b9`, `37cc151` and `72f96eb` (local cherry-pick equivalents
+`afc0518`, `a55f705`, `9304f8d`). Artifacts: `/tmp/paravoid-realapp-cases/{A,B}`;
+log: `/tmp/paravoid-realapp-ab.log`. Broken/repair results follow separately.
