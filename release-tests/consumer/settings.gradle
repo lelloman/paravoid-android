@@ -1,4 +1,16 @@
 pluginManagement {
+    if (providers.gradleProperty('paravoidGroup').isPresent()) {
+        resolutionStrategy.eachPlugin {
+            def modules = ['com.lelloman.paravoid': 'paravoid-gradle-plugin',
+                'com.lelloman.paravoid.module': 'paravoid-gradle-plugin',
+                'com.lelloman.paravoid.shell': 'paravoid-gradle-plugin',
+                'com.lelloman.paravoid.hilt': 'paravoid-hilt',
+                'com.lelloman.paravoid.work': 'paravoid-work']
+            if (modules.containsKey(requested.id.id)) {
+                useModule("${providers.gradleProperty('paravoidGroup').get()}:${modules[requested.id.id]}:${providers.gradleProperty('paravoidVersion').get()}")
+            }
+        }
+    }
     repositories {
         maven { url = uri(providers.gradleProperty('paravoidRepository').get()) }
         google(); mavenCentral(); gradlePluginPortal()

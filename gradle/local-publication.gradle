@@ -1,6 +1,6 @@
 // Local staging only. Remote repositories/credentials are deliberately not configured.
 apply plugin: 'maven-publish'
-group = 'com.lelloman.paravoid'
+group = providers.gradleProperty('paravoidGroup').getOrElse('com.lelloman.paravoid')
 version = providers.gradleProperty('paravoidVersion').getOrElse('0.1.0-dev')
 def releaseLicenseName = providers.gradleProperty('paravoidLicenseName').orNull
 def releaseLicenseUrl = providers.gradleProperty('paravoidLicenseUrl').orNull
