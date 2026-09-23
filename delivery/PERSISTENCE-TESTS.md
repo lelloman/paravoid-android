@@ -44,3 +44,34 @@ Passed 2026-09-23: all 20 cases, the complete delivery Java/Python suite, and An
   The test does not claim an uncommitted cancellation was acknowledged or durable.
 - Interrupted temporary files can remain. Readers ignore them; this test does
   not implement or prove bounded long-term reclamation of those files.
+
+## Installed production-controller matrix
+
+Build the complete fixture as empty/public A/version 1, then run:
+
+```sh
+python3 delivery/device-tests/public_bootstrap.py --serial emulator-5586 --persistence-crash
+python3 delivery/device-tests/public_bootstrap.py --serial emulator-5584 --server-port 18766 --persistence-crash
+```
+
+Passed 2026-09-23 on Restart30/API 30 and Restart36/API 36.1, x86_64, runtime
+`509cb65`: ten cases per API, retry/cancel × all five boundaries above. The
+installed APK is built from the actual production code; only the external harness
+is new. `PersistenceDeathGate` terminates recovery through JDWP at each production
+statement, without running application cleanup. No root, injected record bytes or
+simulated controller is used. The test first activates a genuinely signed VPK.
+
+A real HTTP 503/Retry-After creates retry scheduling. Cancellation publishes its
+actual epoch. At every death boundary the main process, active archive hash and
+selection/security records survive. A fresh recovery controller, opened through
+the real launcher shortcut, resumes valid schedules or rejects a cancelled retry.
+An explicit update succeeds after the matrix. Logs:
+`/tmp/paravoid-persistence-device{30,36}.log`; build log:
+`/tmp/paravoid-persistence-device-build.log`.
+
+These device cases cover retry first publication (explicit cancellation ends the
+prior attempt before Check now) and cancellation replacement. They do not reproduce
+all host first-write/replacement combinations, retry deletion, physical power loss
+or arbitrary concurrent write schedules. Early harness runs failed on attempt
+ownership and adb missing-file result handling; those were corrected before both
+complete passing runs. Both disposable emulators were stopped afterward.

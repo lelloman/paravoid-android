@@ -35,6 +35,8 @@ def main():
     parser.add_argument('--server-port', type=int, default=18765)
     parser.add_argument('--network-transitions', action='store_true',
                         help='Exercise actual Android Wi-Fi metering changes and explicit override')
+    parser.add_argument('--persistence-crash', action='store_true',
+                        help='Kill installed recovery at retry/cancellation write boundaries')
     parser.add_argument('--write-exhaustion', action='store_true',
                         help='Require a padded VPK and inject real ENOSPC during staging with an active payload')
     parser.add_argument('--write-phase', choices=('archive', 'components'), default='archive',
@@ -52,7 +54,7 @@ def main():
         parser.error('--write-phase requires --write-exhaustion')
     if not re.fullmatch(r'emulator-\d+', args.serial):
         parser.error('a dedicated disposable emulator serial is required')
-    if sum((args.network_transitions, args.storage_pressure, args.write_exhaustion)) > 1:
+    if sum((args.network_transitions, args.storage_pressure, args.write_exhaustion, args.persistence_crash)) > 1:
         parser.error('network and storage pressure are separate runs')
     if not 1 <= args.server_port <= 65535:
         parser.error('invalid host port')
@@ -122,10 +124,14 @@ def main():
     catalog.add_archive(APP, release['releaseId'], archive)
     heads, archives = [], []
     held, disconnected, release_transfer = threading.Event(), threading.Event(), threading.Event()
+    retry_response = threading.Event()
     class ObservedHandler(Handler):
         def do_GET(self):
             if '/head?' in self.path:
                 heads.append(True)
+                if retry_response.is_set():
+                    self.send_response(503); self.send_header('Retry-After', '3600')
+                    self.send_header('Content-Length', '0'); self.end_headers(); return
             else:
                 archives.append(True)
                 if args.network_transitions and not release_transfer.is_set():
@@ -233,15 +239,19 @@ def main():
         for label in ('Check now', 'Retry update access', 'Cancel download', 'Automatically check for updates'):
             assert label.lower() in last.lower(), label
         print('PASS: production reference delivery stages pending; shell controls visible; no activation')
-        if args.write_exhaustion:
+        if args.write_exhaustion or args.persistence_crash:
             adb('shell', 'am', 'force-stop', APP)
             adb('shell', 'am', 'start', '-W', '-n', LAUNCHER)
             assert 'generation=A;asset=payload-asset;java=payload-java-resource' in ui()
             subprocess.run([sys.executable, str(ROOT / 'integration-v1/controls-shortcut.py'), '--serial', args.serial],
                            check=True, timeout=120)
-            from write_pressure import run
-            run(ROOT, args.serial, APP, LAUNCHER, archive, server, adb, ui, tap,
-                args.write_phase, args.competing_writer)
+            if args.persistence_crash:
+                from persistence_crash import run
+                run(ROOT, args.serial, APP, adb, ui, tap, retry_response)
+            else:
+                from write_pressure import run
+                run(ROOT, args.serial, APP, LAUNCHER, archive, server, adb, ui, tap,
+                    args.write_phase, args.competing_writer)
             return
         if args.storage_pressure:
             assert free_bytes() < 600 * 1048576

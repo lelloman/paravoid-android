@@ -1,5 +1,12 @@
 # Production delivery device tests
 
+## Retry/cancellation persistence
+
+`public_bootstrap.py --serial SERIAL --persistence-crash` exercises ten production
+write-boundary deaths on an installed empty/public shell. See
+[the persistence report](../PERSISTENCE-TESTS.md) for commands, both-API results
+and the distinction between host, installed process-death and power-loss evidence.
+
 ## Mid-write disk exhaustion
 
 ### Competing installed writer
