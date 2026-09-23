@@ -1,7 +1,8 @@
 # v1 release acceptance
 
-This is the bounded release checklist, not a declaration of readiness. Baseline:
-`509cb65`. Do not substitute host tests for installed tests or independent review.
+This is the bounded release checklist, not a declaration of readiness. Original
+acceptance baseline: `509cb65`; later evidence names its tested revisions below
+and in the linked reports. Do not substitute host tests for installed tests or independent review.
 Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 
 | Gate | Remaining acceptance | Status |
@@ -13,7 +14,7 @@ Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 | Storage/processes | Selected distinct-release contention/death/cancel and publication I/O; restart identity/stall limits | Selected matrix passed on both APIs; see delivery/device-tests/README.md and V1.md restart limits |
 | HTTPS/auth | Signed release HTTPS download, personalized install, revoke/replace, interrupted transfer and fail-closed grants | Passed on API 30/36.1; local TLS and scope in delivery/device-tests/HTTPS-RELEASE.md |
 | Security/signing | Signing-block ID collision audit and independent protocol/security review | Scoped internal audit and AOSP ID survey recorded in delivery/SECURITY-REVIEW-2026-09-23.md; allocation-amplification fix tested; independent reviewer/private-ID approval still needed |
-| Real app | Final-runtime Pezzottify fixed-shell A-to-B, data/workflows, incompatible rejection and forward repair | Open; downstream edits require coordinated scope |
+| Real app | Final-runtime Pezzottify fixed-shell A-to-B, data/workflows, incompatible rejection and forward repair | Logged-out API 30 matrix passes with final-runtime producer-built A/B/4/5, preference/Room checks, incompatible/reused-identity refusal, quarantine/repair and offline relaunch; authenticated workflows still need approved backend/account; see release-tests/PEZZOTTIFY.md |
 | Physical device | Signed release ARM64 core matrix | Guarded HTTPS runner and nine host safety/routing tests prepared; no physical hardware connected/executed; see delivery/device-tests/PHYSICAL-ARM64.md |
 | Packaging/regression | Large valid payload execution, publication failures, optional integrations and final matrix | Near-limit VPK runs on both APIs; final-rename IO and 159-test host bundle pass; see delivery/device-tests/LARGE-PAYLOAD.md and release-tests/README.md |
 | Distribution | Version/license/repository, production metadata/tag/release notes, repeatable validation | Default and alternate local staging/consumer pass; guarded 23-artifact candidate audit prepared; owner choices, repository-specific setup and publication remain pending; see release-tests/CANDIDATE.md |
@@ -45,6 +46,16 @@ ARM64; independent security/signing-block review; and actual publication
 configuration/version/license/repository. Internal audit and local release
 tooling do not waive those gates. Parallel finishing work uses isolated worktrees;
 only reviewed commits and explicitly recorded test results count as integrated.
+
+The real-app group now means the remaining authenticated/content/playback/native
+workflows, not the already-passed logged-out delivery/recovery matrix. The run
+found and fixed a real controls observer race (`72f5816`), reproduced failure on
+the old shell and passed both the dedicated API 30/36.1 regression and final
+Pezzottify repeated-controls sequence. The runtime fix correctly requires a new
+shell baseline; final positive VPKs were rebuilt through the production plugin,
+not relabelled to bypass the old contract. A signed rejected head also consumes
+its payload identity/version: corrected releases must advance the version, as
+clarified in V1.md. No new release gate was waived to obtain these results.
 
 ## Focused evidence added during release work
 
