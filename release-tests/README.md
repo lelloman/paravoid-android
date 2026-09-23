@@ -72,3 +72,8 @@ Log: `/tmp/paravoid-five-tracks-final-regression.log`. This includes the signing
 entry bound and controls launcher implementation, but not physical execution or
 authenticated Pezzottify workflows. Later documentation-only commits do not alter
 these tested surfaces.
+
+The complete bundle passed again after the controls observer fix (`72f5816`),
+including its deterministic lifecycle-ordering test:
+`/tmp/paravoid-five-tracks-observer-regression.log`. JUnit count remains 161;
+the additional assertions live in the separate delivery host suite.

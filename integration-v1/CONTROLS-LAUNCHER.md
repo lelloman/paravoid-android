@@ -56,3 +56,5 @@ pre-fix shell (`/tmp/paravoid-observer-baseline36.log`) and passes on the fixed
 shell (`/tmp/paravoid-observer-fixed36.log`). Full delivery host tests, including
 old-stop-after-new-start, current unsubscribe and old-screen resubscribe, plus
 Android source compilation passed (`/tmp/paravoid-controls-observer-host.log`).
+The fixed observer also passes the installed script on API 30
+(`/tmp/paravoid-observer-fixed30.log`).

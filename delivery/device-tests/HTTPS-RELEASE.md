@@ -68,3 +68,10 @@ the corrected assertions above verify transport and retained-app behavior.
 The full suite passed again on both APIs after the persistence, recovery and
 packaging fixes, production `d7f7072`: `/tmp/paravoid-final-https30.log` and
 `/tmp/paravoid-final-https36.log`; build `/tmp/paravoid-final-release-build.log`.
+
+After the controls alias, bounded grant reader and observer-ownership fix, the
+full non-debuggable suite passed again on API 30/36.1 against production
+`72f5816`. Logs: `/tmp/paravoid-observer-https30.log`,
+`/tmp/paravoid-observer-https36.log`; build:
+`/tmp/paravoid-observer-release-build.log`. These runs use the public controls
+alias. They remain emulator evidence, not physical ARM64 acceptance.
