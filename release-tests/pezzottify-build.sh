@@ -19,17 +19,19 @@ common=(--gradle-user-home "$PARAVOID_GRADLE_USER_HOME" --offline --no-daemon --
 cd "$PEZZOTTIFY_ANDROID"
 output=app/build/outputs/paravoid/paravoidAndroidPhoneDebug
 for generation in A B broken repair; do
-  case "$generation" in A) version=1 ;; B) version=2 ;; broken) version=3 ;; repair) version=4 ;; esac
+  # Version 3 belongs to the signed incompatible head, even though its VPK fails.
+  case "$generation" in A) version=1 ;; B) version=2 ;; broken) version=4 ;; repair) version=5 ;; esac
   baseline=()
   if [[ "$generation" != A ]]; then baseline=("-PparavoidBaseline=$REALAPP_CASES/accepted"); fi
   "$PARAVOID_GRADLE" "${common[@]}" "${baseline[@]}" \
     "-PparavoidPayloadVersion=$version" "-PparavoidAcceptanceGeneration=$generation" \
     :app:assembleParavoidAndroidPhoneDebug > "$REALAPP_CASES/$generation-build.log" 2>&1
-  mkdir "$REALAPP_CASES/$generation"
-  cp -a "$output/." "$REALAPP_CASES/$generation/"
+  mkdir "$REALAPP_CASES/.$generation-staging"
+  cp -a "$output/." "$REALAPP_CASES/.$generation-staging/"
   if [[ "$generation" == A ]]; then
     mkdir -p "$REALAPP_CASES/accepted/paravoidAndroidPhoneDebug"
     cp -a "$output/baseline-candidate/." "$REALAPP_CASES/accepted/paravoidAndroidPhoneDebug/"
   fi
+  mv "$REALAPP_CASES/.$generation-staging" "$REALAPP_CASES/$generation"
   echo "Built $generation/$version"
 done

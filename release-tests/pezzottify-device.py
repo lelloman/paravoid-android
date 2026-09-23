@@ -42,6 +42,8 @@ def main():
     parser.add_argument('--b', type=Path, required=True)
     parser.add_argument('--broken', type=Path)
     parser.add_argument('--repair', type=Path)
+    parser.add_argument('--conflicting', type=Path, help='Optional original payload 3; require permanent identity refusal')
+    parser.add_argument('--reopen-controls', action='store_true', help='Exercise replacement Activity observer ownership')
     parser.add_argument('--keys', type=Path, required=True)
     parser.add_argument('--port', type=int, default=19165)
     args = parser.parse_args()
@@ -106,6 +108,7 @@ def main():
             abis=','.join(abis), runtime='1', format='1', protocol='1'), signed)
         updated.add_archive(APP, release['releaseId'], archive)
         server.catalog = updated
+        print(f'OFFER head {revision}: {release["releaseId"]}/payload {release["payloadVersion"]}', flush=True)
         return release['payloadVersion']
 
     def state():
@@ -129,7 +132,7 @@ def main():
             if predicate():
                 return
             time.sleep(1)
-        raise AssertionError(description)
+        raise AssertionError(f'{description}; observed request paths={requests}')
 
     def login():
         wait(lambda: {'Login', 'Sign in with SSO'} <= {n.get('text') for n in nodes()}, 'Login UI missing')
@@ -161,6 +164,10 @@ def main():
         wait(retained_preference, 'App-owned host preference not committed')
 
     def controls():
+        # Keep the existing controls session while offering successive releases.
+        # Reopening controls is a separate observer-ownership regression gate.
+        if not args.reopen_controls and 'check now' in {n.get('text', '').lower() for n in nodes()}:
+            return
         adb('shell', 'am', 'start', '-W', '-n',
             APP + '/com.lelloman.paravoidandroid.runtime.UpdatesLauncher')
         wait(lambda: 'check now' in {n.get('text', '').lower() for n in nodes()}, 'Controls missing')
@@ -168,6 +175,34 @@ def main():
     def restart():
         tap('Restart app…')
         tap('Stop and restart')
+
+    def check_now():
+        previous = sum(path.endswith('/head') for path in requests)
+        tap('Check now')
+        wait(lambda: sum(path.endswith('/head') for path in requests) > previous, 'No new explicit head request')
+
+    def logged_out_workflows():
+        original_rotation = adb('shell', 'settings', 'get', 'system', 'user_rotation').strip()
+        original_acceleration = adb('shell', 'settings', 'get', 'system', 'accelerometer_rotation').strip()
+        try:
+            adb('shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0')
+            adb('shell', 'settings', 'put', 'system', 'user_rotation', '1')
+            login()
+        finally:
+            for name, value in [('user_rotation', original_rotation), ('accelerometer_rotation', original_acceleration)]:
+                if value == 'null':
+                    adb('shell', 'settings', 'delete', 'system', name)
+                else:
+                    adb('shell', 'settings', 'put', 'system', name, value)
+        login()
+        uri = APP + '://oauth/callback'
+        matches = adb('shell', 'cmd', 'package', 'query-activities', '--brief', '-a',
+                      'android.intent.action.VIEW', '-c', 'android.intent.category.BROWSABLE', '-d', uri)
+        assert '1 activities found:' in matches and APP + '/' in matches, matches
+        adb('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-c',
+            'android.intent.category.BROWSABLE', '-d', uri)
+        login()
+        print('PASS updated real-app rotation and rejected/cancelled callback routing (no auth code)', flush=True)
 
     def databases():
         adb('shell', 'am', 'force-stop', APP)
@@ -209,11 +244,20 @@ def main():
             before = state()
             offer(output, incompatible=True)
             controls()
-            tap('Check now')
+            check_now()
             wait(lambda: any('Update status: INCOMPATIBLE' in n.get('text', '') for n in nodes()),
                  'Mismatching signed release not rejected')
             assert state() == before, 'Incompatible release changed selected generation'
             print('PASS signed wrong-contract VPK rejected; active/healthy/pending journal unchanged', flush=True)
+        if args.conflicting:
+            before = state()
+            assert offer(args.conflicting) == 3
+            controls()
+            check_now()
+            wait(lambda: any('Update status: IDENTITY_CONFLICT' in n.get('text', '') for n in nodes()),
+                 'Previously advertised version 3 not bound to its original identity')
+            assert state() == before
+            print('PASS version 3 remains bound after incompatible archive rejection; conflicting identity refused', flush=True)
 
     try:
         offer(args.a)
@@ -237,7 +281,7 @@ def main():
         for output, broken in [(args.b, False)] + ([(args.broken, True), (args.repair, False)] if args.broken else []):
             version = offer(output)
             controls()
-            tap('Check now')
+            check_now()
             wait(lambda: state()['pending'] is not None and state()['pending']['version'] == version, 'Update not staged')
             assert adb('shell', 'pm', 'path', APP).strip() == installed, 'Shell installation changed'
             restart()
@@ -246,7 +290,7 @@ def main():
                 print(f'PASS payload {version}: startup fault quarantined', flush=True)
             else:
                 login()
-                generation_marker(output.name)
+                generation_marker('repair' if output == args.repair else 'B')
                 wait(lambda: state()['healthy'] is not None and state()['healthy']['version'] == version, 'New payload not healthy')
                 assert databases() == original
                 assert retained_preference(), 'Application-owned ConfigStore preference lost'
@@ -254,6 +298,7 @@ def main():
                 login()
                 print(f'PASS payload {version}: fixed-shell download/activation and Room identity/integrity retained', flush=True)
                 if output == args.b:
+                    logged_out_workflows()
                     incompatible()
         assert any('/payloads/' in path or '/releases/' in path for path in requests), requests
         server.shutdown()
@@ -263,7 +308,7 @@ def main():
         adb('shell', 'am', 'start', '-W', '-n', APP + '/com.lelloman.paravoidandroid.runtime.LauncherActivity')
         login()
         generation_marker('repair' if args.repair else 'B')
-        assert state()['healthy']['version'] == (4 if args.repair else 2)
+        assert state()['healthy']['version'] == (5 if args.repair else 2)
         assert adb('shell', 'sha256sum', installed.removeprefix('package:')).split()[0] == installed_hash
         print('PASS offline final cold relaunch; UI-created preference, Room integrity/identity and shell SHA-256 retained', flush=True)
         print('PASS logged-out scope only; no account, playback, browser login, or JNI execution claim', flush=True)
