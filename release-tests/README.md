@@ -47,3 +47,13 @@ those missing fixture inputs; results above are the corrected full rerun.
 This is not the remaining final device/security/real-app acceptance matrix.
 The checked-in `regression.sh` itself also passed end-to-end, including Android
 source compilation (`/tmp/paravoid-release-bundle.log`).
+
+The 2026-09-23 finishing rerun passed 159 JUnit tests (86 plugin, 10 Hilt,
+9 Work, 33 contract and 21 runtime), all lifecycle/delivery host suites and Android
+delivery compilation: `/tmp/paravoid-final-regression.log`. The contract additions
+include real final-rename IO failure after producing/verifying a VPK: a nonempty
+destination directory and its sentinel survive, and no temporary VPK remains.
+This supplements pre-publication validation-failure tests; it does not promise a
+transaction across every Gradle report/metadata output. Consume build artifacts
+only after the full task succeeds and validate their signed identities before
+distribution. Independent security/physical/real-app gates remain separate.

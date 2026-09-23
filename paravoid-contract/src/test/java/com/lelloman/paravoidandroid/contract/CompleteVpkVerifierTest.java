@@ -125,6 +125,19 @@ public class CompleteVpkVerifierTest {
         assertFalse(absent.exists());
         assertEquals(0, Objects.requireNonNull(temp.getRoot().listFiles((dir, name) -> name.startsWith(".paravoid-vpk-"))).length);
     }
+    @Test public void finalPublicationIoFailurePreservesDestinationAndRemovesVerifiedTemporaryArchive() throws Exception {
+        File destination = temp.newFolder("blocked.vpk");
+        Path sentinel = destination.toPath().resolve("keep");
+        Files.write(sentinel, new byte[]{42, 43});
+        ContractException error = assertThrows(ContractException.class, () -> new VpkWriter().write(
+            destination, files(components("A")),
+            new VpkWriter.ReleaseSpec("a", 1, 30, 0, Collections.emptyList()),
+            f.policy, f.scope, "release", f.release.getPrivate()));
+        assertEquals(ContractException.Code.IO, error.code);
+        assertArrayEquals(new byte[]{42, 43}, Files.readAllBytes(sentinel));
+        assertEquals(1, Objects.requireNonNull(destination.list()).length);
+        assertEquals(0, Objects.requireNonNull(temp.getRoot().listFiles((dir, name) -> name.startsWith(".paravoid-vpk-"))).length);
+    }
     @Test public void acceptsOnlyZeroLocalZipalignPaddingInNestedContainers() throws Exception {
         byte[] original = zip(Collections.singletonMap("probe.txt", new byte[]{42}), true);
         int nameLength = ByteBuffer.wrap(original).order(ByteOrder.LITTLE_ENDIAN).getShort(26) & 65535;
