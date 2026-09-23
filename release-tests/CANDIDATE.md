@@ -84,3 +84,23 @@ repository and compare downloaded hashes/signatures. A local report is never
 remote publication evidence.
 
 Tool regression: `python3 -m unittest discover -s release-tests -p test_candidate.py`.
+
+## Local validation evidence (2026-09-23)
+
+At `046c24f`, eight Python audit tests passed. Gradle 8.13/JDK 21/SDK 36
+local publication and the standalone normal/shell/VPK consumer passed with both
+the unchanged development defaults and alternate version
+`0.1.0-owner-fixture-test`. The latter uses the deliberately non-licensing POM
+label `Test fixture only - not a license grant` and an `example.invalid` URL;
+neither is an owner decision. The audit checked all 23 expected POM/binary/source
+artifacts against those fixture inputs with zero failures. An unpaired license
+property failed at Gradle configuration before any task execution.
+
+Logs: `/tmp/paravoid-publication-ready.log`,
+`/tmp/paravoid-publication-metadata.log`,
+`/tmp/paravoid-publication-audit.json`,
+`/tmp/paravoid-publication-unpaired.log`. Retained local repositories:
+`/tmp/paravoid-local-publication.gcVswz` (development) and
+`/tmp/paravoid-local-publication.TLWvOf` (metadata fixture). These test artifacts
+are not licensed production releases or remote publication evidence. No device,
+remote publisher, production signing key or credential was used.
