@@ -31,11 +31,24 @@ def main():
     parser.add_argument('--serial', required=True)
     parser.add_argument('--restart-controls', action='store_true',
                         help='Activate through confirmed shell controls, never adb force-stop')
+    parser.add_argument('--storage-pressure', action='store_true',
+                        help='Allocate a disposable app-private filler; test low-space rejection and 512 MiB admission')
     args = parser.parse_args()
     if not re.fullmatch(r'emulator-\d+', args.serial):
         parser.error('a dedicated disposable emulator serial is required')
-    def adb(*parts):
-        return subprocess.check_output(['adb', '-s', args.serial, *parts], text=True, stderr=subprocess.STDOUT, timeout=45)
+    def adb(*parts, timeout=45):
+        return subprocess.check_output(['adb', '-s', args.serial, *parts], text=True, stderr=subprocess.STDOUT, timeout=timeout)
+    filler = 'files/paravoid-storage-test-filler'
+    def free_bytes():
+        return int(adb('shell', 'run-as', APP, 'df', '-k', '.').splitlines()[-1].split()[3]) * 1024
+    def ui():
+        adb('shell', 'uiautomator', 'dump', '/sdcard/delivery-ui.xml')
+        return adb('shell', 'cat', '/sdcard/delivery-ui.xml')
+    def tap(label):
+        node = next(n for n in ET.fromstring(ui()).iter('node')
+                    if n.attrib.get('text', '').lower() == label.lower())
+        x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.attrib['bounds']))
+        adb('shell', 'input', 'tap', str((x1+x2)//2), str((y1+y2)//2))
     fixture = ROOT / 'compatibility/complete-v1'
     output = fixture / 'build/outputs/paravoid/paravoidAndroidDebug'
     with zipfile.ZipFile(output / 'shell.apk') as apk:
@@ -79,7 +92,30 @@ def main():
         print(adb('install', '-r', str(output / 'shell.apk')).strip())
         print(adb('shell', 'pm', 'clear', APP).strip())
         adb('reverse', 'tcp:18765', 'tcp:18765')
+        if args.storage_pressure:
+            adb('shell', 'run-as', APP, 'mkdir', '-p', 'files')
+            filler_mib = free_bytes() // (1024 * 1024) - 48
+            assert filler_mib > 512, 'Need room for bounded storage-pressure fixture'
+            # Real allocated blocks, never sparse growth. Only this named fixture file is removed.
+            adb('shell', 'run-as', APP, 'dd', 'if=/dev/zero', 'of=' + filler,
+                'bs=1048576', 'count=' + str(filler_mib), timeout=240)
+            assert 0 < free_bytes() < 64 * 1024 * 1024
         print(adb('shell', 'am', 'start', '-W', '-n', LAUNCHER).strip())
+        if args.storage_pressure:
+            for _ in range(30):
+                last = ui()
+                if 'INSUFFICIENT_STORAGE' in last:
+                    break
+                time.sleep(1)
+            else:
+                raise AssertionError('Missing low-space rejection: ' + last)
+            assert 'Current: none' in last and 'Pending: none' in last
+            print('PASS: actual app-private allocated pressure rejects update below 64 MiB')
+            # Shrinking deallocates existing blocks; it does not fake free capacity with a sparse file.
+            shrink = (512 * 1024 * 1024 - free_bytes() + 1048575) // 1048576
+            adb('shell', 'run-as', APP, 'truncate', '-s', str((filler_mib - shrink) * 1048576), filler)
+            assert 480 * 1048576 < free_bytes() < 600 * 1048576
+            tap('Check now')
         last = ''
         for _ in range(30):
             adb('shell', 'uiautomator', 'dump', '/sdcard/delivery-ui.xml')
@@ -94,14 +130,9 @@ def main():
         for label in ('Check now', 'Retry update access', 'Cancel download', 'Automatically check for updates'):
             assert label.lower() in last.lower(), label
         print('PASS: production reference delivery stages pending; shell controls visible; no activation')
-        def ui():
-            adb('shell', 'uiautomator', 'dump', '/sdcard/delivery-ui.xml')
-            return adb('shell', 'cat', '/sdcard/delivery-ui.xml')
-        def tap(label):
-            nodes = ET.fromstring(ui()).iter('node')
-            node = next(n for n in nodes if n.attrib.get('text', '').lower() == label.lower())
-            x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.attrib['bounds']))
-            adb('shell', 'input', 'tap', str((x1+x2)//2), str((y1+y2)//2))
+        if args.storage_pressure:
+            assert free_bytes() < 600 * 1048576
+            print('PASS: real signed VPK download and materialization with less than 600 MiB free')
         for label in ('Automatically check for updates', 'Automatically download updates',
                       'Automatic downloads only on unmetered networks'):
             tap(label)
@@ -157,6 +188,8 @@ def main():
             print('PASS: cancelled confirmation preserves main; confirmed restart replaces main, preserves recovery, activates offline without adb force-stop')
         print('Device:', args.serial, 'API', sdk, 'ABIs', ','.join(abis))
     finally:
+        if args.storage_pressure:
+            adb('shell', 'run-as', APP, 'rm', '-f', filler)
         server.shutdown()
         server.server_close()
         adb('reverse', '--remove', 'tcp:18765')

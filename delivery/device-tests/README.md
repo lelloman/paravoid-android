@@ -42,6 +42,27 @@ timeout. This mode passed on dedicated Restart30/API 30 and Restart36/API 36.1
 emulators on 2026-09-23. These results cover empty-bootstrap activation, not all
 worker, quarantine, timeout or shared-UID cases.
 
+For real free-space admission, add `--storage-pressure --restart-controls`.
+The script allocates a named app-private filler with actual writes (not sparse
+growth), leaving about 48 MiB free. It requires `INSUFFICIENT_STORAGE` with no
+current/pending generation, shrinks the filler to restore about 512 MiB free, and
+retries through the UI. The signed download and materialization must succeed below
+600 MiB free, followed by the ordinary controls and offline activation checks.
+The filler is removed in `finally`; use only a disposable emulator with several
+GiB available on its host filesystem. This intentionally pressures its whole data
+partition. Individual allocation commands allow up to four minutes.
+
+This gate covers low-space preflight and the tighter budget, not mid-write ENOSPC,
+an already-active app under disk exhaustion, physical ARM64 or competing app
+processes. Those remain separate acceptance tests; host injection is not a substitute.
+
+Passed on 2026-09-23 using `--storage-pressure --restart-controls`: disposable
+Restart30 (`emulator-5586`, API 30) and Restart36 (`emulator-5584`, API 36.1), both
+x86_64, with the runtime/storage implementation at `79f5caf`. Both also passed
+preference persistence, explicit check/retry, offline cancellation, cancelled
+restart confirmation and confirmed offline payload activation. Filler deletion
+was verified on each emulator before shutdown. No phone or publication was involved.
+
 `public_bootstrap.py` verifies normal launch, immediate production empty bootstrap,
 authenticated head and archive staging through the production verifier/lifecycle,
 current versus pending state, actual check/retry/cancel controls, persisted
