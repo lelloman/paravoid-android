@@ -27,6 +27,7 @@ final class CompleteRuntime {
     private final DeliveryController controller;
     private GenerationLease lease;
     private boolean uiHealthy;
+    private boolean applicationReady;
 
     CompleteRuntime(Application app) throws Exception {
         this.app = app;
@@ -102,6 +103,7 @@ final class CompleteRuntime {
                      error.code != ContractException.Code.INTEGRITY)) throw error;
             stageEmbedded(); lease = lifecycle.acquireForProcess();
         }
+        installStartupObserver();
         return CompleteGenerationLoader.load(app, lease, parent);
     }
     private void stageEmbedded() throws Exception {
@@ -122,7 +124,26 @@ final class CompleteRuntime {
             }
         }
     }
-    void applicationCreated() throws ContractException { if (lease != null) lease.applicationCreated(); }
+    void applicationCreated() throws ContractException {
+        if (lease != null) lease.applicationCreated();
+        applicationReady = true;
+        installStartupObserver(); // Preserve/wrap a handler installed by user Application.onCreate.
+    }
+    private void installStartupObserver() {
+        Thread mainThread = Looper.getMainLooper().getThread();
+        if (Thread.currentThread() != mainThread) throw new IllegalStateException("Payload bootstrap must run on the main thread");
+        if (!(mainThread.getUncaughtExceptionHandler() instanceof StartupFailureObserver))
+            mainThread.setUncaughtExceptionHandler(new StartupFailureObserver(mainThread,
+                mainThread.getUncaughtExceptionHandler(), this::startupObservationEligible, failure -> failed()));
+    }
+    private boolean startupObservationEligible() {
+        if (shellOnly || lease == null || uiHealthy) return false;
+        if (!applicationReady || mainProcess) return true;
+        // A background process has no first-frame milestone. Observe component
+        // creation only while the selected generation is still on its initial trial.
+        try { return lifecycle.snapshot().availability == Availability.TRIAL; }
+        catch (ContractException unavailable) { return false; }
+    }
     void failed() {
         if (lease != null) try { lease.startupFailed(ContractException.Code.UNAVAILABLE); }
         catch (ContractException error) { safeLog(error.code); }

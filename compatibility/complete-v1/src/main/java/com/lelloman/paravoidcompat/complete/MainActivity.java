@@ -6,8 +6,11 @@ import android.widget.TextView;
 import java.nio.charset.StandardCharsets;
 
 public final class MainActivity extends Activity {
+    public MainActivity() { StartupProbe.hit("activity-constructor"); }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        StartupProbe.hit("activity-create");
+        if (getIntent().getBooleanExtra("crashCreate", false)) throw new IllegalStateException("Later Activity creation fixture");
         if (!ProbeApplication.ready) throw new IllegalStateException("Application not ready");
         try {
             String asset;

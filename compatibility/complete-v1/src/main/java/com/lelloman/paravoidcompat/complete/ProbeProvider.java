@@ -4,10 +4,12 @@ import android.database.*;
 import android.net.Uri;
 
 public class ProbeProvider extends ContentProvider {
+    public ProbeProvider() { StartupProbe.hit("provider-constructor"); }
     public static final class Worker extends ProbeProvider {}
     public static final class Private extends ProbeProvider {}
     static boolean created;
     public boolean onCreate() {
+        StartupProbe.hit("provider-create");
         getContext().getString(R.string.generation);
         created = true; return true;
     }

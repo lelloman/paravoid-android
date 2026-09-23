@@ -6,6 +6,8 @@ import android.app.NotificationManager;
 import android.content.Intent;
 import android.os.IBinder;
 public class ProbeService extends Service {
+    public ProbeService() { StartupProbe.hit("service-constructor"); }
+    @Override public void onCreate() { super.onCreate(); StartupProbe.hit("service-create"); }
     public static final class Worker extends ProbeService {}
     public static final class Foreground extends ProbeService {}
     public IBinder onBind(Intent intent) { return null; }
