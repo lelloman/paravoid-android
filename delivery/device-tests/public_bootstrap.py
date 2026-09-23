@@ -35,6 +35,8 @@ def main():
     parser.add_argument('--server-port', type=int, default=18765)
     parser.add_argument('--network-transitions', action='store_true',
                         help='Exercise actual Android Wi-Fi metering changes and explicit override')
+    parser.add_argument('--write-exhaustion', action='store_true',
+                        help='Require a padded VPK and inject real ENOSPC during staging with an active payload')
     parser.add_argument('--restart-controls', action='store_true',
                         help='Activate through confirmed shell controls, never adb force-stop')
     parser.add_argument('--storage-pressure', action='store_true',
@@ -42,7 +44,7 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r'emulator-\d+', args.serial):
         parser.error('a dedicated disposable emulator serial is required')
-    if args.network_transitions and args.storage_pressure:
+    if sum((args.network_transitions, args.storage_pressure, args.write_exhaustion)) > 1:
         parser.error('network and storage pressure are separate runs')
     if not 1 <= args.server_port <= 65535:
         parser.error('invalid host port')
@@ -223,6 +225,15 @@ def main():
         for label in ('Check now', 'Retry update access', 'Cancel download', 'Automatically check for updates'):
             assert label.lower() in last.lower(), label
         print('PASS: production reference delivery stages pending; shell controls visible; no activation')
+        if args.write_exhaustion:
+            adb('shell', 'am', 'force-stop', APP)
+            adb('shell', 'am', 'start', '-W', '-n', LAUNCHER)
+            assert 'generation=A;asset=payload-asset;java=payload-java-resource' in ui()
+            subprocess.run([sys.executable, str(ROOT / 'integration-v1/controls-shortcut.py'), '--serial', args.serial],
+                           check=True, timeout=120)
+            from write_pressure import run
+            run(ROOT, args.serial, APP, LAUNCHER, archive, server, adb, ui, tap)
+            return
         if args.storage_pressure:
             assert free_bytes() < 600 * 1048576
             print('PASS: real signed VPK download and materialization with less than 600 MiB free')

@@ -1,5 +1,37 @@
 # Production delivery device tests
 
+## Mid-write disk exhaustion
+
+On a **disposable emulator only**, prepare the fixture with
+`python3 compatibility/complete-v1/prepare.py --pressure-mib 32`, then build the
+normal APK, public empty shell and generation A/version 1 VPK using the commands
+below. Run `public_bootstrap.py --write-exhaustion --serial SERIAL`; a second
+independent emulator can use `--server-port 18766` with the same immutable outputs.
+This deliberately fills the emulator's data filesystem, so reserve at least its
+full data-partition capacity on the host. It requires a JDK with `jdk.jdi` and the
+debuggable fixture, not root or production fault hooks.
+
+After downloading and activating the signed payload, the test opens the real
+launcher shortcut's recovery controls. `WriteFailureGate.java` pauses the delivery
+thread on its second archive-copy iteration. The test checks that a partial archive
+exists, saves selection/security bytes and the active archive hash, and allocates
+an app-private filler until `dd` fails with no space. Resuming must produce a real
+IOException with ENOSPC/"No space left on device", not a preflight rejection.
+The terminal result must be storage IO, without pending publication or network
+retry; active bytes, selection/security records and the main PID must survive.
+Freeing space and explicitly retrying must succeed and clean abandoned staging,
+and the active payload must cold-start offline. The exact named filler and temporary
+JDWP forward are removed in `finally`.
+
+Once tests finish, run `prepare.py --pressure-mib 0` and rebuild to restore the
+ordinary fixture. The generated padding and keys remain ignored. This gate covers
+archive copying with an active generation, not every component-materialization,
+journal-publication, power-loss or concurrent-writer boundary.
+
+Passed on 2026-09-23 on Restart30/API 30 and Restart36/API 36.1, x86_64,
+using the production runtime at `1f1447c`. Both emitted the real IOException
+message "No space left on device". No runtime changes were needed for this gate.
+
 ## Metering transitions
 
 `public_bootstrap.py --network-transitions --serial SERIAL [--server-port PORT]`

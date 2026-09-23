@@ -1,5 +1,6 @@
 plugins { id 'com.lelloman.paravoid' }
 android {
+    sourceSets.main.assets.srcDir 'build/pressure-assets'
     namespace 'com.lelloman.paravoidcompat.complete'
     compileSdk 36
     defaultConfig {

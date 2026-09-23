@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Generate throwaway fixture keys; never developer/publisher credentials."""
 import base64
+import argparse
 import json
+import os
 from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
@@ -26,4 +28,17 @@ def prepare():
     (KEYS / 'trust.json').write_text(json.dumps(trust, sort_keys=True, separators=(',', ':')) + '\n')
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--pressure-mib', type=int, choices=(0, 32), default=0,
+                        help='Generate an ignored incompressible asset for disk-write fault tests; 0 removes it')
+    args = parser.parse_args()
     prepare()
+    pressure = ROOT / 'build/pressure-assets/paravoid-pressure.bin'
+    if args.pressure_mib:
+        pressure.parent.mkdir(parents=True, exist_ok=True)
+        block = os.urandom(1024 * 1024)
+        with pressure.open('wb') as out:
+            for _ in range(args.pressure_mib):
+                out.write(block)
+    else:
+        pressure.unlink(missing_ok=True)

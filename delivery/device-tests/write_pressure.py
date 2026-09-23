@@ -1,0 +1,95 @@
+"""Real ENOSPC during private archive copying, on a disposable debuggable emulator only."""
+import hashlib
+from pathlib import Path
+import subprocess
+import tempfile
+import time
+
+
+def run(root, serial, app, launcher, archive, server, adb, ui, tap):
+    assert archive.stat().st_size > 32 * 1024 * 1024, 'Build with prepare.py --pressure-mib 32'
+    store = 'no_backup/paravoid-v1/'
+    filler = 'files/paravoid-mid-write-filler'
+    def data(path):
+        return subprocess.check_output(['adb', '-s', serial, 'exec-out', 'run-as', app, 'cat', path], timeout=45)
+    def free_bytes():
+        return int(adb('shell', 'run-as', app, 'df', '-k', '.').splitlines()[-1].split()[3]) * 1024
+    active = adb('shell', 'run-as', app, 'find', store + 'generations', '-name', 'archive.vpk').splitlines()
+    assert len(active) == 1
+    digest = hashlib.sha256(data(active[0])).hexdigest()
+    main_pid = adb('shell', 'pidof', app).strip()
+    owner = adb('shell', 'pidof', app + ':paravoid_recovery').strip()
+    assert owner.isdigit() and main_pid.isdigit()
+    source = root / 'paravoid-runtime/src/main/java/com/lelloman/paravoidandroid/runtime/lifecycle/GenerationStore.java'
+    lines = [i for i, line in enumerate(source.read_text().splitlines(), 1)
+             if 'hash.update(buffer, 0, count); if (output != null) output.write' in line]
+    assert len(lines) == 1, 'Update the debugger boundary if the copy loop changes'
+    port = adb('forward', 'tcp:0', 'jdwp:' + owner).strip()
+    assert port.isdigit()
+    gate = None
+    try:
+        with tempfile.TemporaryDirectory(prefix='paravoid-enospc-gate-') as tmp:
+            markers = Path(tmp)
+            subprocess.run(['javac', '--add-modules', 'jdk.jdi', '-d', tmp,
+                            str(root / 'delivery/device-tests/WriteFailureGate.java')], check=True, timeout=45)
+            with (markers / 'log').open('w') as log:
+                gate = subprocess.Popen(['java', '--add-modules', 'jdk.jdi', '-cp', tmp, 'WriteFailureGate',
+                                         port, tmp, str(lines[0])], stdout=log, stderr=log)
+                def wait(name):
+                    deadline = time.monotonic() + 30
+                    while time.monotonic() < deadline:
+                        if (markers / name).exists():
+                            return
+                        if gate.poll() is not None:
+                            raise AssertionError('Write gate exited before ' + name + ': ' + (markers / 'log').read_text())
+                        time.sleep(.1)
+                    raise AssertionError('Write gate timed out at ' + name + ': ' + (markers / 'log').read_text())
+                wait('ready'); tap('Check now'); wait('writing')
+                staging = adb('shell', 'run-as', app, 'find', store + 'staging', '-name', 'archive.vpk').splitlines()
+                assert len(staging) == 1
+                size = int(adb('shell', 'run-as', app, 'stat', '-c', '%s', staging[0]))
+                assert 0 < size < archive.stat().st_size, 'Must interrupt an actual partial write'
+                security, selection = data(store + 'security'), data(store + 'selection')
+                adb('shell', 'run-as', app, 'mkdir', '-p', 'files')
+                count = free_bytes() // 1048576 + 256
+                # Actual allocated blocks, not sparse length. Bound writes by measured
+                # device capacity plus 256 MiB; this file alone is deleted in finally.
+                fill = subprocess.run(['adb', '-s', serial, 'shell', 'run-as', app, 'dd', 'if=/dev/zero',
+                                       'of=' + filler, 'bs=1048576', 'count=' + str(count)],
+                                      text=True, capture_output=True, timeout=240)
+                assert fill.returncode != 0 and 'No space left on device' in fill.stdout + fill.stderr
+                (markers / 'resume').touch()
+                wait('enospc')
+                adb('shell', 'run-as', app, 'rm', '-f', filler)
+                assert gate.wait(timeout=10) == 0
+                for _ in range(15):
+                    state = ui()
+                    if 'Update status: IO' in state:
+                        break
+                    time.sleep(.25)
+                else:
+                    raise AssertionError('Missing terminal storage IO result: ' + state)
+                assert 'Pending: none' in state and 'A local app generation is available.' in state
+                assert security == data(store + 'security') and selection == data(store + 'selection')
+                assert hashlib.sha256(data(active[0])).hexdigest() == digest
+                assert adb('shell', 'pidof', app).strip() == main_pid
+                assert not adb('shell', 'run-as', app, 'find', 'no_backup', '-name', 'paravoid-update-preferences.retry').strip()
+                print('PASS: real mid-copy ENOSPC; active archive, selection/security records and main PID preserved; no network retry', flush=True)
+                tap('Retry update access')
+                for _ in range(30):
+                    if 'Update: READY' in ui():
+                        break
+                    time.sleep(.25)
+                else:
+                    raise AssertionError('Retry after freeing space did not succeed')
+                assert not adb('shell', 'run-as', app, 'ls', store + 'staging').strip()
+                server.shutdown(); server.server_close()
+                adb('shell', 'am', 'force-stop', app)
+                adb('shell', 'am', 'start', '-W', '-n', launcher)
+                assert 'generation=A;asset=payload-asset;java=payload-java-resource' in ui()
+                print('PASS: freed space permits retry/abandoned-staging cleanup; active payload cold-starts offline', serial, flush=True)
+    finally:
+        adb('shell', 'run-as', app, 'rm', '-f', filler)
+        if gate is not None and gate.poll() is None:
+            gate.terminate(); gate.wait(timeout=10)
+        adb('forward', '--remove', 'tcp:' + port)
