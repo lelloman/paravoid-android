@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'delivery/reference'))
 from server import Catalog, Server, Handler
 from physical_safety import preflight, validate_apk_badging
+from controls_access import resolved_updates_alias
 
 APP = 'com.lelloman.paravoidcompat.complete.paravoid'
 NORMAL = 'com.lelloman.paravoidcompat.complete'
@@ -74,6 +75,14 @@ def launch():
 
 
 def controls():
+    launchers = adb('shell', 'cmd', 'package', 'query-activities', '--brief',
+        '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER', '-p', APP)
+    alias = resolved_updates_alias(launchers, APP)
+    if alias is not None:
+        adb('shell', 'am', 'start', '-W', '-n', alias)
+        expect('A local app generation is available.')
+        return
+    # Older shells, or integrators explicitly opting out of the manifest alias.
     w, h = map(int, re.search(r'(\d+)x(\d+)', adb('shell', 'wm', 'size')).groups())
     for index in range(4):
         adb('shell', 'input', 'keyevent', 'KEYCODE_HOME'); time.sleep(.75)
@@ -233,6 +242,9 @@ finally:
     if server is not None:
         server.shutdown(); server.server_close()
     if reverse_created:
-        adb('reverse', '--remove', 'tcp:18765')
+        try:
+            adb('reverse', '--remove', 'tcp:18765', check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            print('Warning: reverse cleanup failed; inspect device tcp:18765 mapping.', file=sys.stderr)
     if args.physical_arm64:
         print('Physical fixture packages retained; no package/data cleanup performed.', flush=True)

@@ -12,8 +12,10 @@ generation without rebuilding. Use throwaway fixture credentials only.
 Before running, obtain the owner's permission to install and exercise **both**
 fixture packages, manipulate their UI, and replace the shell credential APK.
 Use an unlocked dedicated ARM64 device with API 30+, USB debugging enabled, one
-Android user (no work profile), sufficient space and a launcher supporting the
-fixture's dynamic shortcut. Do not interact with the device during execution.
+Android user (no work profile), and sufficient space. Controls prefer the
+package-manager-resolved manifest `UpdatesLauncher` alias, so the default shell
+does not require launcher dynamic-shortcut support. Older or explicitly opted-out
+shells still need a launcher supporting that shortcut. Do not interact with the device during execution.
 Disconnect other devices if practical; an explicit serial is mandatory.
 
 ```sh

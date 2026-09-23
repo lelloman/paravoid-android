@@ -22,7 +22,8 @@ ANDROID_HOME=/path/to/sdk python3 delivery/device-tests/https_release.py \
 
 Select only disposable API 30/36.1 emulators: the test uninstalls the fixture's
 normal and shell packages. Distinct host ports permit concurrent runs. It uses
-adb reverse and the real launcher shortcut, not a private runtime control API.
+adb reverse and the package-manager-resolved public controls launcher alias (or
+the dynamic shortcut for older/opted-out shells), not a private runtime control API.
 It removes its port mapping and shuts down its server even after failure.
 
 For separately authorized, dedicated physical ARM64 hardware, see
