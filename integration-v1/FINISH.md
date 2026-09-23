@@ -1,5 +1,43 @@
 # Finish integration
 
+## Shared-UID restart refusal
+
+Build the complete fixture's normal APK, empty/public shell and VPK with
+`-PsharedUidProbe -Pgeneration=A -PpayloadVersion=1`. This opt-in debug manifest
+overlay gives the normal and shell APKs the same legacy shared UID; both use the
+same debug signing identity. It is a negative restart fixture, not a recommendation
+to use shared UIDs or a claim of general shared-UID support.
+
+Use disposable emulators. The ordinary fixture packages must first be uninstalled
+because changing an installed package's UID is not an APK update. This deletes only
+test data for `com.lelloman.paravoidcompat.complete` and its `.paravoid` counterpart.
+Run the ordinary public bootstrap, then:
+
+```sh
+python3 integration-v1/controls-shortcut.py --serial emulator-5586 \
+  --restart-worker --shared-uid
+```
+
+The normal control APK acts as the peer package. Setup force-stops it **before**
+starting the test main/worker because a shared-UID force-stop can affect both apps.
+PackageManager's installed package UIDs must match. With the peer dormant, then
+with its actual process running, user-confirmed restart must show the safe refusal
+message and re-enable the restart button. Main, worker, recovery, live peer PID,
+selection and security records must all remain unchanged. No synthetic ownership
+list, debugger substitution, root or kill is used during the assertions.
+
+Afterward uninstall these two fixture packages, rebuild without `-PsharedUidProbe`
+and reinstall if needed. Keep the shared-UID outputs separate from ordinary update
+baselines. This test does not cover a deliberately stuck-process timeout or all
+legacy shared-UID package arrangements.
+
+Passed on 2026-09-23 on Restart30/API 30 and Restart36/API 36.1, x86_64, with the
+unchanged runtime at `97eaf1f`. Both dormant and live peer cases passed with actual
+matching package UIDs. A prior API 36 launcher-navigation attempt failed before
+restart assertions; a fresh shortcut run passed. The UI harness compares button
+labels case-insensitively because Android renders them uppercase on these images.
+Both fixture packages were uninstalled afterward and ordinary outputs rebuilt.
+
 ## Foreground sticky-worker restart
 
 After building and bootstrapping the current public empty A/version 1 fixture:

@@ -36,7 +36,7 @@ def run(args, app, adb, nodes, tap, old_main, old_worker):
         assert pid(app + ':paravoid_recovery') == recovery
         text = '\n'.join(n.attrib.get('text', '') for n in nodes())
         if 'Could not safely restart.' in text:
-            assert any(n.attrib.get('text') == 'Restart app…' and n.attrib.get('enabled') == 'true' for n in nodes())
+            assert any(n.attrib.get('text', '').lower() == 'restart app…' and n.attrib.get('enabled') == 'true' for n in nodes())
             outcome = 'restart refused safely with usable recovery'
         else:
             assert 'generation=A;asset=payload-asset;java=payload-java-resource' in text, text

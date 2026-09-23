@@ -1,5 +1,8 @@
 plugins { id 'com.lelloman.paravoid' }
 android {
+    if (providers.gradleProperty('sharedUidProbe').present) {
+        sourceSets.debug.manifest.srcFile 'src/shared-uid/AndroidManifest.xml'
+    }
     sourceSets.main.assets.srcDir 'build/pressure-assets'
     namespace 'com.lelloman.paravoidcompat.complete'
     compileSdk 36
