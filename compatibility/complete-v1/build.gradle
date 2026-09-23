@@ -1,5 +1,16 @@
 plugins { id 'com.lelloman.paravoid' }
 android {
+    if (providers.gradleProperty('httpsAcceptance').present) {
+        signingConfigs {
+            acceptance {
+                storeFile file('build/keys/acceptance.p12')
+                storePassword 'fixture-only'; keyAlias 'fixture'; keyPassword 'fixture-only'
+            }
+        }
+        buildTypes.release { signingConfig signingConfigs.acceptance; debuggable false }
+        sourceSets.release.manifest.srcFile 'src/httpsAcceptance/AndroidManifest.xml'
+        sourceSets.release.res.srcDirs 'src/httpsAcceptance/res', 'build/https-res'
+    }
     if (providers.gradleProperty('sharedUidProbe').present) {
         sourceSets.debug.manifest.srcFile 'src/shared-uid/AndroidManifest.xml'
     }
@@ -25,8 +36,8 @@ paravoid {
     if (providers.gradleProperty('baseline').present) baselineDirectory = layout.projectDirectory.dir('build/accepted')
     updates {
         enabled = true
-        baseUrl = 'http://127.0.0.1:18765/'
-        debugHttpAllowed = true
+        baseUrl = providers.gradleProperty('httpsAcceptance').present ? 'https://127.0.0.1:18765/' : 'http://127.0.0.1:18765/'
+        debugHttpAllowed = !providers.gradleProperty('httpsAcceptance').present
         authentication = providers.gradleProperty('authentication').getOrElse('public')
         trustPolicyFile = layout.projectDirectory.file('build/keys/trust.json')
     }

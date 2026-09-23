@@ -11,7 +11,7 @@ Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 | Recovery races | Installed stale identity, pending repair and live lease refusal | Host passes; corruption after dialog passes both APIs (see integration-v1/STARTUP-FAILURES.md) |
 | Controls access | Document and test fallback when dynamic shortcut unavailable | Product/implementation decision open |
 | Storage/processes | Selected distinct-release contention/death/cancel and publication I/O; review restart identity/stalls | Installed exhaustion/admission passes; broader gates open |
-| HTTPS/auth | Signed release HTTPS download, personalized install, revoke/replace, interrupted transfer and fail-closed grants | Production-like acceptance open |
+| HTTPS/auth | Signed release HTTPS download, personalized install, revoke/replace, interrupted transfer and fail-closed grants | Passed on API 30/36.1; local TLS and scope in delivery/device-tests/HTTPS-RELEASE.md |
 | Security/signing | Signing-block ID/v4 disposition, vector audit, independent protocol/security review | Open; independent reviewer needed |
 | Real app | Final-runtime Pezzottify fixed-shell A-to-B, data/workflows, incompatible rejection and forward repair | Open; downstream edits require coordinated scope |
 | Physical device | Signed release ARM64 core matrix | No device connected; device authorization needed |

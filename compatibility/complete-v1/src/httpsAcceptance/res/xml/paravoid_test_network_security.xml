@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fixture-local CA only; never install this policy in a downstream release. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors><certificates src="@raw/paravoid_fixture_ca"/></trust-anchors>
+    </base-config>
+</network-security-config>
