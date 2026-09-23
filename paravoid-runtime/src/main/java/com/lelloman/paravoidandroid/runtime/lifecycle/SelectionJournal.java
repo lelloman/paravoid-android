@@ -159,13 +159,13 @@ final class SelectionJournal {
     }
     Generation selectedForRetry(ExpectedArchive identity) throws ContractException {
         State s = read();
-        if (!s.quarantined || s.selected == null || !s.selected.identity.equals(identity)) throw fail(Code.UNAVAILABLE);
+        if (!s.quarantined || s.pending != null || s.selected == null || !s.selected.identity.equals(identity)) throw fail(Code.UNAVAILABLE);
         return s.selected;
     }
     /** Facade must reverify intact bytes outside selection and obtain explicit user confirmation first. */
     void retry(Generation generation) throws ContractException {
         State s = forHandle(generation);
-        if (!s.quarantined) throw fail(Code.UNAVAILABLE);
+        if (!s.quarantined || s.pending != null) throw fail(Code.UNAVAILABLE);
         try {
             if (!ProcessLocks.ifUnleased(lease(generation), () -> null)) throw fail(Code.UNAVAILABLE);
         } catch (IOException e) { throw fail(Code.IO); }

@@ -79,7 +79,13 @@ public final class SelectionTest {
         locked(root, j -> { j.retry(generation(3)); return null; });
         Process failed = child(root, "failed"); check(line(failed).equals("generation_3")); exit(failed);
         check(locked(root, j -> j.snapshot(0)).availability == Availability.RECOVERY); // success cannot undo caught failure
+        SelectionJournal.Generation retryCandidate = locked(root, j -> j.selectedForRetry(generation(3).identity));
         locked(root, j -> j.pending(generation(4)));
+        byte[] beforeRefusal = Files.readAllBytes(root.resolve("selection"));
+        // A repair can arrive while the facade verifies candidate bytes outside the lock.
+        AdmissionTest.fails(Code.UNAVAILABLE, () -> locked(root, j -> { j.retry(retryCandidate); return null; }));
+        AdmissionTest.fails(Code.UNAVAILABLE, () -> locked(root, j -> j.selectedForRetry(generation(3).identity)));
+        check(java.util.Arrays.equals(beforeRefusal, Files.readAllBytes(root.resolve("selection"))));
         Process repair = child(root, "healthy"); check(line(repair).equals("generation_4")); exit(repair);
         check(locked(root, j -> j.snapshot(0)).active.payloadVersion == 4);
         locked(root, j -> j.pending(generation(5)));

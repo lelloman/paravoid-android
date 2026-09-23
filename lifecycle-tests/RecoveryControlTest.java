@@ -45,7 +45,12 @@ public final class RecoveryControlTest {
         RuntimeLifecycle two = LifecycleTest.lifecycle(root, twoFixture, true);
         two.stageDownloaded(twoFixture.source, LifecycleTest.admit(two, twoFixture));
         AdmissionTest.check(two.snapshot().pending.equals(twoFixture.release.identity));
-        one.retryQuarantined(captured); // Direct call may clear old quarantine, but forward pending still wins.
+        byte[] selection = Files.readAllBytes(root.resolve("selection"));
+        byte[] security = Files.readAllBytes(root.resolve("security"));
+        AdmissionTest.fails(Code.UNAVAILABLE, () -> one.retryQuarantined(captured));
+        AdmissionTest.check(java.util.Arrays.equals(selection, Files.readAllBytes(root.resolve("selection"))));
+        AdmissionTest.check(java.util.Arrays.equals(security, Files.readAllBytes(root.resolve("security"))));
+        AdmissionTest.check(one.snapshot().availability == Availability.RECOVERY);
         AdmissionTest.check(two.snapshot().pending.equals(twoFixture.release.identity));
         GenerationLease selected = two.acquireForProcess();
         AdmissionTest.check(selected.release().identity.equals(twoFixture.release.identity));

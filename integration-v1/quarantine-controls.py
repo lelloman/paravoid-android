@@ -4,6 +4,7 @@ Build the complete fixture with generation=broken, payloadVersion=2, bootstrap=e
 The fault is in the fixture Application, never in the production verifier/lifecycle.
 """
 import argparse
+from contextlib import ExitStack
 import importlib.util
 from pathlib import Path
 import re
@@ -26,16 +27,30 @@ def main():
                         help='Corrupt selected DEX after opening the retry dialog; require safe refusal')
     parser.add_argument('--live-worker', action='store_true',
                         help='Use broken-main fixture; keep a real worker lease alive during retry confirmation')
+    parser.add_argument('--repair', type=Path, help='Forward p3 repair output directory; stage while the retry dialog is open')
+    parser.add_argument('--activate-repair', action='store_true', help='Cold-start worker on p3 before confirming the stale p2 dialog')
+    parser.add_argument('--server-port', type=int, default=18765)
     args = parser.parse_args()
-    if args.live_worker and args.corrupt_during_confirmation:
-        parser.error('worker and corruption are separate cases')
+    if sum((args.live_worker, args.corrupt_during_confirmation, args.repair is not None)) > 1:
+        parser.error('worker, corruption and repair are separate cases')
+    if args.activate_repair and args.repair is None:
+        parser.error('--activate-repair requires --repair')
     if not re.fullmatch(r'emulator-\d+', args.serial):
         parser.error('dedicated disposable emulator required')
+    with ExitStack() as stack:
+        run(args, stack)
+
+
+def run(args, stack):
     d = device_check.Device(args.serial, args.avd)
     app = device_check.SHELL
     device_check.check_shell(args.apk, 'embedded')
     d.run('uninstall', app, check=False)
     assert 'Success' in d.run('install', str(args.apk.resolve()))
+    if args.repair:
+        from recovery_repair_server import RepairServer
+        server = RepairServer(d, args.apk, args.repair, args.server_port)
+        stack.callback(server.close)
     if args.live_worker:
         assert 'generation=broken-main' in d.run('shell', 'content', 'query', '--uri', 'content://' + app + '.worker')
         worker_pid = d.run('shell', 'pidof', app + ':worker').strip()
@@ -68,6 +83,30 @@ def main():
     assert d.state() == initial, 'Cancelling retry must preserve the journal'
     print('PASS: cancelling quarantine confirmation leaves selection unchanged', flush=True)
     tap('Retry this quarantined generation…')
+    if args.repair:
+        server.allowed.set()
+        d.await_(lambda: d.state()['pending'] is not None, 'signed forward repair staged while dialog is open')
+        assert d.state()['pending']['version'] == 3
+        if args.activate_repair:
+            assert 'generation=B' in d.run('shell', 'content', 'query', '--uri', 'content://' + app + '.worker')
+            assert d.state()['active']['version'] == 3 and d.state()['pending'] is None
+        before = d.state()
+        security = d.run('exec-out', 'run-as', app, 'cat', 'no_backup/paravoid-v1/security', binary=True)
+        tap('Retry this generation')
+        d.await_(lambda: 'Update status: UNAVAILABLE' in ui(), 'stale or superseded quarantine retry refusal')
+        assert d.state() == before, 'Superseded retry altered forward repair selection'
+        assert d.run('exec-out', 'run-as', app, 'cat', 'no_backup/paravoid-v1/security', binary=True) == security
+        assert d.run('shell', 'pidof', app + ':paravoid_recovery').strip() == recovery_pid
+        d.recovery()
+        print('PASS: ' + ('stale identity' if args.activate_repair else 'pending forward repair') +
+              ' refuses old dialog retry; forward selection/security preserved and recovery payload-free', args.serial, flush=True)
+        d.run('shell', 'input', 'swipe', '540', '450', '540', '1500', '300')
+        tap('Restart app…')
+        tap('Stop and restart')
+        d.healthy(3)
+        assert d.state()['active']['version'] == 3 and not d.state()['quarantined']
+        print('PASS: confirmed restart executes and marks forward repair healthy after refused retry', args.serial, flush=True)
+        return
     if args.live_worker:
         security = d.run('exec-out', 'run-as', app, 'cat', 'no_backup/paravoid-v1/security', binary=True)
         tap('Retry this generation')

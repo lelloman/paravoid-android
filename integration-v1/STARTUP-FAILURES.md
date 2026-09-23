@@ -79,3 +79,31 @@ Build: `/tmp/paravoid-recovery-lease-build.log`; passing logs:
 `/tmp/paravoid-recovery-lease30.log`, `/tmp/paravoid-recovery-lease36.log`.
 Stale-selection and concurrently staged forward-repair confirmation races remain
 separate installed gates.
+
+## Forward repair while a confirmation dialog is open
+
+`bash integration-v1/recovery-races.sh SERIAL AVD SERIAL AVD` builds an embedded
+broken p2 shell and a signed B/p3 forward repair. Set `PARAVOID_GRADLE`,
+`PARAVOID_GRADLE_USER_HOME`, `PARAVOID_OFFLINE` and `ANDROID_HOME` as for the startup
+matrix. The script retains its immutable test artifacts at the printed temporary
+path and runs only on the explicitly selected disposable emulators.
+
+The real reference server holds the update until the user has opened the p2 retry
+dialog, then serves signed p3 through production delivery/verifier/admission.
+Confirming the old dialog must return UNAVAILABLE without changing either journal
+or security state. A second case first cold-starts the real worker on p3, so the
+dialog's captured p2 identity is stale as well. Recovery remains payload-free in
+both cases. A subsequent confirmed restart must execute p3 and mark it healthy.
+
+The first installed run exposed a lifecycle gap: the UI hid the retry action when
+repair was pending, but an earlier dialog could still clear the old quarantine.
+Forward repair would still win the next cold selection, but retry changed state
+after its original precondition ceased to hold. Both journal retry checks now
+reject pending repair, including a repair admitted during byte verification
+outside the selection lock. Host regressions cover both checks and unchanged
+selection/security bytes.
+
+Passed all four final installed cases on API 30/36.1 x86_64, 2026-09-23:
+`/tmp/paravoid-recovery-races-final.log`. Full lifecycle suite passed:
+`/tmp/paravoid-recovery-pending-host.log`. The test uses real signed forward
+delivery, no injected selection records or fake generation leases.
