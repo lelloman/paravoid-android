@@ -1,5 +1,10 @@
 # Local release staging
 
+Public distribution targets GitHub/JitPack; Fucina remains internal. See
+[JITPACK.md](JITPACK.md) for build configuration, plugin resolution, local tests
+and the remaining remote-release boundary. The commands below retain the
+original internal/local Maven coordinates and do not upload to Fucina.
+
 `bash release-tests/regression.sh` runs the plugin, optional Hilt/Work, contract,
 runtime, lifecycle and delivery host suites plus Android delivery compilation.
 It accepts the Gradle/cache/offline variables below and deliberately does not

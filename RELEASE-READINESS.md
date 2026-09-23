@@ -17,7 +17,7 @@ Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 | Real app | Final-runtime Pezzottify fixed-shell A-to-B, data/workflows, incompatible rejection and forward repair | Logged-out API 30 matrix passes with final-runtime producer-built A/B/4/5, preference/Room checks, incompatible/reused-identity refusal, quarantine/repair and offline relaunch; authenticated workflows still need approved backend/account; see release-tests/PEZZOTTIFY.md |
 | Physical device | Signed release ARM64 core matrix | Guarded HTTPS runner and nine host safety/routing tests prepared; no physical hardware connected/executed; see delivery/device-tests/PHYSICAL-ARM64.md |
 | Packaging/regression | Large valid payload execution, publication failures, optional integrations and final matrix | Near-limit VPK runs on both APIs; final-rename IO and 159-test host bundle pass; see delivery/device-tests/LARGE-PAYLOAD.md and release-tests/README.md |
-| Distribution | Version/license/repository, production metadata/tag/release notes, repeatable validation | Default and alternate local staging/consumer pass; guarded 23-artifact candidate audit prepared; owner choices, repository-specific setup and publication remain pending; see release-tests/CANDIDATE.md |
+| Distribution | Version/license/repository, production metadata/tag/release notes, repeatable validation | GitHub/JitPack selected; six-module JitPack-coordinate and original internal publication/consumer tests pass locally; license/tag and actual remote build/consumer remain pending; see release-tests/JITPACK.md |
 
 ## Scope and completion rules
 
@@ -35,7 +35,10 @@ Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 
 ## External decisions requested
 
-Artifact repository, license and release version; physical ARM64 test device;
+Public destination selected: GitHub/JitPack, with Fucina internal. Local
+JitPack-coordinate publication and standalone consumer pass; actual GitHub push,
+JitPack build and remote consumer validation have not been performed. See
+release-tests/JITPACK.md. Remaining choices: license and release version; physical ARM64 test device;
 independent reviewer. Prepare local-only publication validation pending those
 choices. Do not claim these gates complete if no answer is available.
 
@@ -43,7 +46,7 @@ The controls fallback is implemented and validated on API 30/36.1; every OEM
 launcher's appearance is not covered by that evidence. Four release
 groups still need acceptance: coordinated final Pezzottify workflows; physical
 ARM64; independent security/signing-block review; and actual publication
-configuration/version/license/repository. Internal audit and local release
+configuration/version/license and remote GitHub/JitPack validation. Internal audit and local release
 tooling do not waive those gates. Parallel finishing work uses isolated worktrees;
 only reviewed commits and explicitly recorded test results count as integrated.
 
