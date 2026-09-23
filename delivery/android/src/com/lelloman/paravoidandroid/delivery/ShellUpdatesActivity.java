@@ -20,6 +20,7 @@ public final class ShellUpdatesActivity extends Activity {
     private Button retryGeneration;
     private boolean rendering;
     private LifecycleSnapshot lastLifecycle;
+    private final DeliveryController.Listener listener = snapshot -> runOnUiThread(() -> render(snapshot));
 
     /** Shell bootstrap calls this in the recovery process; never obtain it from payload code. */
     public static void installController(DeliveryController controller) { installedController = controller; }
@@ -75,10 +76,10 @@ public final class ShellUpdatesActivity extends Activity {
 
     @Override protected void onStart() {
         super.onStart();
-        if (controller != null) controller.listen(snapshot -> runOnUiThread(() -> render(snapshot)));
+        if (controller != null) controller.listen(listener);
     }
     @Override protected void onStop() {
-        if (controller != null) controller.listen(null);
+        if (controller != null) controller.unlisten(listener);
         super.onStop();
     }
     private Button button(String label, View.OnClickListener action) {

@@ -7,6 +7,7 @@ import java.nio.file.*;
 import java.nio.channels.FileChannel;
 import java.util.Objects;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 /** Shell-owned asynchronous controls; no background service or payload loading required. */
@@ -35,7 +36,7 @@ public final class DeliveryController {
     private final Executor callbacks;
     private final AttemptPolicy attempts = new AttemptPolicy();
     private DeliveryPreferences preferences = new DeliveryPreferences(true, true, false);
-    private volatile Listener listener;
+    private final AtomicReference<Listener> listener = new AtomicReference<>();
     private ScheduledFuture<?> pendingRetry;
     private long operation;
     private Activity activity = Activity.IDLE;
@@ -85,7 +86,9 @@ public final class DeliveryController {
             publish();
         });
     }
-    public void listen(Listener listener) { this.listener = listener; worker.execute(this::publish); }
+    public void listen(Listener listener) { this.listener.set(listener); worker.execute(this::publish); }
+    /** A stopped screen must not detach a newer screen's observer. */
+    public void unlisten(Listener expected) { listener.compareAndSet(expected, null); }
     /** Resolve bootstrap from lifecycle state, never from the caller's process or Activity. */
     public void foreground() {
         worker.execute(() -> {
@@ -296,12 +299,12 @@ public final class DeliveryController {
             && (!current.unmeteredOnly || !metered.getAsBoolean());
     }
     private void publish() {
-        Listener target = listener;
+        Listener target = listener.get();
         if (target == null) return;
         LifecycleSnapshot state = null;
         try { state = lifecycle.snapshot(); }
         catch (ContractException failed) { fail(failed.code.name()); }
         Snapshot snapshot = new Snapshot(state, preferences, activity, error);
-        callbacks.execute(() -> { if (listener == target) target.changed(snapshot); });
+        callbacks.execute(() -> { if (listener.get() == target) target.changed(snapshot); });
     }
 }

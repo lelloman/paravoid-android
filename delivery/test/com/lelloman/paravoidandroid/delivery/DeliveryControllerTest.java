@@ -48,6 +48,28 @@ public final class DeliveryControllerTest {
             new CancellationSignal(Paths.get(args[1])).cancel(); return;
         }
         try (Control c = new Control()) {
+            java.util.concurrent.atomic.AtomicInteger oldCalls = new java.util.concurrent.atomic.AtomicInteger();
+            DeliveryController.Listener older = snapshot -> oldCalls.incrementAndGet();
+            DeliveryController.Listener newer = c.snapshots::add;
+            c.controller.listen(older); c.barrier();
+            int observed = oldCalls.get();
+            c.snapshots.clear();
+            // Android can start the replacement Activity before stopping its predecessor.
+            c.controller.listen(newer);
+            c.controller.unlisten(older);
+            c.await(DeliveryController.Activity.IDLE); c.barrier(); c.snapshots.clear();
+            c.controller.preferences(new DeliveryPreferences(false, false, true));
+            DeliveryController.Snapshot changed = c.await(DeliveryController.Activity.IDLE);
+            check(!changed.preferences.automaticChecks && !changed.preferences.automaticDownloads);
+            check(oldCalls.get() == observed);
+            c.barrier(); c.snapshots.clear();
+            c.controller.unlisten(newer);
+            c.controller.preferences(new DeliveryPreferences(true, true, false)); c.barrier();
+            check(c.snapshots.isEmpty());
+            c.controller.listen(older); c.barrier();
+            check(oldCalls.get() > observed); // Returning to the old Activity can subscribe again.
+        }
+        try (Control c = new Control()) {
             c.metered = false;
             c.controller.preferences(new DeliveryPreferences(true, true, true)); c.barrier();
             Fake head = c.setup.head(); head.onResponse = () -> c.metered = true;
