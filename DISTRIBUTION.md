@@ -300,8 +300,8 @@ would need a separate explicit specification. Never erase user data on auth fail
 
 ## 7. Embedded and empty bootstrap; activation
 
-The target plugin offers `bootstrap = 'embedded'` or `'empty'`, as defined in V1.md
-(not implemented DSL yet):
+The complete-profile plugin implements `bootstrap = 'embedded'` or `'empty'`,
+as defined in V1.md (release acceptance remains tracked in RELEASE-READINESS.md):
 
 | Mode | Without network on first launch | After a verified payload is retained |
 | --- | --- | --- |

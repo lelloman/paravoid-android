@@ -8,6 +8,23 @@ The same application implementation should also build as a traditional,
 self-contained Android APK or AAB. Both modes are intended to render native UI,
 including Jetpack Compose.
 
+## Current complete-profile status
+
+The complete profile implements signed VPK packaging, embedded/empty bootstrap,
+public or APK-grant authenticated delivery, cold activation and recovery controls.
+It is under release acceptance, not yet a production-ready published v1. See
+[the bounded release checklist](RELEASE-READINESS.md), [v1 contract](V1.md), and
+[combined validation evidence](parallel-finish/INTEGRATION.md).
+
+Complete mode targets AGP 8.13.2 and Android API 30+, produces a standalone shell
+APK and VPK, and rejects shrinking and shell AAB distribution. Normal packaging
+retains ordinary APK/AAB builds. Older DEX/resource-shell experiments below have
+narrower capabilities and must not be confused with the complete profile.
+
+[Local Maven staging and standalone consumer validation](release-tests/README.md)
+are available; remote publication, release metadata and security acceptance are
+not implied by a successful local build.
+
 ## Agreed downstream architecture
 
 The downstream developer keeps an ordinary Android application project. The
@@ -28,18 +45,18 @@ intended integration contract is:
   by the plugin, alongside the app's build types and existing flavor dimensions.
 
 The plugin packages the entire application implementation, including its
-dependencies and eventually its resources and assets. Downstream developers
+dependencies, resources and assets in complete mode. Downstream developers
 should not manually split their project into implementation, shell, and standalone
 modules, implement `AppEntry`, or write bootstrap code.
 
 | Packaging mode | Intended outputs and behavior |
 | --- | --- |
 | Normal packaging | Conventional APK/AAB containing the app; the user's Application subclass is the actual Android Application |
-| Paravoid Android packaging | Generated shell APK/AAB plus a separately packaged application payload; the shell owns the actual Android Application and bootstrap launcher |
+| Paravoid Android complete packaging | Generated shell APK plus a signed VPK; the shell owns the actual Android Application and bootstrap launcher |
 
 The example now uses plugin `com.lelloman.paravoid`, dimension `paravoidPackaging`, and
-flavors `normal` and `paravoidAndroid`. Server/authentication configuration and external
-delivery remain future work; this experiment uses an embedded payload.
+flavors `normal` and `paravoidAndroid`. The original sample uses an embedded
+payload; `compatibility/complete-v1` exercises the complete delivery/runtime path.
 
 The [distribution specification draft](DISTRIBUTION.md) defines the store-agnostic
 direction: signed VPKs, compatible-release discovery/download, public access or
@@ -51,8 +68,8 @@ The distributor can revoke a key; restoring update access requires a new key
 provisioned through a shell APK update, not Paravoid-managed key rotation.
 The [v1 implementation contract](V1.md) now selects the build API, complete VPK
 format, signing/authentication, cold activation, empty-shell behavior, recovery
-and minimum controls, with an ordered completion checklist. These are implementation
-requirements, not shipped plugin/runtime features; wire freeze still requires
+and minimum controls, with an ordered completion checklist. The complete implementation
+is undergoing release validation; wire freeze still requires
 cross-implementation vectors and security review.
 
 ### Application behavior
@@ -102,8 +119,8 @@ Adding, removing or renaming an Activity, changing its manifest attributes,
 intent filters or metadata, or changing its pinned resources requires a new shell.
 Compatible code and movable resource changes may belong to a new payload instead.
 See [the Activity compatibility contract](PACKAGING.md#activity-declarations-and-library-components)
-for examples, requirements and implementation gaps. Resource updates and external
-payload delivery are still planned features, not current production capabilities.
+for examples, requirements and implementation gaps. Complete-profile resource updates
+and external delivery are implemented and tested, but not production-release approved.
 
 **Current implementation:** the generated shell preserves all declared app/library
 Activities and adds Paravoid Android's `LauncherActivity`. It requires exactly one
@@ -281,7 +298,9 @@ Release signing remains the downstream app's responsibility.
 ## Plugin integration in the example
 
 The repository includes `paravoid-gradle-plugin` through `pluginManagement.includeBuild`.
-Runtime projects are consumed from source; Maven publication is future work.
+Source integration remains available. Local Maven publication and a standalone
+artifact consumer are covered by [release staging](release-tests/README.md);
+there is not yet an approved remote release.
 
 ```groovy
 plugins { id 'com.lelloman.paravoid' }
@@ -518,9 +537,9 @@ files. As payload resources evolve, promote the updated ledger, but retain the
 original contract and its installed ID reservations. A new shell generation starts
 with a deliberately separate baseline; do not automatically accept failed diffs.
 
-This is not the future downloaded-VPK contract: distribution is currently fixed to
-embedded bootstrap/no updates. Download trust, endpoints, authentication and runtime
-VPK compatibility enforcement remain future work, not guarantees of this snapshot.
+This older resource-shell task is fixed to embedded bootstrap/no updates. The
+separate complete profile implements downloaded VPK trust, endpoints,
+authentication and compatibility enforcement; see [V1.md](V1.md).
 
 The task also relocates merged Java resources into `java-resources.jar`, preserving
 the final AGP merge/exclude/pickFirst result and removing the installed copies.

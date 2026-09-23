@@ -105,7 +105,8 @@ Androidoscopy. It does not yet verify those SDK flows on a device.
 **Remaining limitations:** aliases and anything other than one MAIN/LAUNCHER filter
 are still rejected. The launcher metadata represents one default destination,
 alongside a build-time inventory of all Activity classes. Multiple-launcher routing
-and shell-baseline compatibility-diff validation are not implemented. Add device
+is not implemented. Complete-mode shell-baseline compatibility diffs are implemented
+and host-tested; final real-app acceptance remains open. Add device
 coverage for multiple app/library Activities, result round trips, external cold
 entry and process restoration. TV/LEANBACK routing and alias support need explicit implementation
 and tests; they are not established by allowing multiple Activity classes. Custom
