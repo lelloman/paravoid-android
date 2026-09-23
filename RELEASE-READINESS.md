@@ -9,7 +9,7 @@ Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 | Persistence | First/replacement retry/cancel writes, deletion, bounded temporary slots and documented durability limits | Host matrix and 22 installed boundaries/API pass on API 30/36.1; see delivery/PERSISTENCE-TESTS.md |
 | Startup | Supported factory construction and provider/Activity/service startup; later crashes excluded | Seven installed cases/API on API 30/36.1 pass; explicit scope/handler limits in integration-v1/STARTUP-FAILURES.md |
 | Recovery races | Installed stale identity, pending repair, corruption and live lease refusal | Passed on API 30/36.1; pending-repair lifecycle gap fixed; see integration-v1/STARTUP-FAILURES.md |
-| Controls access | Document and test fallback when dynamic shortcut unavailable | Default-on configurable shell launcher entry implemented; API 36.1 cold/offline/shortcut-absent checks pass; see integration-v1/CONTROLS-LAUNCHER.md |
+| Controls access | Document and test fallback when dynamic shortcut unavailable | Default-on configurable shell launcher entry implemented; API 30/36.1 cold/offline/shortcut-absent checks pass; see integration-v1/CONTROLS-LAUNCHER.md |
 | Storage/processes | Selected distinct-release contention/death/cancel and publication I/O; restart identity/stall limits | Selected matrix passed on both APIs; see delivery/device-tests/README.md and V1.md restart limits |
 | HTTPS/auth | Signed release HTTPS download, personalized install, revoke/replace, interrupted transfer and fail-closed grants | Passed on API 30/36.1; local TLS and scope in delivery/device-tests/HTTPS-RELEASE.md |
 | Security/signing | Signing-block ID collision audit and independent protocol/security review | Scoped internal audit and AOSP ID survey recorded in delivery/SECURITY-REVIEW-2026-09-23.md; allocation-amplification fix tested; independent reviewer/private-ID approval still needed |
@@ -38,8 +38,8 @@ Artifact repository, license and release version; physical ARM64 test device;
 independent reviewer. Prepare local-only publication validation pending those
 choices. Do not claim these gates complete if no answer is available.
 
-The controls fallback is implemented and validated on API 36.1; fallback-specific
-API 30 and OEM launcher appearance are not covered by that evidence. Four release
+The controls fallback is implemented and validated on API 30/36.1; every OEM
+launcher's appearance is not covered by that evidence. Four release
 groups still need acceptance: coordinated final Pezzottify workflows; physical
 ARM64; independent security/signing-block review; and actual publication
 configuration/version/license/repository. Internal audit and local release

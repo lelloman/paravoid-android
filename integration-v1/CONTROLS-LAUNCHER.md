@@ -37,3 +37,7 @@ production `b73264a`; `/tmp/paravoid-controls-device.log`. Normal and complete
 embedded fixture builds passed (`/tmp/paravoid-controls-build.log`). The initial
 test expected mixed-case button text; Android renders it uppercase, so the UI
 assertion now compares case-insensitively. No production change was needed.
+
+API 30 Restart30 / emulator-5586 passed the same installed test using that same
+embedded shell artifact; `/tmp/paravoid-controls-api30.log`. The fixture was
+force-stopped afterward. Neither run establishes every OEM launcher's appearance.
