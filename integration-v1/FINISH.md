@@ -1,5 +1,43 @@
 # Finish integration
 
+## Foreground sticky-worker restart
+
+After building and bootstrapping the current public empty A/version 1 fixture:
+
+```sh
+python3 delivery/device-tests/public_bootstrap.py --serial emulator-5586
+python3 integration-v1/controls-shortcut.py --serial emulator-5586 \
+  --restart-worker --sticky-worker
+```
+
+This variant starts the fixture worker as a `dataSync` foreground service and
+returns `START_STICKY`. The fixture records its PID, generation and whether Android
+delivered a null Intent on recreation, after successfully calling `startForeground`.
+The test opens the real recovery shortcut, cancels restart (selection and both PIDs
+must survive), then confirms it. It never calls startservice or a provider to induce
+the replacement worker. Natural recreation with a new PID and null Intent is
+required within 60 seconds; absence is a test failure, not a pass or implicit skip.
+
+Both safe outcomes are accepted: a fresh A Activity launches, or the restart guard
+refuses because a worker is present and recovery offers an enabled retry button.
+Recovery must survive, and the replacement worker must remain alive for another
+six seconds without a repeated kill loop. Finally the fixture service is explicitly
+stopped. The harness accepts `am stopservice` exit 255 only with a recognized
+response and verifies service disappearance through `dumpsys`; these images report
+255 even when stopping succeeds. No adb kill/force-stop is used during this
+restart scenario.
+
+This is separate from `--pending-update`. It does not prove higher-version
+activation during sticky respawn, every OS restart-backoff policy, a deliberately
+stuck-process timeout, or shared-UID behavior. Worker foreground-service type is
+part of the shell manifest; rebuild the fixture shell/baseline when adopting it.
+
+Passed on 2026-09-23 on Restart30/API 30 and Restart36/API 36.1, x86_64, using the
+unchanged runtime at `fd313a6`. Both runs observed a fresh A Activity and natural
+foreground worker recreation with a null Intent; neither exercised the refusal
+branch. The normal/public fixture builds and bootstrap runs passed as well.
+No phone, root access or publication was involved.
+
 ## Fixed-shell pending update with a live worker
 
 `controls-shortcut.py --restart-worker --pending-update PATH --serial SERIAL`

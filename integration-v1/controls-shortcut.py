@@ -13,9 +13,12 @@ import xml.etree.ElementTree as ET
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--serial', required=True)
 parser.add_argument('--restart-worker', action='store_true', help='Confirm restart with a live payload worker service')
+parser.add_argument('--sticky-worker', action='store_true', help='Exercise Android foreground sticky-worker respawn; requires --restart-worker')
 parser.add_argument('--pending-update', type=Path, help='Immutable generation B/version 2 output directory; requires --restart-worker')
 parser.add_argument('--server-port', type=int, default=18765)
 args = parser.parse_args()
+if args.sticky_worker and (not args.restart_worker or args.pending_update):
+    parser.error('--sticky-worker requires --restart-worker and is separate from --pending-update')
 if args.pending_update and not args.restart_worker:
     parser.error('--pending-update requires --restart-worker')
 if not 1 <= args.server_port <= 65535:
@@ -44,7 +47,8 @@ assert 'generation=A;asset=payload-asset;java=payload-java-resource' in adb(
 if args.restart_worker:
     adb('shell', 'am', 'start', '-W', '-n', app + '/com.lelloman.paravoidandroid.runtime.LauncherActivity')
     component = app + '/com.lelloman.paravoidcompat.complete.ProbeService$Worker'
-    adb('shell', 'am', 'startservice', '-n', "'" + component + "'", '-a', 'hold')
+    adb('shell', 'am', 'start-foreground-service' if args.sticky_worker else 'startservice',
+        '-n', "'" + component + "'", '-a', 'sticky' if args.sticky_worker else 'hold')
     assert 'generation=A' in adb('shell', 'content', 'query', '--uri', 'content://' + app + '.worker')
     old_main = adb('shell', 'pidof', app).strip()
     old_worker = adb('shell', 'pidof', app + ':worker').strip()
@@ -98,6 +102,11 @@ if args.restart_worker:
     def tap(label):
         node = next(n for n in nodes() if n.attrib.get('text', '').lower() == label.lower())
         adb('shell', 'input', 'tap', *point(node))
+    if args.sticky_worker:
+        sys.dont_write_bytecode = True
+        from sticky_worker import run
+        run(args, app, adb, nodes, tap, old_main, old_worker)
+        sys.exit(0)
     if args.pending_update:
         sys.dont_write_bytecode = True
         from pending_worker import run
