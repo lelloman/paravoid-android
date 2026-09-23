@@ -15,6 +15,9 @@ public final class ApkGrantReaderTest {
             pair(pairs, Protocol.GRANT_BLOCK_ID, grant);
             if (duplicate) pair(pairs, Protocol.GRANT_BLOCK_ID, grant);
         }
+        return apk(pairs);
+    }
+    static byte[] apk(ByteArrayOutputStream pairs) {
         ByteBuffer apk = ByteBuffer.allocate(8 + pairs.size() + 24 + 22).order(ByteOrder.LITTLE_ENDIAN);
         apk.putLong(pairs.size() + 24).put(pairs.toByteArray()).putLong(pairs.size() + 24);
         apk.put("APK Sig Block 42".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
@@ -44,6 +47,22 @@ public final class ApkGrantReaderTest {
             for (byte[] invalid : new byte[][] {new byte[0], new byte[16385]}) {
                 Files.write(file, apk(invalid, false, true));
                 DeliveryClientTest.contractFailure(ContractException.Code.LIMIT_EXCEEDED, () -> ApkGrantReader.read(file.toFile()));
+            }
+            ByteArrayOutputStream many = new ByteArrayOutputStream();
+            pair(many, 0x7109871a, new byte[] {0});
+            pair(many, Protocol.GRANT_BLOCK_ID, grant);
+            for (int id = 0; id < 1022; id++) pair(many, id, new byte[0]);
+            Files.write(file, apk(many));
+            check(Arrays.equals(grant, ApkGrantReader.read(file.toFile())));
+            pair(many, 1022, new byte[0]);
+            Files.write(file, apk(many));
+            DeliveryClientTest.contractFailure(ContractException.Code.LIMIT_EXCEEDED, () -> ApkGrantReader.read(file.toFile()));
+            // Lengths must not wrap into a small accepted allocation or a backwards seek.
+            for (long size : new long[] {0, 3, Long.MAX_VALUE, Long.MIN_VALUE, -1}) {
+                byte[] invalid = apk(grant, false, true);
+                ByteBuffer.wrap(invalid).order(ByteOrder.LITTLE_ENDIAN).putLong(8, size);
+                Files.write(file, invalid);
+                DeliveryClientTest.contractFailure(ContractException.Code.MALFORMED, () -> ApkGrantReader.read(file.toFile()));
             }
         } finally { Files.deleteIfExists(file); }
         System.out.println("ApkGrantReaderTest: " + TransportTest.assertions + " assertions passed");

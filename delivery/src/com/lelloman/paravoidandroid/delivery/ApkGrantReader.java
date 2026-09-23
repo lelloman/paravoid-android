@@ -10,6 +10,9 @@ import java.util.*;
 public final class ApkGrantReader {
     private static final byte[] MAGIC = "APK Sig Block 42".getBytes(StandardCharsets.US_ASCII);
     private static final long MAX_BLOCK = 16L << 20;
+    // A byte limit alone permits over a million tiny pairs and an amplified HashSet.
+    // Unknown pairs are allowed, but the unsigned carrier must remain cheap to inspect.
+    private static final int MAX_ENTRIES = 1024;
     private ApkGrantReader() {}
 
     /** Read the installed base APK on every process startup. Never fall back to an asset/cache. */
@@ -44,6 +47,8 @@ public final class ApkGrantReader {
             Set<Long> ids = new HashSet<>();
             byte[] grant = null;
             while (apk.getFilePointer() < directory - 24) {
+                if (ids.size() == MAX_ENTRIES)
+                    throw new ContractException(ContractException.Code.LIMIT_EXCEEDED, "APK signing entry limit");
                 if (directory - 24 - apk.getFilePointer() < 12) throw malformed();
                 long pairSize = u64(apk);
                 if (pairSize < 4 || pairSize > directory - 24 - apk.getFilePointer()) throw malformed();
