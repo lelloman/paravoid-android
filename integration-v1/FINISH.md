@@ -1,5 +1,37 @@
 # Finish integration
 
+## Installed restart polling timeout
+
+After ordinary empty/public A bootstrap, run:
+
+```sh
+python3 integration-v1/controls-shortcut.py --serial emulator-5586 \
+  --restart-worker --restart-timeout
+```
+
+This requires a JDK with `jdk.jdi` and the debuggable fixture. A temporary JDWP
+connection to recovery pauses only the restart thread after its initial kill pass,
+before starting the real five-second polling clock. The original main and worker
+must disappear; the harness then makes one real worker-provider request to model
+a competing background entry. The new worker must load A with a different PID.
+The thread resumes with real elapsed time and real ActivityManager snapshots.
+Debugger breakpoints witness repeated polling and the false-return boundary after
+at least 4.9 seconds; no clock, process list, kill operation or result is replaced.
+
+Timeout must display refusal with restart re-enabled, retain the worker and
+recovery, leave main absent, and preserve selection/security hashes. After debugger
+detach, a second user-confirmed restart must stop the worker and launch A normally,
+without adb kill/force-stop or journal edits. The forward/debugger are removed in
+`finally`. This is a deliberately scheduled process-creation race on installed
+Android, not natural sticky respawn or an unkillable kernel process. It does not
+prove a hard deadline for blocked platform calls or pending-update activation.
+
+Passed on 2026-09-23 with unchanged runtime `b28ee03`: Restart30/API 30 observed
+49 polls over 5023 ms; Restart36/API 36.1 observed 50 polls over 5094 ms. Both kept
+recovery usable and records unchanged, then completed the debugger-free retry.
+Public bootstrap passed on both; Java 11 helper compilation and Python syntax
+checks passed. No phone, root access or artifact publication was involved.
+
 ## Shared-UID restart refusal
 
 Build the complete fixture's normal APK, empty/public shell and VPK with

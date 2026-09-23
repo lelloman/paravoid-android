@@ -15,9 +15,12 @@ parser.add_argument('--serial', required=True)
 parser.add_argument('--restart-worker', action='store_true', help='Confirm restart with a live payload worker service')
 parser.add_argument('--sticky-worker', action='store_true', help='Exercise Android foreground sticky-worker respawn; requires --restart-worker')
 parser.add_argument('--shared-uid', action='store_true', help='Require shared-UID build; verify dormant/live peer rejection')
+parser.add_argument('--restart-timeout', action='store_true', help='Debugger-scheduled real worker forces restart polling timeout')
 parser.add_argument('--pending-update', type=Path, help='Immutable generation B/version 2 output directory; requires --restart-worker')
 parser.add_argument('--server-port', type=int, default=18765)
 args = parser.parse_args()
+if args.restart_timeout and (not args.restart_worker or args.shared_uid or args.sticky_worker or args.pending_update):
+    parser.error('--restart-timeout requires --restart-worker and no other variant')
 if args.shared_uid and (not args.restart_worker or args.pending_update or args.sticky_worker):
     parser.error('--shared-uid requires --restart-worker and is separate from other variants')
 if args.sticky_worker and not args.restart_worker:
@@ -110,6 +113,11 @@ if args.restart_worker:
     def tap(label):
         node = next(n for n in nodes() if n.attrib.get('text', '').lower() == label.lower())
         adb('shell', 'input', 'tap', *point(node))
+    if args.restart_timeout:
+        sys.dont_write_bytecode = True
+        from restart_timeout import run
+        run(args, app, adb, nodes, tap, old_main, old_worker)
+        sys.exit(0)
     if args.shared_uid:
         sys.dont_write_bytecode = True
         from shared_uid import run
