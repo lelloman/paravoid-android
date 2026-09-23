@@ -1,5 +1,49 @@
 # Finish integration
 
+## Fixed-shell pending update with a live worker
+
+`controls-shortcut.py --restart-worker --pending-update PATH --serial SERIAL`
+extends the runnable-app shortcut test. Start from the ordinary public empty-shell
+generation A/version 1 fixture after `public_bootstrap.py` completes. `PATH` must
+contain immutable `payload.vpk` and `release.json` outputs for generation B/version
+2, built against A's promoted baseline with the same throwaway signing keys.
+
+Preparation (use the complete fixture's Gradle invocation and cached SDK setup):
+
+1. Build A/version 1 with `-Pbootstrap=empty -Pauthentication=public` and the normal
+   APK, shell APK and `packageParavoidAndroidDebugParavoidVpk` tasks.
+2. Promote `build/outputs/paravoid/paravoidAndroidDebug/baseline-candidate/` into
+   `build/accepted/paravoidAndroidDebug/` in that fixture's ignored build directory.
+3. Build B with `-Pgeneration=B -PpayloadVersion=2 -Pbaseline` and the same policy;
+   copy its `payload.vpk` and `release.json` into a fresh `mktemp -d` directory.
+4. Rebuild A/version 1, then run `public_bootstrap.py` and the shortcut test:
+
+```sh
+python3 delivery/device-tests/public_bootstrap.py --serial emulator-5586
+python3 integration-v1/controls-shortcut.py --serial emulator-5586 \
+  --restart-worker --pending-update /absolute/path/to/saved-B-output
+```
+
+Separate emulators can both use immutable outputs with distinct `--server-port`
+values (supported by both scripts). Never rebuild while a server serves outputs.
+No B shell is installed. The test reads policy from the actual installed APK,
+checks B's contract, signs a fresh head with fixture keys, and stages B over the
+reference HTTP server while A's main and non-sticky worker remain alive. Cancelling
+restart must preserve the selection hash and both PIDs. The server is then stopped;
+confirmed restart must launch B offline, stop the old worker and preserve recovery.
+A new worker-provider query must execute B, and the installed APK hash must remain
+unchanged. There is no adb force-stop or kill in this update/restart test.
+
+This covers a non-sticky started service holding a generation lease, not sticky
+respawn, foreground-service behavior, shared UIDs, restart timeout or power loss.
+
+Passed on 2026-09-23 on Restart30/API 30 (`emulator-5586`) and Restart36/API 36.1
+(`emulator-5584`), x86_64, with production runtime `de27c65`. Both complete fixture
+builds and B's promoted-baseline check passed. No runtime fix was needed; no phone,
+root access, APK publication or production fault hook was used.
+
+## Original integration handoff
+
 Worktree `/tmp/paravoid-v1-integration-finish`, branch `v1/integration-finish`.
 Starts from Track A `da45412`, imports B `6208140`, `4b72682`, `f06cc5d`,
 `00a321f`, `bb8fb17`, `3a4610d`. B's `00a321f` is C's `3281e6e`; skip that

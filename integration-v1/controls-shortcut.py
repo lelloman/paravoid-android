@@ -3,15 +3,23 @@
 Only a dedicated disposable emulator is accepted; no install or payload mutation.
 """
 import argparse
+from pathlib import Path
 import re
 import subprocess
+import sys
 import time
 import xml.etree.ElementTree as ET
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--serial', required=True)
 parser.add_argument('--restart-worker', action='store_true', help='Confirm restart with a live payload worker service')
+parser.add_argument('--pending-update', type=Path, help='Immutable generation B/version 2 output directory; requires --restart-worker')
+parser.add_argument('--server-port', type=int, default=18765)
 args = parser.parse_args()
+if args.pending_update and not args.restart_worker:
+    parser.error('--pending-update requires --restart-worker')
+if not 1 <= args.server_port <= 65535:
+    parser.error('invalid host port')
 if not re.fullmatch(r'emulator-\d+', args.serial):
     parser.error('dedicated emulator required')
 
@@ -90,6 +98,11 @@ if args.restart_worker:
     def tap(label):
         node = next(n for n in nodes() if n.attrib.get('text', '').lower() == label.lower())
         adb('shell', 'input', 'tap', *point(node))
+    if args.pending_update:
+        sys.dont_write_bytecode = True
+        from pending_worker import run
+        run(args, app, adb, nodes, tap, old_main, old_worker)
+        sys.exit(0)
     recovery = adb('shell', 'pidof', app + ':paravoid_recovery').strip()
     tap('Restart app…')
     tap('Cancel')
