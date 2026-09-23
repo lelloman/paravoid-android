@@ -14,6 +14,7 @@ java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.ApkPolicyReaderTest
 java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.DeliveryControllerTest
 java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.DeliveryLocksTest
 java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.LegacyDeliveryCleanupTest
+java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.RecoveryActionsTest
 java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.SignedDeliveryTest
 DELIVERY_TEST_CLASSES="$output" PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s reference -p 'test_*.py'
 DELIVERY_TEST_CLASSES="$output" PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools -p 'test_*.py'

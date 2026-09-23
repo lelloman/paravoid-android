@@ -123,12 +123,11 @@ public final class ShellUpdatesActivity extends Activity {
             checks.setChecked(snapshot.preferences.automaticChecks);
             downloads.setChecked(snapshot.preferences.automaticDownloads);
             unmetered.setChecked(snapshot.preferences.unmeteredOnly);
-            retryGeneration.setVisibility(lastLifecycle != null && lastLifecycle.availability == Availability.RECOVERY
-                    && lastLifecycle.active != null ? View.VISIBLE : View.GONE);
+            retryGeneration.setVisibility(RecoveryActions.canOfferGenerationRetry(lastLifecycle) ? View.VISIBLE : View.GONE);
         } finally { rendering = false; }
     }
     private void confirmGenerationRetry() {
-        if (lastLifecycle == null || lastLifecycle.availability != Availability.RECOVERY || lastLifecycle.active == null) return;
+        if (!RecoveryActions.canOfferGenerationRetry(lastLifecycle)) return;
         ExpectedArchive captured = lastLifecycle.active;
         new AlertDialog.Builder(this).setTitle("Retry quarantined generation?")
                 .setMessage("Retry " + identity(captured) + " on a later cold start? It previously failed to start and may fail again. This does not restore older app data.")

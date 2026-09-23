@@ -11,5 +11,6 @@ java -cp "$out" com.lelloman.paravoidandroid.runtime.lifecycle.AdmissionTest
 java -cp "$out" com.lelloman.paravoidandroid.runtime.lifecycle.InstalledAuthorityTest
 java -cp "$out" com.lelloman.paravoidandroid.runtime.lifecycle.SelectionTest
 java -cp "$out" com.lelloman.paravoidandroid.runtime.lifecycle.LifecycleTest
+java -cp "$out" com.lelloman.paravoidandroid.runtime.lifecycle.RecoveryControlTest
 java -cp "$out" com.lelloman.paravoidandroid.runtime.lifecycle.PublicationTest
 java -cp "$out" com.lelloman.paravoidandroid.runtime.lifecycle.SpaceAdmissionTest
