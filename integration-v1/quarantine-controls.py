@@ -22,6 +22,8 @@ def main():
     parser.add_argument('--serial', required=True)
     parser.add_argument('--avd', required=True)
     parser.add_argument('--apk', type=Path, required=True)
+    parser.add_argument('--corrupt-during-confirmation', action='store_true',
+                        help='Corrupt selected DEX after opening the retry dialog; require safe refusal')
     args = parser.parse_args()
     if not re.fullmatch(r'emulator-\d+', args.serial):
         parser.error('dedicated disposable emulator required')
@@ -58,6 +60,18 @@ def main():
     assert d.state() == initial, 'Cancelling retry must preserve the journal'
     print('PASS: cancelling quarantine confirmation leaves selection unchanged', flush=True)
     tap('Retry this quarantined generation…')
+    if args.corrupt_during_confirmation:
+        security = d.run('exec-out', 'run-as', app, 'cat', 'no_backup/paravoid-v1/security', binary=True)
+        component = 'no_backup/paravoid-v1/generations/' + initial['active']['directory'] + '/components/code/classes.dex'
+        d.corrupt(component)
+        tap('Retry this generation')
+        d.await_(lambda: 'Update status: INTEGRITY' in ui(), 'corruption refusal after confirmation')
+        assert d.state() == initial, 'Corrupt retry altered selection/quarantine'
+        assert d.run('exec-out', 'run-as', app, 'cat', 'no_backup/paravoid-v1/security', binary=True) == security
+        assert d.run('shell', 'pidof', app + ':paravoid_recovery').strip() == recovery_pid
+        d.recovery()
+        print('PASS: selected bytes corrupted after dialog; exact retry refused, quarantine/security preserved, recovery stays payload-free', args.serial, flush=True)
+        return
     tap('Retry this generation')
     d.await_(lambda: not d.state()['quarantined'], 'confirmed quarantine retry')
     retry = d.state()

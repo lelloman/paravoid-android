@@ -46,3 +46,18 @@ observer code. Logs: `/tmp/paravoid-startup-matrix-final.log` and
 (`/tmp/paravoid-startup-units-final.log`), including boundary classification,
 cause wrapping, different-thread/later-crash rejection, exact throwable delegation
 and reporting failure. No physical ARM64 or arbitrary custom crash-handler claim.
+
+## Corruption while a recovery confirmation is open
+
+Build `generation=broken`, `payloadVersion=2`, `bootstrap=embedded` and
+`startupFault=none`, then run `integration-v1/quarantine-controls.py` with its
+usual `--serial`, `--avd`, `--apk` and `--corrupt-during-confirmation`.
+After actual Application failure and a cancelled confirmation control, the test
+opens a new retry dialog, corrupts the selected generation's DEX and confirms.
+The real lifecycle returns INTEGRITY; selection/quarantine and security bytes
+remain unchanged. Recovery PID survives with no payload mappings or leases.
+
+Passed on both API 30/36.1, 2026-09-23, runtime `0e79cb5`. Logs:
+`/tmp/paravoid-recovery-corrupt{30,36}.log`; build:
+`/tmp/paravoid-recovery-corrupt-build.log`. This is installed corruption-race
+evidence, not stale-selection/pending-repair/live-lease device evidence.

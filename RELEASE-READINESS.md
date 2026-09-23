@@ -8,7 +8,7 @@ Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 | --- | --- | --- |
 | Persistence | Retry deletion; temporary-file reclamation; remaining write combinations and explicit durability limits | Host 20 cases and installed 10/API on API 30/36.1 pass; see delivery/PERSISTENCE-TESTS.md |
 | Startup | Supported factory construction and provider/Activity/service startup; later crashes excluded | Seven installed cases/API on API 30/36.1 pass; explicit scope/handler limits in integration-v1/STARTUP-FAILURES.md |
-| Recovery races | Installed stale confirmation, corrupted bytes, pending repair and live lease refusal | Host passes; device open |
+| Recovery races | Installed stale identity, pending repair and live lease refusal | Host passes; corruption after dialog passes both APIs (see integration-v1/STARTUP-FAILURES.md) |
 | Controls access | Document and test fallback when dynamic shortcut unavailable | Product/implementation decision open |
 | Storage/processes | Selected distinct-release contention/death/cancel and publication I/O; review restart identity/stalls | Installed exhaustion/admission passes; broader gates open |
 | HTTPS/auth | Signed release HTTPS download, personalized install, revoke/replace, interrupted transfer and fail-closed grants | Production-like acceptance open |
