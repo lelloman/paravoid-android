@@ -82,11 +82,14 @@ def main():
     thread.start()
     sdk = int(adb('shell', 'getprop', 'ro.build.version.sdk').strip())
     abis = adb('shell', 'getprop', 'ro.product.cpu.abilist64').strip().split(',')
+    print(f'Device {args.avd}/{args.serial}: API {sdk}; 64-bit ABIs {abis}', flush=True)
     key = serialization.load_der_private_key((args.keys / 'head.der').read_bytes(), None)
     revision = 0
 
     def offer(output, incompatible=False):
         nonlocal revision
+        # The builder publishes a complete generation directory by atomic rename.
+        wait(lambda: output.is_dir(), 'Immutable artifact directory not published: ' + str(output))
         revision += 1
         envelope = (output / 'release.json').read_bytes()
         release = json.loads(base64.b64decode(json.loads(envelope)['body']))

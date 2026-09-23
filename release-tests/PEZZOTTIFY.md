@@ -70,6 +70,50 @@ registration and separate `.paravoid` app identity requirements still apply.
 
 ## Evidence
 
+**Final corrected-runtime matrix passed on 2026-09-23**, API 30 / Restart30
+x86_64, including `--reopen-controls`. Production is the revision set below plus
+observer fix `72f5816` (local equivalent `67e6d5a`). All positive A1/B2/broken4/
+repair5 artifacts were freshly built with the production Gradle plugin against
+a newly accepted A shell baseline. Their shell contracts match byte-for-byte;
+none was retargeted or re-signed outside the producer. Only negative fixtures
+(wrong-contract3 and conflicting3) use test re-signing.
+
+Passed: fixed-shell A-to-B download and confirmed activation; real Application
+generation markers; rotation and rejected/cancelled callback routing; signed
+incompatible refusal; observed version-3 `IDENTITY_CONFLICT`; broken4 quarantine;
+forward repair5; UI-created app preference and two Room identity/integrity checks;
+server-offline cold relaunch; unchanged installed-shell SHA-256. Reopening the
+updates Activity now continues to show live results, including the previously
+stale identity-conflict result. No authenticated workflows or physical ARM64
+acceptance are claimed. This AVD advertises ARM64 translation capabilities too;
+it is still an x86_64 emulator, not physical ARM64 evidence.
+
+Artifacts: `/tmp/paravoid-realapp-final-cases`. Build log:
+`/tmp/paravoid-realapp-final-build.log` plus per-generation logs there. Device log:
+`/tmp/paravoid-realapp-final.log`. Exact device invocation:
+
+```sh
+python3 release-tests/pezzottify-device.py --serial emulator-5586 --avd Restart30 \
+  --a /tmp/paravoid-realapp-final-cases/A --b /tmp/paravoid-realapp-final-cases/B \
+  --broken /tmp/paravoid-realapp-final-cases/broken \
+  --repair /tmp/paravoid-realapp-final-cases/repair \
+  --conflicting /tmp/paravoid-realapp-final-cases/conflicting3 \
+  --reopen-controls --keys /tmp/paravoid-release-realapp-keys
+```
+
+The optional conflicting3 fixture is reissued from fresh B2 with
+`pezzottify-reissue.py --version 3`, preserving every component byte. The emulator
+was stopped after the successful run. No phone or existing downstream worktree
+was modified; no artifact was published.
+
+The observer fix correctly failed a build against the *old* shell baseline,
+because the contract pins runtime class hashes (`New shell required`, log
+`/tmp/paravoid-realapp-observer-build.log`). Runtime implementation changes require
+a new shell/baseline even when its public API is unchanged. The final run used
+that new shell from a fresh installation; it is not a cross-shell migration test.
+
+### Earlier diagnostic evidence
+
 Initial production `3b163a1` build passed normal and complete shell packaging in
 `/tmp/paravoid-realapp-build.log`. The normal app's logged-out Compose login UI
 was observed on API 30. Final update artifacts and matrix results must be recorded
@@ -91,7 +135,7 @@ fix or evidence for the separate duplicate-controls regression. The original
 diagnostic log is `/tmp/paravoid-realapp-full-v2.log` (interrupted while waiting
 for the stale UI to update).
 
-For the current local run, original Gradle-built broken/repair archives used
+For the earlier pre-observer-fix run, original Gradle-built broken/repair archives used
 versions 3/4. `pezzottify-reissue.py` republishes only their signed release metadata
 as 4/5, comparing SHA-256 of every other ZIP entry against the original. This
 avoids rebuilding identical code and still exercises real signature/archive
