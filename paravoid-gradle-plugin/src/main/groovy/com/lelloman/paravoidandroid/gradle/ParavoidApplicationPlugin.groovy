@@ -264,7 +264,12 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 candidateFile.set(complete ? completePolicy.flatMap { it.policyFile } : contract.flatMap { it.contractFile })
                 reportFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/shell-contract-check.txt"))
             }
-            project.tasks.register("package${cap}ParavoidResourceShell", PackageResourceShellTask) {
+            if (complete) project.tasks.register("package${cap}ParavoidResourceShell") {
+                group = 'paravoid'
+                description = 'Rejects the legacy resource-shell task in complete packaging.'
+                doLast { throw new GradleException('Complete packaging uses package' + cap + 'ParavoidCompleteShell; the legacy resource-shell task is unavailable.') }
+            }
+            else project.tasks.register("package${cap}ParavoidResourceShell", PackageResourceShellTask) {
                 dependsOn(contractCheck)
                 group = 'paravoid'
                 description = 'Signs an embedded-resource shell APK (not a complete VPK); leaves ordinary APK outputs unchanged.'

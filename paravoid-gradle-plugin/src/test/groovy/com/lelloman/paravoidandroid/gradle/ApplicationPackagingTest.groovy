@@ -16,6 +16,17 @@ import static org.junit.Assert.*
 class ApplicationPackagingTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder()
 
+    @Test void completeProfileRejectsLegacyResourceShellWithoutRunningPackagingDependencies() {
+        File root = fixture()
+        File build = new File(root, 'app/build.gradle')
+        build.text = build.text.replace('minSdk 28', 'minSdk 30')
+        build << "\nparavoid.packaging = 'complete'\n"
+        def result = run(root, ':app:packageParavoidAndroidDebugParavoidResourceShell').buildAndFail()
+        assertTrue(result.output.contains('legacy resource-shell task is unavailable'))
+        assertNull(result.task(':app:compileParavoidAndroidDebugJavaWithJavac'))
+        assertNull(result.task(':app:packageParavoidAndroidDebugParavoidCompleteShell'))
+    }
+
     @Test void automaticallyAssemblesSignedCompleteEmbeddedAndEmptyShells() {
         File root = fixture()
         File build = new File(root, 'app/build.gradle')

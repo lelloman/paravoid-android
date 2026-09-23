@@ -37,6 +37,26 @@ abstract class ApplicationManifestTask extends DefaultTask {
         }
         String pkg = document.documentElement.getAttribute('package')
         if (complete.get()) {
+            def reservedNames = [
+                'com.lelloman.paravoidandroid.runtime.LauncherActivity',
+                'com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity'
+            ] as Set
+            ['activity', 'service', 'receiver', 'provider'].each { kind ->
+                def nodes = app.getElementsByTagName(kind)
+                (0..<nodes.length).each { index ->
+                    def node = (Element) nodes.item(index)
+                    String name = ApplicationManifestTask.qualify(pkg, node.getAttributeNS(ANDROID, 'name'))
+                    if (name in reservedNames)
+                        throw new GradleException("Complete packaging reserves shell ${kind} ${name}; remove the declaration from the payload manifest.")
+                    ['directBootAware', 'isolatedProcess'].each { attribute ->
+                        String value = node.getAttributeNS(ANDROID, attribute)
+                        if (value && value != 'false')
+                            throw new GradleException("Complete packaging cannot run ${kind} ${name} with android:${attribute}=${value}; remove that component or use normal packaging.")
+                    }
+                }
+            }
+            if (app.getAttributeNS(ANDROID, 'directBootAware') && app.getAttributeNS(ANDROID, 'directBootAware') != 'false')
+                throw new GradleException('Complete packaging cannot run a directBootAware Application before unlock; use normal packaging.')
             def existingMetadata = app.getElementsByTagName('meta-data')
             if ((0..<existingMetadata.length).any { existingMetadata.item(it).getAttributeNS(ANDROID, 'name').startsWith('paravoid.') })
                 throw new GradleException('paravoid.* application metadata is reserved in complete packaging.')

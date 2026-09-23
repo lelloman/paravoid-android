@@ -110,6 +110,21 @@ public class CompleteVpkVerifierTest {
             new VpkWriter.ReleaseSpec("a", 1, 30, 0, Collections.emptyList()), f.policy, f.scope, "release", f.release.getPrivate()));
         assertArrayEquals(new byte[]{42}, Files.readAllBytes(output.toPath()));
     }
+    @Test public void failedProducerAfterTemporaryArchiveNeverPublishesOrChangesExistingOutput() throws Exception {
+        Map<String,byte[]> invalid = components("A");
+        invalid.put("java-resources.jar", zip(Collections.singletonMap("Injected.class", new byte[]{1}), false));
+        File existing = write(new byte[]{42, 43});
+        File absent = new File(temp.getRoot(), "absent.vpk");
+        VpkWriter writer = new VpkWriter();
+        VpkWriter.ReleaseSpec spec = new VpkWriter.ReleaseSpec("a", 1, 30, 0, Collections.emptyList());
+        for (File output : Arrays.asList(existing, absent)) {
+            assertThrows(ContractException.class, () -> writer.write(output, files(invalid), spec,
+                f.policy, f.scope, "release", f.release.getPrivate()));
+        }
+        assertArrayEquals(new byte[]{42, 43}, Files.readAllBytes(existing.toPath()));
+        assertFalse(absent.exists());
+        assertEquals(0, Objects.requireNonNull(temp.getRoot().listFiles((dir, name) -> name.startsWith(".paravoid-vpk-"))).length);
+    }
     @Test public void acceptsOnlyZeroLocalZipalignPaddingInNestedContainers() throws Exception {
         byte[] original = zip(Collections.singletonMap("probe.txt", new byte[]{42}), true);
         int nameLength = ByteBuffer.wrap(original).order(ByteOrder.LITTLE_ENDIAN).getShort(26) & 65535;

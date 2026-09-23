@@ -32,6 +32,33 @@ class ApplicationManifestTest {
         }
     }
 
+    @Test void completeProfileRejectsUnsupportedComponentModesBeforeSigning() {
+        ['activity', 'service', 'receiver', 'provider'].each { kind ->
+            ['directBootAware', 'isolatedProcess'].each { attribute ->
+                def task = fixture("<${kind} android:name=\".Unsupported\" android:${attribute}=\"true\" />")
+                task.complete.set(true)
+                String message = assertThrows(GradleException, { task.rewrite() }).message
+                assertTrue(message, message.contains(kind + ' example.Unsupported'))
+                assertTrue(message, message.contains('android:' + attribute + '=true'))
+                assertFalse(task.outputManifest.get().asFile.exists())
+            }
+        }
+        def app = fixture('', 'android:directBootAware="true"')
+        app.complete.set(true)
+        assertTrue(assertThrows(GradleException, { app.rewrite() }).message.contains('before unlock'))
+    }
+
+    @Test void completeProfileRejectsReservedShellComponents() {
+        ['com.lelloman.paravoidandroid.runtime.LauncherActivity',
+         'com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity'].each { name ->
+            ['activity', 'service', 'receiver', 'provider'].each { kind ->
+                def task = fixture("<${kind} android:name=\"${name}\" />")
+                task.complete.set(true)
+                assertTrue(assertThrows(GradleException, { task.rewrite() }).message.contains("reserves shell ${kind} ${name}"))
+            }
+        }
+    }
+
     @Test void preservesReceiverAndServiceDeclarationsAndAttributes() {
         def task = fixture('''
             <receiver android:name="example.Receiver" android:exported="false" android:permission="example.PRIVATE" />

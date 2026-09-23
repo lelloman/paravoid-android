@@ -63,4 +63,21 @@ class ShellContractTest {
         b.text = b.text.replace('example.App', 'example.Other')
         assertNotEquals(GenerateShellContractTask.declarations(a), GenerateShellContractTask.declarations(b))
     }
+
+    @Test void completeBaselineDetectsEachInstalledComponentKind() {
+        File manifest = tmp.newFile('components.xml')
+        manifest.text = '''<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="example.app">
+            <application><activity android:name="example.Main" /></application></manifest>'''
+        Map accepted = descriptor()
+        accepted.declarations = GenerateShellContractTask.declarations(manifest)
+        [activity: 'example.OtherActivity', service: 'example.Worker',
+         receiver: 'example.Boot', provider: 'example.Data'].each { kind, name ->
+            manifest.text = """<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="example.app">
+                <application><activity android:name="example.Main" /><${kind} android:name="${name}" /></application></manifest>"""
+            Map candidate = descriptor()
+            candidate.declarations = GenerateShellContractTask.declarations(manifest)
+            assertTrue(kind, ShellContract.differences(accepted, candidate).any { it.contains('/' + kind + '[') })
+            assertNotEquals(kind, ShellContract.document(accepted).contractId, ShellContract.document(candidate).contractId)
+        }
+    }
 }
