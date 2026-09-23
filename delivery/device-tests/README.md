@@ -1,5 +1,22 @@
 # Production delivery device tests
 
+## Metering transitions
+
+`public_bootstrap.py --network-transitions --serial SERIAL [--server-port PORT]`
+requires the ordinary public, empty-shell fixture and disposable AndroidWifi emulator.
+It enables unmetered-only automatic downloads, verifies metered head-only discovery,
+starts an automatic archive on unmetered Wi-Fi, then changes Android's actual metering
+override and requires HTTP disconnection before staging. An explicit check on the
+metered network must still stage and launch the payload. The original override is
+restored in `finally`; state readback is mandatory because these images apply the
+netpolicy command but return exit status 255. Default override is restored using
+the CLI's `undefined` spelling, which reads back as `none`.
+
+Passed on 2026-09-23 on Restart30/API 30 and Restart36/API 36.1, x86_64. Host tests
+also cover a transition during discovery and disabling shared automatic-download
+preferences during an active transfer. This is not proof of every roaming/VPN/data-
+saver configuration, nor an automatic wakeup when Wi-Fi becomes unmetered.
+
 Use **dedicated disposable emulators**, with explicit serials. Scripts install and
 clear only the complete fixture app, install the normal control, configure/remove
 `adb reverse tcp:18765`, and press real shell UI controls. Do not use another

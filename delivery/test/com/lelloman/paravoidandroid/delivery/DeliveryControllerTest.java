@@ -12,6 +12,7 @@ public final class DeliveryControllerTest {
         final Path preferences;
         DeliveryController controller;
         Runnable meteredHook;
+        volatile boolean metered = true;
         Control() throws Exception { this(false); }
         Control(boolean apkKey) throws Exception {
             setup = new DeliveryClientTest.Setup(apkKey);
@@ -21,7 +22,7 @@ public final class DeliveryControllerTest {
         }
         void create() {
             controller = new DeliveryController(setup.client, setup.life, setup.scope, setup.clock,
-                    preferences.toFile(), () -> { if (meteredHook != null) meteredHook.run(); return true; }, worker, Runnable::run);
+                    preferences.toFile(), () -> { if (meteredHook != null) meteredHook.run(); return metered; }, worker, Runnable::run);
             controller.listen(snapshots::add);
         }
         DeliveryController.Snapshot await(DeliveryController.Activity activity) throws Exception {
@@ -44,6 +45,39 @@ public final class DeliveryControllerTest {
     public static void main(String[] args) throws Exception {
         if (args.length == 2 && args[0].equals("cancel")) {
             new CancellationSignal(Paths.get(args[1])).cancel(); return;
+        }
+        try (Control c = new Control()) {
+            c.metered = false;
+            c.controller.preferences(new DeliveryPreferences(true, true, true)); c.barrier();
+            Fake head = c.setup.head(); head.onResponse = () -> c.metered = true;
+            c.controller.foreground(true); c.barrier();
+            check(c.setup.f.requests == 1 && c.setup.life.stages == 0); // Transition during head must not start archive HTTP.
+            c.metered = false;
+            c.setup.cached(); c.setup.f.responses.add(new Fake(200, ARCHIVE));
+            c.controller.foreground(true); c.await(DeliveryController.Activity.READY);
+            check(c.setup.life.stages == 1);
+        }
+        for (boolean disableDownloads : new boolean[] {false, true}) try (Control c = new Control()) {
+            c.metered = false;
+            c.controller.preferences(new DeliveryPreferences(true, true, true)); c.barrier();
+            c.setup.head(); Fake archive = new Fake(200, ARCHIVE);
+            CountDownLatch reading = new CountDownLatch(1);
+            archive.stream = new java.io.InputStream() {
+                public int read() throws java.io.IOException {
+                    reading.countDown(); long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                    while (!archive.disconnected && System.nanoTime() < deadline) {
+                        try { Thread.sleep(10); } catch (InterruptedException e) { throw new java.io.IOException(e); }
+                    }
+                    if (!archive.disconnected) throw new AssertionError("policy transition did not disconnect");
+                    throw new java.io.IOException("disconnected");
+                }
+            };
+            c.setup.f.responses.add(archive); c.controller.foreground(true);
+            check(reading.await(5, TimeUnit.SECONDS));
+            if (disableDownloads) DeliveryPreferences.update(c.preferences, p -> new DeliveryPreferences(true, false, true));
+            else c.metered = true;
+            c.await(DeliveryController.Activity.CANCELLED); c.barrier();
+            check(c.setup.life.stages == 0 && !c.setup.life.reserved && archive.disconnected);
         }
         try (Control c = new Control()) {
             c.setup.head();

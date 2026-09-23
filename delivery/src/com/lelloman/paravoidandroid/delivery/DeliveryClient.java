@@ -139,7 +139,14 @@ public final class DeliveryClient {
         return check(scope, download, explicitRetry, () -> {});
     }
     @FunctionalInterface interface Checkpoint { void check() throws IOException; }
+    @FunctionalInterface interface DownloadPermission { boolean allowed() throws IOException; }
+    private volatile boolean downloading;
+    boolean isDownloading() { return downloading; }
     Result check(RequestScope scope, boolean download, boolean explicitRetry, Checkpoint checkpoint) throws ContractException, IOException {
+        return check(scope, download, explicitRetry, checkpoint, () -> true);
+    }
+    Result check(RequestScope scope, boolean download, boolean explicitRetry, Checkpoint checkpoint,
+            DownloadPermission permission) throws ContractException, IOException {
         final Session captured;
         final HttpTransport.Cancellation cancel = new HttpTransport.Cancellation();
         final Cache cached;
@@ -189,7 +196,8 @@ public final class DeliveryClient {
             // Controller cancellation takes its operation lock before the client
             // monitor. Never invoke its checkpoint while holding this monitor.
             checkpoint.check();
-            if (!download || admission.status != HeadStatus.AVAILABLE) return new Result(admission.status, null);
+            if (!download || admission.status != HeadStatus.AVAILABLE || !permission.allowed())
+                return new Result(admission.status, null);
             ExpectedArchive expected = admission.release;
             validCredential(captured.credential);
             URI archiveUri = transport.archiveUri(scope.applicationId, expected.releaseId);
@@ -201,9 +209,11 @@ public final class DeliveryClient {
             }
             try (DownloadReservation reservation = lifecycle.reserveDownload(admission.admission)) {
                 storage.reserve(directory, expected.archiveSize); // Additional host-test fault seam only.
+                downloading = true;
                 current(captured, cancel); checkpoint.check();
                 transport.download(archiveUri, partial, expected.archiveSize, expected.archiveSha256, cancel);
                 current(captured, cancel); checkpoint.check();
+                downloading = false; // Successful checkpoint is the non-cancellable staging boundary.
                 handedOff = true;
                 StageResult staged = reservation.stage(partial.toFile());
                 return new Result(admission.status, staged);
@@ -217,6 +227,7 @@ public final class DeliveryClient {
             }
             throw failure;
         } finally {
+            downloading = false;
             synchronized (this) {
                 try {
                     if (partial != null && (handedOff || session != captured

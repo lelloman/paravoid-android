@@ -9,9 +9,12 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import select
+import socket
 import subprocess
 import sys
 import threading
+import tempfile
 import time
 import zipfile
 import xml.etree.ElementTree as ET
@@ -21,7 +24,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'delivery/reference'))
-from server import Catalog, Server
+from server import Catalog, Server, Handler
 APP = 'com.lelloman.paravoidcompat.complete.paravoid'
 LAUNCHER = APP + '/com.lelloman.paravoidandroid.runtime.LauncherActivity'
 
@@ -29,6 +32,9 @@ LAUNCHER = APP + '/com.lelloman.paravoidandroid.runtime.LauncherActivity'
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial', required=True)
+    parser.add_argument('--server-port', type=int, default=18765)
+    parser.add_argument('--network-transitions', action='store_true',
+                        help='Exercise actual Android Wi-Fi metering changes and explicit override')
     parser.add_argument('--restart-controls', action='store_true',
                         help='Activate through confirmed shell controls, never adb force-stop')
     parser.add_argument('--storage-pressure', action='store_true',
@@ -36,8 +42,26 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r'emulator-\d+', args.serial):
         parser.error('a dedicated disposable emulator serial is required')
+    if args.network_transitions and args.storage_pressure:
+        parser.error('network and storage pressure are separate runs')
+    if not 1 <= args.server_port <= 65535:
+        parser.error('invalid host port')
     def adb(*parts, timeout=45):
         return subprocess.check_output(['adb', '-s', args.serial, *parts], text=True, stderr=subprocess.STDOUT, timeout=timeout)
+    def set_metered(state):
+        # These images apply the override but return 255; require state readback,
+        # not just shell exit status. The CLI spells its default value 'undefined'.
+        result = subprocess.run(['adb', '-s', args.serial, 'shell', 'cmd', 'netpolicy', 'set',
+                                 'metered-network', 'AndroidWifi', 'undefined' if state == 'none' else state],
+                                text=True, capture_output=True, timeout=45)
+        assert result.returncode in (0, 255), result.stdout + result.stderr
+        for _ in range(20):
+            rows = adb('shell', 'cmd', 'netpolicy', 'list', 'wifi-networks').splitlines()
+            if {row.rsplit(';', 1)[1] for row in rows if row.startswith('AndroidWifi;')} == {state}:
+                time.sleep(.5)
+                return
+            time.sleep(.1)
+        raise AssertionError('Metering override did not apply: ' + state)
     filler = 'files/paravoid-storage-test-filler'
     def free_bytes():
         return int(adb('shell', 'run-as', APP, 'df', '-k', '.').splitlines()[-1].split()[3]) * 1024
@@ -86,12 +110,51 @@ def main():
                  runtime='1', format='1', protocol='1')
     catalog.add_head(APP, query, signed)
     catalog.add_archive(APP, release['releaseId'], archive)
-    server = Server(('127.0.0.1', 18765), catalog)
+    heads, archives = [], []
+    held, disconnected, release_transfer = threading.Event(), threading.Event(), threading.Event()
+    class ObservedHandler(Handler):
+        def do_GET(self):
+            if '/head?' in self.path:
+                heads.append(True)
+            else:
+                archives.append(True)
+                if args.network_transitions and not release_transfer.is_set():
+                    held.set()
+                    deadline = time.monotonic() + 120
+                    while not release_transfer.is_set() and time.monotonic() < deadline:
+                        ready, _, _ = select.select([self.connection], [], [], .1)
+                        if ready:
+                            try:
+                                eof = self.connection.recv(1, socket.MSG_PEEK) == b''
+                            except ConnectionResetError:
+                                eof = True
+                            if eof:
+                                disconnected.set(); return
+            super().do_GET()
+    server = Server(('127.0.0.1', args.server_port), catalog)
+    server.RequestHandlerClass = ObservedHandler
+    original_metering = None
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         print(adb('install', '-r', str(output / 'shell.apk')).strip())
         print(adb('shell', 'pm', 'clear', APP).strip())
-        adb('reverse', 'tcp:18765', 'tcp:18765')
+        adb('reverse', 'tcp:18765', 'tcp:' + str(args.server_port))
+        if args.network_transitions:
+            wifi = [line.rsplit(';', 1) for line in adb('shell', 'cmd', 'netpolicy', 'list', 'wifi-networks').splitlines() if line]
+            assert wifi and all(name == 'AndroidWifi' for name, _ in wifi), 'Requires disposable emulator AndroidWifi'
+            assert len({state for _, state in wifi}) == 1
+            original_metering = wifi[0][1]
+            set_metered('true')
+            with tempfile.TemporaryDirectory(prefix='paravoid-network-prefs-') as tmp:
+                local = Path(tmp) / 'preferences'
+                local.write_text('checks=true\ndownloads=true\nunmetered=true\nlastAutomaticCheck=0\n')
+                remote = '/data/local/tmp/' + Path(tmp).name
+                adb('push', str(local), remote)
+                try:
+                    adb('shell', 'run-as', APP, 'mkdir', '-p', 'no_backup')
+                    adb('shell', 'run-as', APP, 'cp', remote, 'no_backup/paravoid-update-preferences')
+                finally:
+                    adb('shell', 'rm', '-f', remote)
         if args.storage_pressure:
             adb('shell', 'run-as', APP, 'mkdir', '-p', 'files')
             filler_mib = free_bytes() // (1024 * 1024) - 48
@@ -101,6 +164,36 @@ def main():
                 'bs=1048576', 'count=' + str(filler_mib), timeout=240)
             assert 0 < free_bytes() < 64 * 1024 * 1024
         print(adb('shell', 'am', 'start', '-W', '-n', LAUNCHER).strip())
+        if args.network_transitions:
+            for _ in range(30):
+                if heads and 'Pending: none' in ui():
+                    break
+                time.sleep(.25)
+            else:
+                raise AssertionError('Metered automatic discovery did not run')
+            time.sleep(2)
+            assert not archives, 'Automatic download started on metered Wi-Fi'
+            set_metered('false')
+            adb('shell', 'am', 'force-stop', APP)
+            adb('shell', 'am', 'start', '-W', '-n', LAUNCHER)
+            assert held.wait(15), 'Unmetered automatic attempt did not start archive transfer'
+            assert not disconnected.is_set()
+            set_metered('true')
+            assert disconnected.wait(10), 'Metering transition did not cancel automatic archive HTTP'
+            assert 'Pending: none' in ui()
+            release_transfer.set()
+            tap('Check now')
+            for _ in range(30):
+                if 'Pending: ' + release['releaseId'] in ui():
+                    break
+                time.sleep(.25)
+            else:
+                raise AssertionError('Explicit check did not override unmetered-only restriction')
+            adb('shell', 'am', 'force-stop', APP)
+            adb('shell', 'am', 'start', '-W', '-n', LAUNCHER)
+            assert 'generation=A;asset=payload-asset;java=payload-java-resource' in ui()
+            print('PASS: metered head-only -> unmetered automatic archive -> metered cancellation -> explicit override and payload launch', args.serial)
+            return
         if args.storage_pressure:
             for _ in range(30):
                 last = ui()
@@ -188,6 +281,9 @@ def main():
             print('PASS: cancelled confirmation preserves main; confirmed restart replaces main, preserves recovery, activates offline without adb force-stop')
         print('Device:', args.serial, 'API', sdk, 'ABIs', ','.join(abis))
     finally:
+        release_transfer.set()
+        if original_metering is not None:
+            set_metered(original_metering)
         if args.storage_pressure:
             adb('shell', 'run-as', APP, 'rm', '-f', filler)
         server.shutdown()

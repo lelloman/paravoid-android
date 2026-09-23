@@ -190,9 +190,11 @@ public final class DeliveryController {
             }
             final long watchedOperation = operation;
             final String watchedEpoch = cancellationEpoch;
+            final boolean watchedExplicit = resume == null ? explicit : resume.explicit;
             cancellationWatch = SIGNALS.scheduleWithFixedDelay(() -> {
                 try {
-                    if (!watchedEpoch.equals(cancellation.read())) {
+                    if (!watchedEpoch.equals(cancellation.read())
+                            || client.isDownloading() && !transferAllowed(watchedExplicit)) {
                         synchronized (attempts) {
                             if (attempts.current(watchedOperation)) cancelLocal();
                         }
@@ -245,9 +247,10 @@ public final class DeliveryController {
             DeliveryClient.Result result = client.check(scope, attempts.downloadAllowed(explicit, metered.getAsBoolean()), explicit, () -> {
                 // The watcher disconnects blocked IO, but cannot be the only gate:
                 // cancel can precede client registration or race the final handoff.
-                if (!attempts.current(token) || !cancellationEpoch.equals(cancellation.read()))
+                if (!attempts.current(token) || !cancellationEpoch.equals(cancellation.read())
+                        || client.isDownloading() && !transferAllowed(explicit))
                     throw new HttpTransport.Failure("cancelled");
-            });
+            }, () -> transferAllowed(explicit));
             activity = result.stage == null ? Activity.IDLE : Activity.READY;
             if (result.status == HeadStatus.SHELL_UPDATE_REQUIRED) error = "SHELL_UPDATE_REQUIRED";
             else if (result.status == HeadStatus.NO_COMPATIBLE_RELEASE) error = "NO_COMPATIBLE_RELEASE";
@@ -279,6 +282,12 @@ public final class DeliveryController {
         attempts.finish(token); clearRetry(); releaseAttempt(); publish();
     }
     private void fail(String code) { activity = Activity.ERROR; error = code; }
+    private boolean transferAllowed(boolean explicit) throws IOException {
+        if (explicit) return true;
+        DeliveryPreferences current = DeliveryPreferences.read(preferenceFile);
+        return current.automaticChecks && current.automaticDownloads
+            && (!current.unmeteredOnly || !metered.getAsBoolean());
+    }
     private void publish() {
         Listener target = listener;
         if (target == null) return;

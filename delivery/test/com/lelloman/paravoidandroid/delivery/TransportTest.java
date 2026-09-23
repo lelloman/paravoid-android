@@ -18,6 +18,7 @@ public final class TransportTest {
         byte[] body;
         volatile boolean disconnected;
         Runnable onDisconnect;
+        Runnable onResponse;
         InputStream stream;
         Fake(int status, byte[] body) throws Exception {
             super(URL.toURL()); this.responseCode = status; this.body = body;
@@ -25,7 +26,7 @@ public final class TransportTest {
             put("Content-Type", "application/vnd.paravoid.vpk"); put("ETag", ETAG);
         }
         Fake put(String name, String value) { headers.put(name, Collections.singletonList(value)); return this; }
-        @Override public int getResponseCode() { return responseCode; }
+        @Override public int getResponseCode() { if (onResponse != null) onResponse.run(); return responseCode; }
         @Override public Map<String, List<String>> getHeaderFields() { return headers; }
         @Override public long getContentLengthLong() { return Long.parseLong(headers.get("Content-Length").get(0)); }
         @Override public InputStream getInputStream() { return stream == null ? new ByteArrayInputStream(body) : stream; }
