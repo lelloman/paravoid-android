@@ -32,6 +32,16 @@ The explicit VPK task matters: an empty-shell assembly intentionally does not
 need an embedded VPK; a stale VPK from a different authentication/bootstrap policy
 cannot be served under its new contract. Both scripts check policy/manifest match.
 
+For the user-facing activation path, pass `--restart-controls` to
+`public_bootstrap.py`. After real download/staging and shutting the server down,
+it cancels the restart confirmation and checks the original main PID is preserved,
+then confirms restart and checks a new main PID executes the downloaded payload
+while the recovery PID survives. It does not substitute adb force-stop for this
+activation. Preference checks await the asynchronous disk write with a bounded
+timeout. This mode passed on dedicated Restart30/API 30 and Restart36/API 36.1
+emulators on 2026-09-23. These results cover empty-bootstrap activation, not all
+worker, quarantine, timeout or shared-UID cases.
+
 `public_bootstrap.py` verifies normal launch, immediate production empty bootstrap,
 authenticated head and archive staging through the production verifier/lifecycle,
 current versus pending state, actual check/retry/cancel controls, persisted

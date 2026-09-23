@@ -29,6 +29,8 @@ LAUNCHER = APP + '/com.lelloman.paravoidandroid.runtime.LauncherActivity'
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial', required=True)
+    parser.add_argument('--restart-controls', action='store_true',
+                        help='Activate through confirmed shell controls, never adb force-stop')
     args = parser.parse_args()
     if not re.fullmatch(r'emulator-\d+', args.serial):
         parser.error('a dedicated disposable emulator serial is required')
@@ -103,8 +105,13 @@ def main():
         for label in ('Automatically check for updates', 'Automatically download updates',
                       'Automatic downloads only on unmetered networks'):
             tap(label)
-        preferences = adb('shell', 'run-as', APP, 'cat', 'no_backup/paravoid-update-preferences')
-        assert 'checks=false' in preferences and 'downloads=false' in preferences and 'unmetered=true' in preferences
+        for _ in range(40):
+            preferences = adb('shell', 'run-as', APP, 'cat', 'no_backup/paravoid-update-preferences')
+            if 'checks=false' in preferences and 'downloads=false' in preferences and 'unmetered=true' in preferences:
+                break
+            time.sleep(.25)
+        else:
+            raise AssertionError('Updated preferences were not persisted')
         tap('1')
         tap('2')
         assert 'text="2"' in ui()
@@ -119,8 +126,20 @@ def main():
         tap('Cancel download')
         assert 'Update: CANCELLED' in ui()
         print('PASS: cancel stops an offline attempt')
-        adb('shell', 'am', 'force-stop', APP)
-        adb('shell', 'am', 'start', '-W', '-n', LAUNCHER)
+        if args.restart_controls:
+            old_main = adb('shell', 'pidof', APP).strip()
+            recovery = adb('shell', 'pidof', APP + ':paravoid_recovery').strip()
+            assert old_main and recovery, 'Exercise an existing unavailable main process, not only recovery'
+            tap('Restart app…')
+            assert 'Unsaved changes may be lost' in ui()
+            tap('Cancel')
+            assert adb('shell', 'pidof', APP).strip() == old_main
+            assert 'Current: none' in ui(), 'Cancelling confirmation must not activate'
+            tap('Restart app…')
+            tap('Stop and restart')
+        else:
+            adb('shell', 'am', 'force-stop', APP)
+            adb('shell', 'am', 'start', '-W', '-n', LAUNCHER)
         for _ in range(15):
             try:
                 probe = adb('shell', 'run-as', APP, 'cat', 'shared_prefs/probe.xml')
@@ -132,6 +151,10 @@ def main():
         else:
             raise AssertionError('Offline cold start did not execute A')
         print('PASS: offline cold start executes downloaded production payload A')
+        if args.restart_controls:
+            assert adb('shell', 'pidof', APP).strip() != old_main
+            assert adb('shell', 'pidof', APP + ':paravoid_recovery').strip() == recovery
+            print('PASS: cancelled confirmation preserves main; confirmed restart replaces main, preserves recovery, activates offline without adb force-stop')
         print('Device:', args.serial, 'API', sdk, 'ABIs', ','.join(abis))
     finally:
         server.shutdown()
