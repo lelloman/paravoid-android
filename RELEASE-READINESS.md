@@ -15,7 +15,7 @@ Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 | Security/signing | Signing-block ID/v4 disposition, vector audit, independent protocol/security review | Open; independent reviewer needed |
 | Real app | Final-runtime Pezzottify fixed-shell A-to-B, data/workflows, incompatible rejection and forward repair | Open; downstream edits require coordinated scope |
 | Physical device | Signed release ARM64 core matrix | No device connected; device authorization needed |
-| Packaging/regression | Large limits, publication failures, optional integrations and final exact-revision matrix | Open |
+| Packaging/regression | Large valid payload execution, publication failures, optional integrations and final exact-revision matrix | Exact structural bounds pass; broader acceptance open |
 | Distribution | Version/license/repository, production metadata/tag/release notes, repeatable validation | Local staging/standalone consumer pass; user choices and remote setup pending |
 
 ## Scope and completion rules
@@ -37,3 +37,13 @@ Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 Artifact repository, license and release version; physical ARM64 test device;
 independent reviewer. Prepare local-only publication validation pending those
 choices. Do not claim these gates complete if no answer is available.
+
+## Focused evidence added during release work
+
+- Local publication/standalone consumer: `release-tests/README.md` (both default
+  and alternate coordinated version; no remote publication).
+- Archive boundaries: `ArchiveLimitsTest`, full contract suite passed on
+  2026-09-23 (`/tmp/paravoid-archive-limits.log`). Covers a sparse 1 GiB/+1 size
+  guard probe, 4,096/4,097 entries, 255/256-byte names and 1 MiB/+1 envelope reads.
+  Sparse size rejection is not verification/loading of a valid 1 GiB payload;
+  structural envelope reads are not acceptance of unsigned metadata.
