@@ -102,6 +102,23 @@ public final class DeliveryClientTest {
         catch (ContractException failure) { check(failure.code == code); }
     }
     public static void main(String[] args) throws Exception {
+        try (Setup s = new Setup(false)) {
+            s.head();
+            Fake archive = new Fake(200, ARCHIVE);
+            CancellationSignal signal = new CancellationSignal(s.f.dir.resolve("preferences"));
+            String before = signal.read();
+            archive.onDisconnect = () -> {
+                try { signal.cancel(); } catch (IOException failure) { throw new AssertionError(failure); }
+            };
+            s.f.responses.add(archive);
+            // No polling watcher: change the epoch after transport verified the complete
+            // archive but before the synchronous stage handoff checkpoint.
+            fails("cancelled", () -> s.client.check(s.scope, true, false, () -> {
+                if (!before.equals(signal.read())) throw new HttpTransport.Failure("cancelled");
+            }));
+            check(s.f.requests == 2 && s.life.stages == 0);
+            check(s.life.releasedReservations == 1 && !s.life.reserved);
+        }
         try (Setup s = new Setup(true)) {
             s.metadata.grantExpiresAt = 0;
             s.client.installedCredential(new byte[] {1});

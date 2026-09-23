@@ -11,6 +11,7 @@ public final class DeliveryControllerTest {
         final BlockingQueue<DeliveryController.Snapshot> snapshots = new LinkedBlockingQueue<>();
         final Path preferences;
         DeliveryController controller;
+        Runnable meteredHook;
         Control() throws Exception { this(false); }
         Control(boolean apkKey) throws Exception {
             setup = new DeliveryClientTest.Setup(apkKey);
@@ -20,7 +21,7 @@ public final class DeliveryControllerTest {
         }
         void create() {
             controller = new DeliveryController(setup.client, setup.life, setup.scope, setup.clock,
-                    preferences.toFile(), () -> true, worker, Runnable::run);
+                    preferences.toFile(), () -> { if (meteredHook != null) meteredHook.run(); return true; }, worker, Runnable::run);
             controller.listen(snapshots::add);
         }
         DeliveryController.Snapshot await(DeliveryController.Activity activity) throws Exception {
@@ -43,6 +44,30 @@ public final class DeliveryControllerTest {
     public static void main(String[] args) throws Exception {
         if (args.length == 2 && args[0].equals("cancel")) {
             new CancellationSignal(Paths.get(args[1])).cancel(); return;
+        }
+        try (Control c = new Control()) {
+            c.setup.head();
+            c.meteredHook = c.controller::cancelDownload; // Before client registers its HTTP cancellation object.
+            c.controller.checkNow(); c.await(DeliveryController.Activity.CANCELLED); c.barrier();
+            check(c.setup.f.requests == 0 && c.setup.life.stages == 0);
+        }
+        try (Control c = new Control()) {
+            c.setup.head(); c.setup.f.responses.add(new Fake(200, ARCHIVE));
+            c.setup.life.duringStage = c.controller::cancelDownload;
+            c.controller.checkNow(); c.await(DeliveryController.Activity.CANCELLED); c.barrier();
+            check(c.setup.life.stages == 1 && !c.setup.life.reserved); // Handoff already occurred; staging finishes.
+        }
+        try (Control c = new Control(true)) {
+            c.setup.f.responses.add(new Fake(429, new byte[0]).put("Retry-After", "3600"));
+            c.controller.checkNow(); c.await(DeliveryController.Activity.WAITING_TO_RETRY);
+            Path replacement = c.setup.f.dir.resolve("replacement.apk");
+            Files.write(replacement, ApkGrantReaderTest.apk(new byte[] {2}, false, true));
+            c.controller.refreshInstalledApk(replacement.toFile()); c.await(DeliveryController.Activity.IDLE);
+            Fake head = c.setup.head(); c.setup.f.responses.add(new Fake(200, ARCHIVE));
+            c.controller.foreground(true); c.await(DeliveryController.Activity.READY); c.barrier();
+            check(head.getRequestProperty("Authorization").equals("Bearer " + "B".repeat(43)));
+            check(!Files.exists(c.preferences.resolveSibling("preferences.retry")));
+            check(c.worker.getQueue().isEmpty() && c.setup.life.stages == 1);
         }
         try (Control c = new Control()) {
             c.setup.head();

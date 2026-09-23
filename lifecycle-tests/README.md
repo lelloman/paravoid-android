@@ -39,6 +39,12 @@ only the registry's sole descriptor after unlocking. Lock files remain permanent
 
 ## Validation
 
+- `InstalledAuthorityTest` replaces the injected installed-APK authority after the
+  lifecycle's private archive copy has been verified, before publication. Staging
+  must reject the stale credential, preserve active leased bytes and replay floors,
+  then accept the same candidate under a freshly admitted replacement grant. This
+  is a host facade test with test-only archive evidence, not real PackageManager
+  replacement during Android staging.
 - `SpaceAdmissionTest` covers the shared update-space claim: cross-JVM exclusion
   and death release, same-JVM descriptor safety, exact budget boundaries, cancellation,
   credential invalidation, protected active/pending bytes and replay floors. Embedded

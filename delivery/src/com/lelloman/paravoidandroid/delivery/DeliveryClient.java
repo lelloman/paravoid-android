@@ -136,6 +136,10 @@ public final class DeliveryClient {
 
     /** Must run off the UI thread. explicitRetry lifts HTTP auth suppression, never grant checks. */
     public Result check(RequestScope scope, boolean download, boolean explicitRetry) throws ContractException, IOException {
+        return check(scope, download, explicitRetry, () -> {});
+    }
+    @FunctionalInterface interface Checkpoint { void check() throws IOException; }
+    Result check(RequestScope scope, boolean download, boolean explicitRetry, Checkpoint checkpoint) throws ContractException, IOException {
         final Session captured;
         final HttpTransport.Cancellation cancel = new HttpTransport.Cancellation();
         final Cache cached;
@@ -158,7 +162,7 @@ public final class DeliveryClient {
         try {
             lock = DeliveryLocks.tryAcquire(directory.resolve("transfer.lock"));
             if (lock == null) throw new ContractException(ContractException.Code.UNAVAILABLE, "Another process is checking updates");
-            current(captured, cancel);
+            current(captured, cancel); checkpoint.check();
             // Only the current transfer owner may lift suppression. A stale/busy
             // controller cannot clear another process's authentication failure.
             if (explicitRetry) {
@@ -175,10 +179,10 @@ public final class DeliveryClient {
                 if (cached == null || !cached.fresh(clock)) throw new ContractException(ContractException.Code.EXPIRED, "Cached discovery expired");
                 head = cached.head;
             } else head = verifier.verifyHead(response.body, policy, scope);
-            current(captured, cancel);
+            current(captured, cancel); checkpoint.check();
             AdmissionResult admission = lifecycle.observeHead(head, captured.credential);
             synchronized (this) {
-                current(captured, cancel);
+                current(captured, cancel); checkpoint.check();
                 // Preserve original elapsed deadline on 304; never extend cache freshness.
                 cache = response.notModified ? cached : new Cache(captured, scope, head, clock.unixSeconds(), clock.elapsedMillis());
             }
@@ -194,9 +198,9 @@ public final class DeliveryClient {
             }
             try (DownloadReservation reservation = lifecycle.reserveDownload(admission.admission)) {
                 storage.reserve(directory, expected.archiveSize); // Additional host-test fault seam only.
-                current(captured, cancel);
+                current(captured, cancel); checkpoint.check();
                 transport.download(archiveUri, partial, expected.archiveSize, expected.archiveSha256, cancel);
-                current(captured, cancel);
+                current(captured, cancel); checkpoint.check();
                 handedOff = true;
                 StageResult staged = reservation.stage(partial.toFile());
                 return new Result(admission.status, staged);

@@ -40,6 +40,51 @@ public final class InstalledAuthorityTest {
         fails(Code.CREDENTIAL_UNAVAILABLE, () -> store.resolve(next.admission));
         authority.snapshot = new InstalledStateSource.Snapshot("new-shell", policy(Authentication.APK_KEY, "new-contract"), b);
         fails(Code.INCOMPATIBLE, () -> store.setCredentialScope(b));
+        // Full staging facade: APK authority changes after the owned archive copy
+        // is verified, not merely between two preliminary admission lookups.
+        LifecycleTest.Fixture one = new LifecycleTest.Fixture(parent, 1);
+        LifecycleTest.Fixture two = new LifecycleTest.Fixture(parent, 2);
+        Authority live = new Authority(); live.snapshot = new InstalledStateSource.Snapshot("apk-a", policy, a);
+        boolean[] replace = {false};
+        VpkVerifier verifier = new VpkVerifier() {
+            private LifecycleTest.Fixture fixture(ExpectedArchive expected) { return expected.payloadVersion == 1 ? one : two; }
+            public VerifiedRelease verifyDownloaded(java.io.File file, ShellPolicy p, RequestScope d, ExpectedArchive expected)
+                    throws ContractException {
+                VerifiedRelease result = fixture(expected).verifyDownloaded(file, p, d, expected);
+                if (replace[0]) {
+                    check(file.toPath().toString().contains("staging") && !file.equals(two.source));
+                    live.snapshot = new InstalledStateSource.Snapshot("apk-b", policy, b);
+                }
+                return result;
+            }
+            public VerifiedRelease verifyEmbedded(java.io.File file, ShellPolicy p, RequestScope d) throws ContractException {
+                return one.verifyEmbedded(file, p, d);
+            }
+            public VerifiedRelease verifyRetained(java.io.File file, ShellPolicy p, RequestScope d, ExpectedArchive expected)
+                    throws ContractException { return fixture(expected).verifyRetained(file, p, d, expected); }
+        };
+        RuntimeLifecycle lifecycle = new RuntimeLifecycle(parent.resolve("facade").toFile(), policy, scope("contract", 30),
+            verifier, LifecycleTest.CLOCK, true, live);
+        lifecycle.initializeNew(); lifecycle.setCredentialScope(a);
+        lifecycle.stageDownloaded(one.source, lifecycle.observeHead(head(1, one.release.identity, "one"), a).admission);
+        GenerationLease lease = lifecycle.acquireForProcess(); lease.applicationCreated(); lease.firstFrameRendered();
+        AdmissionId incoming = lifecycle.observeHead(head(2, two.release.identity, "two"), a).admission;
+        replace[0] = true;
+        try (DownloadReservation reserved = lifecycle.reserveDownload(incoming)) {
+            fails(Code.CREDENTIAL_CHANGED, () -> reserved.stage(two.source));
+        }
+        check(lifecycle.snapshot().pending == null && lifecycle.snapshot().active.equals(one.release.identity));
+        lease.beforeUserCode(); check(lease.files().resourcesApk.isFile());
+        lifecycle.setCredentialScope(b);
+        fails(Code.REPLAY, () -> lifecycle.observeHead(head(1, one.release.identity, "one"), b));
+        replace[0] = false;
+        try (DownloadReservation reserved = lifecycle.reserveDownload(
+                lifecycle.observeHead(head(2, two.release.identity, "two"), b).admission)) {
+            check(reserved.stage(two.source).status == StageStatus.PENDING);
+        }
+        check(lifecycle.snapshot().active.equals(one.release.identity));
+        check(lifecycle.snapshot().pending.equals(two.release.identity));
         System.out.println("PASS current installed authority: stale grant/null assertions, publication race and shell replacement rejection");
+        System.out.println("PASS authority replacement during owned staging rejects publication, preserves active lease/replay floors, permits fresh-grant retry");
     }
 }

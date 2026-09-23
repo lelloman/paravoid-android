@@ -17,6 +17,7 @@ public final class TransportTest {
         final Map<String, List<String>> headers = new LinkedHashMap<>();
         byte[] body;
         volatile boolean disconnected;
+        Runnable onDisconnect;
         InputStream stream;
         Fake(int status, byte[] body) throws Exception {
             super(URL.toURL()); this.responseCode = status; this.body = body;
@@ -28,7 +29,7 @@ public final class TransportTest {
         @Override public Map<String, List<String>> getHeaderFields() { return headers; }
         @Override public long getContentLengthLong() { return Long.parseLong(headers.get("Content-Length").get(0)); }
         @Override public InputStream getInputStream() { return stream == null ? new ByteArrayInputStream(body) : stream; }
-        @Override public void disconnect() { disconnected = true; }
+        @Override public void disconnect() { disconnected = true; if (onDisconnect != null) onDisconnect.run(); }
         @Override public boolean usingProxy() { return false; }
         @Override public void connect() {}
     }

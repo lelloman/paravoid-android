@@ -43,6 +43,13 @@ Host subprocess tests cover busy client/controller attempts, repeated contention
 normal release and process death. Preferences use a separate class-synchronized
 read/modify/write lock, with no concurrently open descriptors in that path.
 
+Controller cancellation has synchronous token/epoch checkpoints as well as a
+watcher that disconnects blocked IO. This prevents cancellation before request
+registration from being lost, and checks the shared epoch at the final staging
+handoff without waiting for the watcher. After that checkpoint staging remains
+non-cancellable. Host tests cover both boundaries and credential replacement while
+a delayed retry is scheduled; they do not replace installed-device fault tests.
+
 Historical track handoff (consult the local remaining-gaps handoff for current gates):
 - C's snapshots, recovery routing, retention and explicit confirmed retry actions.
 - A's complete VPK verifier and real executable A/B archives. Real

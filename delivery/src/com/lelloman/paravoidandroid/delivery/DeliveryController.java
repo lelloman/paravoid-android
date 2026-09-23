@@ -242,7 +242,12 @@ public final class DeliveryController {
             if (!explicit && !preferences.automaticChecks) {
                 activity = Activity.CANCELLED; attempts.finish(token); clearRetry(); releaseAttempt(); publish(); return;
             }
-            DeliveryClient.Result result = client.check(scope, attempts.downloadAllowed(explicit, metered.getAsBoolean()), explicit);
+            DeliveryClient.Result result = client.check(scope, attempts.downloadAllowed(explicit, metered.getAsBoolean()), explicit, () -> {
+                // The watcher disconnects blocked IO, but cannot be the only gate:
+                // cancel can precede client registration or race the final handoff.
+                if (!attempts.current(token) || !cancellationEpoch.equals(cancellation.read()))
+                    throw new HttpTransport.Failure("cancelled");
+            });
             activity = result.stage == null ? Activity.IDLE : Activity.READY;
             if (result.status == HeadStatus.SHELL_UPDATE_REQUIRED) error = "SHELL_UPDATE_REQUIRED";
             else if (result.status == HeadStatus.NO_COMPATIBLE_RELEASE) error = "NO_COMPATIBLE_RELEASE";
