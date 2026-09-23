@@ -76,6 +76,13 @@ def run(args, app, adb, nodes, tap, old_main, old_worker):
         print('PASS: signed B stays pending while A main/worker survive; cancel preserves selection and both PIDs', flush=True)
         # Activation must not require another request, APK replacement or adb kill.
         server.shutdown(); server.server_close()
+        if args.sticky_worker:
+            from sticky_worker import run as restart_sticky
+            restart_sticky(args, app, adb, nodes, tap, old_main, old_worker,
+                           expected_generation='B', require_launch=True)
+            assert adb('shell', 'sha256sum', apk).split()[0] == installed_hash
+            print('PASS: signed pending B activates offline in Activity and naturally respawned sticky worker; shell unchanged', args.serial, flush=True)
+            return
         tap('Restart app…'); tap('Stop and restart')
         wait_text('generation=B;asset=payload-asset;java=payload-java-resource')
         assert adb('shell', 'pidof', app).strip() != old_main

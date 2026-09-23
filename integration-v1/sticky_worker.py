@@ -4,7 +4,7 @@ import time
 import xml.etree.ElementTree as ET
 
 
-def run(args, app, adb, nodes, tap, old_main, old_worker):
+def run(args, app, adb, nodes, tap, old_main, old_worker, expected_generation='A', require_launch=False):
     component = app + '/com.lelloman.paravoidcompat.complete.ProbeService$Worker'
     def record():
         xml = adb('shell', 'run-as', app, 'cat', 'shared_prefs/sticky-worker.xml')
@@ -32,21 +32,27 @@ def run(args, app, adb, nodes, tap, old_main, old_worker):
             time.sleep(.5)
         else:
             raise AssertionError('No natural sticky respawn within 60s: ' + str(observed))
-        assert observed['generation'] == 'A'
+        assert observed['generation'] == expected_generation, observed
         assert pid(app + ':paravoid_recovery') == recovery
-        text = '\n'.join(n.attrib.get('text', '') for n in nodes())
+        marker = 'generation=' + expected_generation + ';asset=payload-asset;java=payload-java-resource'
+        for _ in range(15):
+            text = '\n'.join(n.attrib.get('text', '') for n in nodes())
+            if marker in text or 'Could not safely restart.' in text:
+                break
+            time.sleep(.25)
         if 'Could not safely restart.' in text:
+            assert not require_launch, 'This activation test requires an actual fresh payload launch: ' + text
             assert any(n.attrib.get('text', '').lower() == 'restart app…' and n.attrib.get('enabled') == 'true' for n in nodes())
             outcome = 'restart refused safely with usable recovery'
         else:
-            assert 'generation=A;asset=payload-asset;java=payload-java-resource' in text, text
+            assert marker in text, text
             assert pid(app) and pid(app) != old_main
             outcome = 'fresh payload launched'
         # Ensure the guard does not continue killing the naturally respawned worker.
         time.sleep(6)
         assert pid(app + ':worker') == worker and record()['pid'] == worker
         assert pid(app + ':paravoid_recovery') == recovery
-        print('PASS: foreground sticky worker naturally respawned with null Intent; ' + outcome
+        print('PASS: foreground sticky worker naturally respawned as ' + expected_generation + ' with null Intent; ' + outcome
               + '; recovery survives; no repeated kills', args.serial, flush=True)
     finally:
         # These images can return 255 despite successfully stopping the service.

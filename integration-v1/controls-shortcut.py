@@ -20,8 +20,8 @@ parser.add_argument('--server-port', type=int, default=18765)
 args = parser.parse_args()
 if args.shared_uid and (not args.restart_worker or args.pending_update or args.sticky_worker):
     parser.error('--shared-uid requires --restart-worker and is separate from other variants')
-if args.sticky_worker and (not args.restart_worker or args.pending_update):
-    parser.error('--sticky-worker requires --restart-worker and is separate from --pending-update')
+if args.sticky_worker and not args.restart_worker:
+    parser.error('--sticky-worker requires --restart-worker')
 if args.pending_update and not args.restart_worker:
     parser.error('--pending-update requires --restart-worker')
 if not 1 <= args.server_port <= 65535:
@@ -115,7 +115,7 @@ if args.restart_worker:
         from shared_uid import run
         run(args, app, adb, nodes, tap, old_main, old_worker)
         sys.exit(0)
-    if args.sticky_worker:
+    if args.sticky_worker and not args.pending_update:
         sys.dont_write_bytecode = True
         from sticky_worker import run
         run(args, app, adb, nodes, tap, old_main, old_worker)

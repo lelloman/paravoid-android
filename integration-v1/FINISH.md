@@ -65,8 +65,8 @@ response and verifies service disappearance through `dumpsys`; these images repo
 255 even when stopping succeeds. No adb kill/force-stop is used during this
 restart scenario.
 
-This is separate from `--pending-update`. It does not prove higher-version
-activation during sticky respawn, every OS restart-backoff policy, a deliberately
+Without `--pending-update`, this does not prove higher-version activation during
+sticky respawn. Neither variant proves every OS restart-backoff policy, a deliberately
 stuck-process timeout, or shared-UID behavior. Worker foreground-service type is
 part of the shell manifest; rebuild the fixture shell/baseline when adopting it.
 
@@ -77,6 +77,23 @@ branch. The normal/public fixture builds and bootstrap runs passed as well.
 No phone, root access or publication was involved.
 
 ## Fixed-shell pending update with a live worker
+
+Add `--sticky-worker` to the pending-update command below to require **both** the
+fresh Activity and a naturally respawned foreground sticky worker to execute B.
+The signed update is staged while A remains alive, then the reference server is
+shut down before restart. Cancellation preserves selection and original PIDs.
+The replacement worker must receive a framework null Intent, with no service-start
+or provider request to wake it. It must survive another six seconds, recovery must
+remain alive and the installed shell APK hash must remain unchanged. A safe refusal
+or continued execution of A does **not** count as a passing B-activation run.
+Service cleanup is verified afterward, as in the standalone sticky test.
+
+The combined `--sticky-worker --pending-update` variant passed on 2026-09-23 on
+Restart30/API 30 and Restart36/API 36.1, x86_64, with runtime `b901d48` unchanged.
+Both observed B in the Activity and the naturally recreated null-Intent worker;
+the reference server was stopped before activation and the installed APK hash
+was unchanged. A/B builds and baseline validation passed. These are observed
+successful interleavings, not proof of every respawn timing or a timeout branch.
 
 `controls-shortcut.py --restart-worker --pending-update PATH --serial SERIAL`
 extends the runnable-app shortcut test. Start from the ordinary public empty-shell
