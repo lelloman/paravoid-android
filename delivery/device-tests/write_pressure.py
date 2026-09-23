@@ -1,12 +1,14 @@
-"""Real ENOSPC during private archive copying, on a disposable debuggable emulator only."""
+"""Real ENOSPC during archive/component copying, on a disposable debuggable emulator only."""
 import hashlib
 from pathlib import Path
 import subprocess
 import tempfile
 import time
+import zipfile
 
 
-def run(root, serial, app, launcher, archive, server, adb, ui, tap):
+def run(root, serial, app, launcher, archive, server, adb, ui, tap, phase='archive'):
+    assert phase in ('archive', 'components')
     assert archive.stat().st_size > 32 * 1024 * 1024, 'Build with prepare.py --pressure-mib 32'
     store = 'no_backup/paravoid-v1/'
     filler = 'files/paravoid-mid-write-filler'
@@ -24,6 +26,12 @@ def run(root, serial, app, launcher, archive, server, adb, ui, tap):
     lines = [i for i, line in enumerate(source.read_text().splitlines(), 1)
              if 'hash.update(buffer, 0, count); if (output != null) output.write' in line]
     assert len(lines) == 1, 'Update the debugger boundary if the copy loop changes'
+    gate_lines = [str(lines[0])]
+    if phase == 'components':
+        components = [i for i, line in enumerate(source.read_text().splitlines(), 1)
+                      if 'try (InputStream input = zip.getInputStream(zipped))' in line]
+        assert len(components) == 1, 'Update the component debugger boundary'
+        gate_lines.append(str(components[0]))
     port = adb('forward', 'tcp:0', 'jdwp:' + owner).strip()
     assert port.isdigit()
     gate = None
@@ -34,7 +42,7 @@ def run(root, serial, app, launcher, archive, server, adb, ui, tap):
                             str(root / 'delivery/device-tests/WriteFailureGate.java')], check=True, timeout=45)
             with (markers / 'log').open('w') as log:
                 gate = subprocess.Popen(['java', '--add-modules', 'jdk.jdi', '-cp', tmp, 'WriteFailureGate',
-                                         port, tmp, str(lines[0])], stdout=log, stderr=log)
+                                         port, tmp, *gate_lines], stdout=log, stderr=log)
                 def wait(name):
                     deadline = time.monotonic() + 30
                     while time.monotonic() < deadline:
@@ -48,7 +56,19 @@ def run(root, serial, app, launcher, archive, server, adb, ui, tap):
                 staging = adb('shell', 'run-as', app, 'find', store + 'staging', '-name', 'archive.vpk').splitlines()
                 assert len(staging) == 1
                 size = int(adb('shell', 'run-as', app, 'stat', '-c', '%s', staging[0]))
-                assert 0 < size < archive.stat().st_size, 'Must interrupt an actual partial write'
+                if phase == 'archive':
+                    assert 0 < size < archive.stat().st_size, 'Must interrupt an actual partial write'
+                else:
+                    assert size == archive.stat().st_size
+                    assert hashlib.sha256(data(staging[0])).digest() == hashlib.sha256(archive.read_bytes()).digest()
+                    component_root = str(Path(staging[0]).parent / 'components')
+                    partial = adb('shell', 'run-as', app, 'find', component_root, '-type', 'f').splitlines()
+                    assert len(partial) == 1, 'Must pause during the first component'
+                    relative = partial[0][len(component_root) + 1:]
+                    with zipfile.ZipFile(archive) as contents:
+                        expected_size = contents.getinfo(relative).file_size
+                    written = int(adb('shell', 'run-as', app, 'stat', '-c', '%s', partial[0]))
+                    assert 0 < written < expected_size, 'Must interrupt actual component materialization'
                 security, selection = data(store + 'security'), data(store + 'selection')
                 adb('shell', 'run-as', app, 'mkdir', '-p', 'files')
                 count = free_bytes() // 1048576 + 256
@@ -74,7 +94,7 @@ def run(root, serial, app, launcher, archive, server, adb, ui, tap):
                 assert hashlib.sha256(data(active[0])).hexdigest() == digest
                 assert adb('shell', 'pidof', app).strip() == main_pid
                 assert not adb('shell', 'run-as', app, 'find', 'no_backup', '-name', 'paravoid-update-preferences.retry').strip()
-                print('PASS: real mid-copy ENOSPC; active archive, selection/security records and main PID preserved; no network retry', flush=True)
+                print('PASS: real mid-' + phase + '-copy ENOSPC; active archive, selection/security records and main PID preserved; no network retry', flush=True)
                 tap('Retry update access')
                 for _ in range(30):
                     if 'Update: READY' in ui():

@@ -32,6 +32,18 @@ Passed on 2026-09-23 on Restart30/API 30 and Restart36/API 36.1, x86_64,
 using the production runtime at `1f1447c`. Both emitted the real IOException
 message "No space left on device". No runtime changes were needed for this gate.
 
+Add `--write-phase components` to move the fault into materialization, after
+archive verification and the materialization capacity check. The debugger first
+waits for the component-copy loop, then pauses on its second write iteration.
+The test additionally requires an exact complete staging-archive hash and a
+partially written first inventory component. It applies the same real disk-full,
+active-state preservation, retry/cleanup and offline-launch assertions. This does
+not exercise publication or journal writes, which happen later.
+
+The component variant passed on 2026-09-23 on Restart30/API 30 and
+Restart36/API 36.1, x86_64, against the unchanged runtime at `7dc7a65`.
+The original archive-copy variant also passed again on API 30 with this helper.
+
 ## Metering transitions
 
 `public_bootstrap.py --network-transitions --serial SERIAL [--server-port PORT]`

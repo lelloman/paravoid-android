@@ -5,7 +5,7 @@ import com.sun.jdi.request.*;
 import java.nio.file.*;
 import java.util.*;
 
-/** Test-only gate: pause an actual second archive-write iteration, then witness an ENOSPC IOException. */
+/** Test-only gate: pause a second archive/component write, then witness an ENOSPC IOException. */
 public final class WriteFailureGate {
     public static void main(String[] args) throws Exception {
         AttachingConnector connector = Bootstrap.virtualMachineManager().attachingConnectors().stream()
@@ -18,7 +18,12 @@ public final class WriteFailureGate {
         try {
             ReferenceType store = vm.classesByName("com.lelloman.paravoidandroid.runtime.lifecycle.GenerationStore").get(0);
             BreakpointRequest stop = vm.eventRequestManager().createBreakpointRequest(store.locationsOfLine(Integer.parseInt(args[2])).get(0));
-            stop.addCountFilter(2); stop.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD); stop.enable();
+            stop.addCountFilter(2); stop.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD);
+            BreakpointRequest component = null;
+            if (args.length > 3) {
+                component = vm.eventRequestManager().createBreakpointRequest(store.locationsOfLine(Integer.parseInt(args[3])).get(0));
+                component.addCountFilter(1); component.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD); component.enable();
+            } else stop.enable();
             Files.writeString(markers.resolve("ready"), "armed\n");
             EventSet paused = null;
             long deadline = System.nanoTime() + 300_000_000_000L;
@@ -29,6 +34,10 @@ public final class WriteFailureGate {
                 boolean hold = false, failed = false;
                 for (Event event : events) {
                     if (event instanceof BreakpointEvent) {
+                        if (event.request() == component) {
+                            component.disable(); stop.enable();
+                            continue;
+                        }
                         stop.disable();
                         ReferenceType io = vm.classesByName("java.io.IOException").get(0);
                         ExceptionRequest errors = vm.eventRequestManager().createExceptionRequest(io, true, true);
