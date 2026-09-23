@@ -68,7 +68,10 @@ host evidence; this integration adds the installed intact-quarantine path only.
 Still unresolved, not silently waived:
 
 - Broader installed writer/death/cancellation interleavings, actual power/cache-loss
-  behavior and raw retry/cancellation temporary-write/rename interruption cases.
+  behavior and installed retry/cancellation temporary-write/rename interruption cases.
+  Follow-up host evidence: `delivery/PERSISTENCE-TESTS.md` records 20 actual child
+  process deaths around write/sync/rename for first writes and replacements;
+  installed ART and power-loss validation remain separate.
   Follow-up: overlapping HTTP-staging/embedded admission under real exhaustion now
   passes on both APIs at archive and component writes; see
   `delivery/device-tests/README.md`. This does not cover two HTTP downloads or

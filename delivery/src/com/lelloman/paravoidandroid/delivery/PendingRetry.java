@@ -43,11 +43,16 @@ final class PendingRetry {
         p.setProperty("cancellationEpoch", cancellationEpoch);
         Path tmp = Files.createTempFile(path.getParent(), "retry", ".tmp");
         try {
-            try (FileOutputStream out = new FileOutputStream(tmp.toFile())) { p.store(out, "Delivery retry schedule"); out.getFD().sync(); }
+            try (FileOutputStream out = new FileOutputStream(tmp.toFile())) {
+                p.store(out, "Delivery retry schedule");
+                out.getFD().sync();
+            }
             Files.move(tmp, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             try (FileChannel directory = FileChannel.open(path.getParent(), StandardOpenOption.READ)) {
                 directory.force(true);
             }
-        } finally { Files.deleteIfExists(tmp); }
+        } finally {
+            Files.deleteIfExists(tmp);
+        }
     }
 }

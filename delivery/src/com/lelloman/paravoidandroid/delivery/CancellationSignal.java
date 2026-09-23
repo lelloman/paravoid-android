@@ -26,12 +26,15 @@ final class CancellationSignal {
         Path tmp = Files.createTempFile(path.getParent(), "cancel", ".tmp");
         try {
             try (FileOutputStream out = new FileOutputStream(tmp.toFile())) {
-                out.write(UUID.randomUUID().toString().getBytes(StandardCharsets.US_ASCII)); out.getFD().sync();
+                out.write(UUID.randomUUID().toString().getBytes(StandardCharsets.US_ASCII));
+                out.getFD().sync();
             }
             Files.move(tmp, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             try (FileChannel directory = FileChannel.open(path.getParent(), StandardOpenOption.READ)) {
                 directory.force(true);
             }
-        } finally { Files.deleteIfExists(tmp); }
+        } finally {
+            Files.deleteIfExists(tmp);
+        }
     }
 }
