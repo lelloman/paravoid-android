@@ -6,6 +6,11 @@ clear only the complete fixture app, install the normal control, configure/remov
 track's emulator. Run scripts sequentially: the fixture pins port 18765.
 Do not rebuild fixtures while a script is serving their VPK files.
 
+The auth script also accepts `--server-port PORT`: it binds a different host port
+and reverses the device's pinned 18765 endpoint to that port. This permits separate
+auth suites on separate disposable emulators with immutable shared build inputs;
+each suite keeps its own catalog, grants and temporary personalized APKs.
+
 Requirements: JDK, Gradle's cached Android dependencies, Python `cryptography`, adb,
 Android build-tools 36.0.0/platform 36, running API 30 and 36.1 x86_64 emulators.
 The scripts require an `emulator-NNNN` serial and time out individual adb commands.
@@ -104,8 +109,26 @@ signature-preserving APK credential replacement during outstanding HTTP and
 offline execution after revocation. API 36 initially exposed a test-driver HOME
 transition race; the shortcut driver now waits and retries drawer opening before
 asserting icon presence, and the entire auth suite passed on rerun.
-Credential replacement during scheduled retry/staging, cancellation at retry
+Credential replacement during staging, cancellation at retry
 persistence boundaries, metering transitions and real HTTPS remain separate gates.
+
+Add `--retry-replacement` to `apk_key.py` to exercise real APK replacement while
+recovery holds a persisted HTTP 429 retry with `Retry-After: 3600`. The test verifies
+the future due time, revokes that credential, installs a differently personalized
+APK with the same developer signatures, and launches main. It must discard the old
+partition's delay immediately, issue head/archive requests only with the currently
+installed credential, remove stale retry state and leave the active payload usable.
+Neither the retry file nor device clock is edited for this step. This covers
+replacement during a scheduled retry, not replacement halfway through staging or
+process death at every retry-write boundary.
+
+Passed on 2026-09-23 against final implementation `5a7dcdc` (including `5acf2ab`):
+Restart30/API 30 (`emulator-5586`, host port 18765) and Restart36/API 36.1
+(`emulator-5584`, host port 18766), both x86_64. Each ran the entire auth suite with
+`--retry-replacement`, revalidating cross-process cancellation and suppression,
+explicit retry, HTTP-time APK replacement and the new persisted-delay replacement.
+The final-build runs passed after the checkpoint/monitor lock-order correction;
+both emulators were stopped afterward. No phone or publication was involved.
 
 The auth test uses the production carrier insertion primitive to create private
 debug-HTTP test APKs, including intentionally invalid inputs. This is **not** proof

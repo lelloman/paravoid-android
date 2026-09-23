@@ -34,9 +34,15 @@ LAUNCHER = APP + '/com.lelloman.paravoidandroid.runtime.LauncherActivity'
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial', required=True)
+    parser.add_argument('--server-port', type=int, default=18765,
+                        help='Host-side port; adb reverse keeps the APK endpoint at 18765')
+    parser.add_argument('--retry-replacement', action='store_true',
+                        help='Replace the installed credential while a one-hour retry is durably scheduled')
     args = parser.parse_args()
     if not re.fullmatch(r'emulator-\d+', args.serial):
         parser.error('a dedicated disposable emulator serial is required')
+    if not 1 <= args.server_port <= 65535:
+        parser.error('invalid host server port')
     def adb(*parts):
         return subprocess.check_output(['adb', '-s', args.serial, *parts], text=True, stderr=subprocess.STDOUT, timeout=45)
     def launch():
@@ -90,6 +96,8 @@ def main():
         archiveSize=archive.stat().st_size))))
     catalog.add_archive(APP, release['releaseId'], archive)
     requests = []  # Booleans only: never retain or print request credentials.
+    credential_ids = []  # Fixture indices, never bearer values.
+    retry_head = threading.Event()
     old_download = threading.Event()
     release_old = threading.Event()
     hold_main = threading.Event()
@@ -99,6 +107,15 @@ def main():
     class ObservedHandler(Handler):
         def do_GET(self):
             requests.append(self.headers.get('Authorization') is not None)
+            credential_ids.append(next((i for i, token in enumerate(tokens)
+                                        if self.headers.get('Authorization') == 'Bearer ' + token), -1))
+            if '/head?' in self.path and retry_head.is_set():
+                retry_head.clear()
+                self.send_response(429)
+                self.send_header('Retry-After', '3600')
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+                return
             if '/releases/' in self.path and self.headers.get('Authorization') == 'Bearer ' + tokens[0]:
                 old_download.set()
                 release_old.wait(30)
@@ -111,14 +128,14 @@ def main():
                         main_disconnected.set()
                         return
             super().do_GET()
-    server = Server(('127.0.0.1', 18765), catalog)
+    server = Server(('127.0.0.1', args.server_port), catalog)
     server.RequestHandlerClass = ObservedHandler
     threading.Thread(target=server.serve_forever, daemon=True).start()
     sdkroot = Path(os.environ.get('ANDROID_HOME', '/home/lelloman/Android/Sdk'))
     signer = sdkroot / 'build-tools/36.0.0/apksigner'
     original_signatures = developer_signatures(signer, source)
     try:
-        adb('reverse', 'tcp:18765', 'tcp:18765')
+        adb('reverse', 'tcp:18765', 'tcp:' + str(args.server_port))
         with tempfile.TemporaryDirectory(prefix='paravoid-device-grants-') as tmp:
             def carrier(name, payload):
                 path = Path(tmp) / (name + '.apk')
@@ -222,6 +239,29 @@ def main():
             assert adb('shell', 'pidof', APP).strip() == main_pid
             assert all(requests)
             print('PASS: main HTTP cancelled by recovery; socket closed before response, no pending payload, main survives')
+            if args.retry_replacement:
+                hold_main.clear(); retry_head.set()
+                tap('Retry update access'); expect('Update: WAITING_TO_RETRY')
+                saved_retry = adb('shell', 'run-as', APP, 'cat', preference_path + '.retry')
+                due = int(re.search(r'(?m)^due=(\d+)$', saved_retry)[1])
+                assert due > int(time.time()) + 3000, 'Need a real long persisted Retry-After'
+                count = len(requests)
+                catalog.revoke(tokens[1]); catalog.grant(tokens[0], APP, ['stable'], [release['releaseId']])
+                # Android kills the old app processes; the persisted retry survives the APK replacement.
+                adb('install', '-r', str(first)); launch()
+                for _ in range(60):
+                    pending_retry = subprocess.run(['adb', '-s', args.serial, 'shell', 'run-as', APP,
+                                                    'test', '-e', preference_path + '.retry'], timeout=45)
+                    if len(requests) >= count + 2 and pending_retry.returncode == 1:
+                        break
+                    time.sleep(.25)
+                else:
+                    raise AssertionError('New installed credential did not discard the old persisted delay')
+                assert credential_ids[count:] and all(i == 0 for i in credential_ids[count:])
+                assert int(time.time()) < now + 3600, 'Grant expiry must not explain old retry rejection'
+                assert 'generation=A;asset=payload-asset;java=payload-java-resource' in adb(
+                    'shell', 'run-as', APP, 'cat', 'shared_prefs/probe.xml')
+                print('PASS: APK credential replacement discards old one-hour retry; only replacement key requests, active payload survives')
             print('Device:', args.serial, 'API', sdk)
     finally:
         release_old.set(); release_main.set(); server.shutdown(); server.server_close()

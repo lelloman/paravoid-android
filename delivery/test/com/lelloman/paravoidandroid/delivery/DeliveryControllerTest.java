@@ -98,10 +98,13 @@ public final class DeliveryControllerTest {
             check(c.setup.f.requests == 1);
             check(!Files.exists(c.preferences.resolveSibling("preferences.retry")));
         }
-        try (Control c = new Control()) {
+        for (boolean cancelBeforePersistence : new boolean[] {false, true}) try (Control c = new Control()) {
             Path retry = c.preferences.resolveSibling("preferences.retry");
+            if (cancelBeforePersistence) cancelFromProcess(c.preferences);
             new PendingRetry(c.setup.client.credentialPartition(), 0, 1, true).write(retry);
-            cancelFromProcess(c.preferences); // Original attempt's process is already gone.
+            if (!cancelBeforePersistence) cancelFromProcess(c.preferences);
+            // Resume durable state after an absent owner, including cancellation
+            // before that owner's final stale retry write. Neither ordering may revive it.
             c.controller.foreground(true); c.await(DeliveryController.Activity.CANCELLED); c.barrier();
             check(c.setup.f.requests == 0 && !Files.exists(retry));
             c.setup.head(); c.setup.f.responses.add(new Fake(200, ARCHIVE));
