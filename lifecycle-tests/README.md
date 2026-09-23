@@ -1,5 +1,29 @@
 # Track C lifecycle handoff
 
+## Restart decision regression (2026-09-23)
+
+`RestartProcessGateTest` runs in `run.sh` against the production restart decision
+class with deterministic platform snapshots and elapsed time. It covers a bounded
+five-second timeout, respawn without repeated killing, recovery/foreign-UID
+exclusion, missing enumeration, ambiguous ownership, kill denial, stale PID
+ownership and a respawn/shared-UID change before the main-thread launch callback.
+These are decision tests, not actual Android sticky-service or timeout evidence.
+
+The Android adapter now requires PackageManager to report this package as the
+only owner of its UID, re-enumerates ownership before each kill and rechecks before
+launch. It never fakes lease release or changes selection to force activation.
+There is still no atomic Android enumerate-and-launch operation: a process starting
+after the final check is governed by normal lifecycle leases and may delay pending
+activation. The restart result means a launch was requested, not that a particular
+pending version is guaranteed to have activated.
+
+The full host lifecycle suite and Android A/B fixture builds passed. The installed
+fixed-shell pending-B/live-A-worker/confirmed-offline-restart regression also passed
+on API 30 and 36.1 (2026-09-23), including recovery survival and a new worker loading
+B. B was rebuilt against the new shell baseline; the prior B fixture was correctly
+rejected for contract mismatch. These device passes validate the normal Android
+adapter path, not the injected host failure scenarios above.
+
 ## Pending publication fault regression (2026-09-23)
 
 `bash lifecycle-tests/run.sh` includes `PublicationTest`: a parent holds a healthy

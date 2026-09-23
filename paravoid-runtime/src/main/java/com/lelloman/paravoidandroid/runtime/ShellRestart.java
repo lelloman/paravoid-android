@@ -8,40 +8,36 @@ import android.os.Looper;
 import android.os.Process;
 import android.os.SystemClock;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.function.Consumer;
 
 /** Only called after explicit destructive-restart confirmation in shell controls. */
 final class ShellRestart {
     static void restart(Application app, Consumer<Boolean> result) {
         Handler main = new Handler(Looper.getMainLooper());
-        new Thread(() -> {
-            boolean stopped = false;
-            try {
+        RestartProcessGate gate = new RestartProcessGate(new RestartProcessGate.Platform() {
+            public boolean exclusiveUid() {
+                String[] packages = app.getPackageManager().getPackagesForUid(Process.myUid());
+                return packages != null && packages.length == 1 && app.getPackageName().equals(packages[0]);
+            }
+            public List<RestartProcessGate.Entry> processes() {
                 ActivityManager manager = app.getSystemService(ActivityManager.class);
                 List<ActivityManager.RunningAppProcessInfo> processes = manager.getRunningAppProcesses();
-                if (processes == null) throw new IllegalStateException("Process list unavailable");
-                // Do not terminate another package in legacy shared-UID configurations.
-                for (ActivityManager.RunningAppProcessInfo process : processes) {
-                    if (process.uid != Process.myUid() || process.pid == Process.myPid()) continue;
-                    if (!owned(app, process)) throw new IllegalStateException("Shared UID cannot restart safely");
-                }
-                for (ActivityManager.RunningAppProcessInfo process : processes) {
-                    if (process.uid == Process.myUid() && process.pid != Process.myPid()) Process.killProcess(process.pid);
-                }
-                // OS process death releases leases; never fake lease release or reset the journal.
-                long deadline = SystemClock.elapsedRealtime() + 5000;
-                while (SystemClock.elapsedRealtime() < deadline) {
-                    processes = manager.getRunningAppProcesses();
-                    if (processes != null && processes.stream().noneMatch(p -> p.uid == Process.myUid() && p.pid != Process.myPid())) {
-                        stopped = true; break;
-                    }
-                    SystemClock.sleep(100);
-                }
-            } catch (RuntimeException unavailable) { /* Fixed UI error, no platform/payload text. */ }
-            final boolean ready = stopped;
+                if (processes == null) return null;
+                List<RestartProcessGate.Entry> entries = new ArrayList<>();
+                for (ActivityManager.RunningAppProcessInfo process : processes)
+                    entries.add(new RestartProcessGate.Entry(process.pid, process.uid, process.pkgList));
+                return entries;
+            }
+            public void kill(int pid) { Process.killProcess(pid); }
+            public long elapsed() { return SystemClock.elapsedRealtime(); }
+            public void sleep() { SystemClock.sleep(100); }
+        }, Process.myUid(), Process.myPid(), app.getPackageName());
+        new Thread(() -> {
+            final boolean ready = gate.stop();
             main.post(() -> {
                 boolean launched = false;
-                if (ready) try {
+                if (ready && gate.readyToLaunch()) try {
                     app.startActivity(new Intent(app, LauncherActivity.class)
                         .setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
@@ -50,8 +46,5 @@ final class ShellRestart {
                 result.accept(launched);
             });
         }, "paravoid-explicit-restart").start();
-    }
-    private static boolean owned(Application app, ActivityManager.RunningAppProcessInfo process) {
-        return process.pkgList != null && process.pkgList.length == 1 && app.getPackageName().equals(process.pkgList[0]);
     }
 }
