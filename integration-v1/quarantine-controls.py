@@ -24,7 +24,11 @@ def main():
     parser.add_argument('--apk', type=Path, required=True)
     parser.add_argument('--corrupt-during-confirmation', action='store_true',
                         help='Corrupt selected DEX after opening the retry dialog; require safe refusal')
+    parser.add_argument('--live-worker', action='store_true',
+                        help='Use broken-main fixture; keep a real worker lease alive during retry confirmation')
     args = parser.parse_args()
+    if args.live_worker and args.corrupt_during_confirmation:
+        parser.error('worker and corruption are separate cases')
     if not re.fullmatch(r'emulator-\d+', args.serial):
         parser.error('dedicated disposable emulator required')
     d = device_check.Device(args.serial, args.avd)
@@ -32,6 +36,10 @@ def main():
     device_check.check_shell(args.apk, 'embedded')
     d.run('uninstall', app, check=False)
     assert 'Success' in d.run('install', str(args.apk.resolve()))
+    if args.live_worker:
+        assert 'generation=broken-main' in d.run('shell', 'content', 'query', '--uri', 'content://' + app + '.worker')
+        worker_pid = d.run('shell', 'pidof', app + ':worker').strip()
+        assert worker_pid.isdecimal()
     d.failed_application()
     initial = d.state()
     assert initial['quarantined'] and initial['active']['version'] == 2
@@ -60,6 +68,18 @@ def main():
     assert d.state() == initial, 'Cancelling retry must preserve the journal'
     print('PASS: cancelling quarantine confirmation leaves selection unchanged', flush=True)
     tap('Retry this quarantined generation…')
+    if args.live_worker:
+        security = d.run('exec-out', 'run-as', app, 'cat', 'no_backup/paravoid-v1/security', binary=True)
+        tap('Retry this generation')
+        d.await_(lambda: 'Update status: UNAVAILABLE' in ui(), 'live lease refusal after confirmation')
+        assert d.state() == initial, 'Live-lease retry altered selection/quarantine'
+        assert d.run('exec-out', 'run-as', app, 'cat', 'no_backup/paravoid-v1/security', binary=True) == security
+        assert d.run('shell', 'pidof', app + ':worker').strip() == worker_pid
+        assert d.run('shell', 'pidof', app + ':paravoid_recovery').strip() == recovery_pid
+        assert 'generation=broken-main' in d.run('shell', 'content', 'query', '--uri', 'content://' + app + '.worker')
+        d.recovery()
+        print('PASS: live worker lease refuses confirmed retry; quarantine/security unchanged, existing worker and payload-free recovery survive', args.serial, flush=True)
+        return
     if args.corrupt_during_confirmation:
         security = d.run('exec-out', 'run-as', app, 'cat', 'no_backup/paravoid-v1/security', binary=True)
         component = 'no_backup/paravoid-v1/generations/' + initial['active']['directory'] + '/components/code/classes.dex'

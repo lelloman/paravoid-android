@@ -61,3 +61,21 @@ Passed on both API 30/36.1, 2026-09-23, runtime `0e79cb5`. Logs:
 `/tmp/paravoid-recovery-corrupt{30,36}.log`; build:
 `/tmp/paravoid-recovery-corrupt-build.log`. This is installed corruption-race
 evidence, not stale-selection/pending-repair/live-lease device evidence.
+
+## Live worker during quarantine retry
+
+Build `generation=broken-main`, `payloadVersion=2`, `bootstrap=embedded` and
+`startupFault=none`, then run the same quarantine harness with `--live-worker`.
+The fixture's worker Application initializes successfully, acquires a real
+generation lease and answers its provider. Main-process Application creation
+then fails and quarantines that same generation. After a cancelled dialog
+control, confirming retry returns UNAVAILABLE. Selection/security bytes and both
+worker/recovery PIDs remain unchanged; the already-loaded worker still answers
+and recovery remains payload-free. No fake lease file or forced worker death is
+used to produce the refusal.
+
+Passed 2026-09-23, API 30 and 36.1 x86_64, production code `52aea67`.
+Build: `/tmp/paravoid-recovery-lease-build.log`; passing logs:
+`/tmp/paravoid-recovery-lease30.log`, `/tmp/paravoid-recovery-lease36.log`.
+Stale-selection and concurrently staged forward-repair confirmation races remain
+separate installed gates.
