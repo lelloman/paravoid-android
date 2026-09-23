@@ -18,6 +18,8 @@ the build's Gradle 8.13/tooling dependencies. Optional environment:
 - `PARAVOID_GRADLE_USER_HOME`: isolated writable dependency cache.
 - `PARAVOID_OFFLINE=true`: require already-cached external dependencies.
 - `PARAVOID_VERSION`: coordinated candidate version; default `0.1.0-dev`.
+- `PARAVOID_LICENSE_NAME` and `PARAVOID_LICENSE_URL`: optional paired,
+  owner-approved POM license metadata; neither has a default.
 
 The repository is retained at the printed `/tmp/paravoid-local-publication.*`
 path for inspection. Only local-file staging is configured; no remote upload,
@@ -29,6 +31,10 @@ throwaway VPK keys under ignored `build/keys`; they are not production releases.
 License, release version, remote repository, release credentials/signing policy
 and external publication remain release-owner decisions. Local staging POMs must
 not be mistaken for approved production publication metadata.
+
+See [CANDIDATE.md](CANDIDATE.md) for the owner-decision checklist and read-only
+candidate audit. It checks local artifacts, metadata and hashes without enabling
+remote writes; repository-specific documentation and signing remain explicit gates.
 
 Verified 2026-09-23 with Gradle 8.13, JDK 21, SDK 36: default `0.1.0-dev`
 publication/consumer and the complete script with coordinated version

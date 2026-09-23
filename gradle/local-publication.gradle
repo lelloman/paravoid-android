@@ -2,6 +2,11 @@
 apply plugin: 'maven-publish'
 group = 'com.lelloman.paravoid'
 version = providers.gradleProperty('paravoidVersion').getOrElse('0.1.0-dev')
+def releaseLicenseName = providers.gradleProperty('paravoidLicenseName').orNull
+def releaseLicenseUrl = providers.gradleProperty('paravoidLicenseUrl').orNull
+if ((releaseLicenseName == null) != (releaseLicenseUrl == null)) {
+    throw new GradleException('Supply both paravoidLicenseName and paravoidLicenseUrl, or neither for development staging.')
+}
 
 publishing {
     repositories {
@@ -21,7 +26,10 @@ publishing {
                 url = 'https://github.com/lelloman/paravoid-android'
                 connection = 'scm:git:https://github.com/lelloman/paravoid-android.git'
             }
-            // License is a release-owner decision; do not invent one for staging.
+            // Explicit owner-approved metadata only; development staging has no default license.
+            if (releaseLicenseName != null) {
+                licenses { license { name = releaseLicenseName; url = releaseLicenseUrl } }
+            }
         }
     }
 }

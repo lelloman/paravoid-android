@@ -12,6 +12,8 @@ if [[ -n "${PARAVOID_GRADLE_USER_HOME:-}" ]]; then
 fi
 if [[ "${PARAVOID_OFFLINE:-false}" == true ]]; then common+=(--offline); fi
 if [[ -n "${PARAVOID_VERSION:-}" ]]; then common+=("-PparavoidVersion=$PARAVOID_VERSION"); fi
+if [[ -n "${PARAVOID_LICENSE_NAME:-}" ]]; then common+=("-PparavoidLicenseName=$PARAVOID_LICENSE_NAME"); fi
+if [[ -n "${PARAVOID_LICENSE_URL:-}" ]]; then common+=("-PparavoidLicenseUrl=$PARAVOID_LICENSE_URL"); fi
 "$paravoid_gradle" "${common[@]}" \
     :paravoid-api:publishAllPublicationsToLocalStagingRepository \
     :paravoid-contract:publishAllPublicationsToLocalStagingRepository \
