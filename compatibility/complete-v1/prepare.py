@@ -29,7 +29,7 @@ def prepare():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--pressure-mib', type=int, choices=(0, 32), default=0,
+    parser.add_argument('--pressure-mib', type=int, choices=(0, 32, 1000), default=0,
                         help='Generate an ignored incompressible asset for disk-write fault tests; 0 removes it')
     args = parser.parse_args()
     prepare()

@@ -71,7 +71,16 @@ alongside eight child-process writers, separately for retry and cancellation.
 Every writer must succeed; final records must parse and no slot may remain.
 This exercises the same locks/atomic publication used on Android, not a simulated
 filesystem. The full host delivery suite passed (`/tmp/paravoid-bounded-records.log`).
-Installed reruns and deletion extensions are recorded separately when complete.
+Installed reruns of all ten original write cases passed on API 30/36.1 after the
+writer change: `/tmp/paravoid-bounded-records{30,36}.log`. Two additional installed
+deletion cases per API passed with `public_bootstrap.py --persistence-delete`:
+`/tmp/paravoid-deletion{30,36}.log`. They terminate the real controller before
+unlink and after unlink/before directory force, preserve active PID/archive and
+both journals, reject surviving cancelled retries and complete an explicit check
+after recovery. The full `--persistence-crash` command now includes deletion too;
+the reported runs executed the ten-write and two-deletion subsets separately.
+Installed deletion also asserts at most two retry/cancellation slots and no
+remaining slots after the final successful operation. No physical power-loss claim.
 
 ## Installed production-controller matrix
 

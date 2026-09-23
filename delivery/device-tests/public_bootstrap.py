@@ -33,10 +33,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial', required=True)
     parser.add_argument('--server-port', type=int, default=18765)
+    parser.add_argument('--large-payload', action='store_true',
+                        help='Require a near-limit valid VPK and stream/hash the 1000 MiB asset in normal and shell apps')
+    parser.add_argument('--publication-fault', choices=('io', 'death', 'cancel'),
+                        help='Exercise signed p2 journal publication with permission IO, owner death or late cancellation')
     parser.add_argument('--network-transitions', action='store_true',
                         help='Exercise actual Android Wi-Fi metering changes and explicit override')
     parser.add_argument('--persistence-crash', action='store_true',
                         help='Kill installed recovery at retry/cancellation write boundaries')
+    parser.add_argument('--persistence-delete', action='store_true',
+                        help='Run only the two retry-deletion process-death cases')
     parser.add_argument('--write-exhaustion', action='store_true',
                         help='Require a padded VPK and inject real ENOSPC during staging with an active payload')
     parser.add_argument('--write-phase', choices=('archive', 'components'), default='archive',
@@ -54,12 +60,17 @@ def main():
         parser.error('--write-phase requires --write-exhaustion')
     if not re.fullmatch(r'emulator-\d+', args.serial):
         parser.error('a dedicated disposable emulator serial is required')
-    if sum((args.network_transitions, args.storage_pressure, args.write_exhaustion, args.persistence_crash)) > 1:
-        parser.error('network and storage pressure are separate runs')
+    if sum((args.network_transitions, args.storage_pressure, args.write_exhaustion, args.persistence_crash,
+            args.persistence_delete, args.large_payload, args.publication_fault is not None)) > 1:
+        parser.error('network, storage, persistence and large-payload cases are separate runs')
     if not 1 <= args.server_port <= 65535:
         parser.error('invalid host port')
     def adb(*parts, timeout=45):
-        return subprocess.check_output(['adb', '-s', args.serial, *parts], text=True, stderr=subprocess.STDOUT, timeout=timeout)
+        try:
+            return subprocess.check_output(['adb', '-s', args.serial, *parts], text=True, stderr=subprocess.STDOUT, timeout=timeout)
+        except subprocess.CalledProcessError as failure:
+            print('Fixture adb failed: ' + failure.output, file=sys.stderr)
+            raise
     def set_metered(state):
         # These images apply the override but return 255; require state readback,
         # not just shell exit status. The CLI spells its default value 'undefined'.
@@ -86,20 +97,40 @@ def main():
         x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.attrib['bounds']))
         adb('shell', 'input', 'tap', str((x1+x2)//2), str((y1+y2)//2))
     fixture = ROOT / 'compatibility/complete-v1'
+    def pressure_probe(package):
+        expected = fixture / 'build/pressure-assets/paravoid-pressure.bin'
+        assert expected.stat().st_size == 1000 * 1048576
+        with expected.open('rb') as source:
+            digest = hashlib.file_digest(source, 'sha256').hexdigest()
+        result = adb('shell', 'content', 'call', '--uri', 'content://' + package + '.probe',
+                     '--method', 'probe.read-pressure', timeout=300)
+        assert 'bytes=' + str(expected.stat().st_size) in result and 'sha256=' + digest in result, result
+        print('PASS: streamed all 1000 MiB through Android AssetManager with exact SHA-256', package, flush=True)
     output = fixture / 'build/outputs/paravoid/paravoidAndroidDebug'
     with zipfile.ZipFile(output / 'shell.apk') as apk:
         policy = json.loads(apk.read('assets/paravoid/shell-policy.json'))
     normal = fixture / 'build/outputs/apk/normal/debug/complete-v1-normal-debug.apk'
     normal_app = 'com.lelloman.paravoidcompat.complete'
-    adb('install', '-r', str(normal))
+    if args.large_payload:
+        # This test resets shell data below in every mode. Do it before installing
+        # the large normal control too, so a prior run cannot consume its space.
+        subprocess.run(['adb', '-s', args.serial, 'shell', 'pm', 'clear', APP], capture_output=True, timeout=45)
+    adb('install', '-r', str(normal), timeout=300 if args.large_payload else 45)
     adb('shell', 'am', 'force-stop', normal_app)
     adb('shell', 'am', 'start', '-W', '-n', normal_app + '/.MainActivity')
     assert 'generation=A;asset=payload-asset;java=payload-java-resource' in adb(
         'shell', 'run-as', normal_app, 'cat', 'shared_prefs/probe.xml')
     print('PASS: normal packaging launches Application, Activity, assets and Java resources')
+    if args.large_payload:
+        pressure_probe(normal_app)
+        # The normal control is now complete. Reclaim its 1 GiB installed APK so
+        # emulator capacity measures delivery rather than two separate installs.
+        adb('uninstall', normal_app)
     distribution = policy['descriptor']['distribution']
     assert distribution['bootstrap'] == 'empty' and distribution['authentication'] == 'public'
     archive = output / 'payload.vpk'
+    if args.large_payload:
+        assert 1000 * 1048576 <= archive.stat().st_size <= 1024 * 1048576
     envelope = (output / 'release.json').read_bytes()
     release = json.loads(base64.b64decode(json.loads(envelope)['body']))
     assert release['shellContractId'] == policy['contractId'], 'Build a matching empty-policy VPK'
@@ -226,7 +257,7 @@ def main():
             assert 480 * 1048576 < free_bytes() < 600 * 1048576
             tap('Check now')
         last = ''
-        for _ in range(30):
+        for _ in range(180 if args.large_payload else 30):
             adb('shell', 'uiautomator', 'dump', '/sdcard/delivery-ui.xml')
             last = adb('shell', 'cat', '/sdcard/delivery-ui.xml')
             if 'Pending: ' + release['releaseId'] in last and 'payload ' + str(release['payloadVersion']) in last:
@@ -239,15 +270,41 @@ def main():
         for label in ('Check now', 'Retry update access', 'Cancel download', 'Automatically check for updates'):
             assert label.lower() in last.lower(), label
         print('PASS: production reference delivery stages pending; shell controls visible; no activation')
-        if args.write_exhaustion or args.persistence_crash:
+        if args.large_payload:
+            # A second staging attempt needs another full reservation. This gate
+            # tests one near-limit download/activation, not a 6 GiB emulator's
+            # ability to hold two such update attempts plus the cached archive.
+            server.shutdown(); server.server_close()
+            old_main = adb('shell', 'pidof', APP).strip()
+            recovery = adb('shell', 'pidof', APP + ':paravoid_recovery').strip()
+            tap('Restart app…'); tap('Cancel')
+            assert adb('shell', 'pidof', APP).strip() == old_main
+            tap('Restart app…'); tap('Stop and restart')
+            deadline = time.monotonic() + 300
+            while time.monotonic() < deadline:
+                if 'generation=A;asset=payload-asset;java=payload-java-resource' in ui():
+                    break
+                time.sleep(.5)
+            else:
+                raise AssertionError('Large payload did not activate offline')
+            pressure_probe(APP)
+            assert adb('shell', 'pidof', APP).strip() != old_main
+            assert adb('shell', 'pidof', APP + ':paravoid_recovery').strip() == recovery
+            print('PASS: near-limit signed VPK downloads, verifies, activates via confirmed restart and streams all assets offline',
+                  args.serial, 'archiveBytes=' + str(archive.stat().st_size), flush=True)
+            return
+        if args.write_exhaustion or args.persistence_crash or args.persistence_delete or args.publication_fault:
             adb('shell', 'am', 'force-stop', APP)
             adb('shell', 'am', 'start', '-W', '-n', LAUNCHER)
             assert 'generation=A;asset=payload-asset;java=payload-java-resource' in ui()
             subprocess.run([sys.executable, str(ROOT / 'integration-v1/controls-shortcut.py'), '--serial', args.serial],
                            check=True, timeout=120)
-            if args.persistence_crash:
+            if args.publication_fault:
+                from publication_io import run
+                run(ROOT, args.serial, APP, archive, catalog, query, head, server, adb, ui, tap, args.publication_fault)
+            elif args.persistence_crash or args.persistence_delete:
                 from persistence_crash import run
-                run(ROOT, args.serial, APP, adb, ui, tap, retry_response)
+                run(ROOT, args.serial, APP, adb, ui, tap, retry_response, deletion_only=args.persistence_delete)
             else:
                 from write_pressure import run
                 run(ROOT, args.serial, APP, LAUNCHER, archive, server, adb, ui, tap,
@@ -269,10 +326,16 @@ def main():
         tap('1')
         tap('2')
         assert 'text="2"' in ui()
-        tap('Check now')
-        assert 'Update: READY' in ui(), 'explicit check must override automatic-download preference'
-        tap('Retry update access')
-        assert 'Update: READY' in ui()
+        for action in ('Check now', 'Retry update access'):
+            before = len(heads)
+            tap(action)
+            deadline = time.monotonic() + (300 if args.large_payload else 60)
+            while time.monotonic() < deadline:
+                if len(heads) > before and 'Update: READY' in ui():
+                    break
+                time.sleep(.25)
+            else:
+                raise AssertionError('Explicit action did not complete despite automatic-download preference: ' + action)
         print('PASS: explicit check/retry, persisted automatic/unmetered preferences, retention control')
         server.shutdown()
         server.server_close()
@@ -294,7 +357,7 @@ def main():
         else:
             adb('shell', 'am', 'force-stop', APP)
             adb('shell', 'am', 'start', '-W', '-n', LAUNCHER)
-        for _ in range(15):
+        for _ in range(90 if args.large_payload else 15):
             try:
                 probe = adb('shell', 'run-as', APP, 'cat', 'shared_prefs/probe.xml')
                 if 'generation=A;asset=payload-asset;java=payload-java-resource' in probe:
@@ -305,6 +368,8 @@ def main():
         else:
             raise AssertionError('Offline cold start did not execute A')
         print('PASS: offline cold start executes downloaded production payload A')
+        if args.large_payload:
+            pressure_probe(APP)
         if args.restart_controls:
             assert adb('shell', 'pidof', APP).strip() != old_main
             assert adb('shell', 'pidof', APP + ':paravoid_recovery').strip() == recovery
@@ -318,7 +383,9 @@ def main():
             adb('shell', 'run-as', APP, 'rm', '-f', filler)
         server.shutdown()
         server.server_close()
-        adb('reverse', '--remove', 'tcp:18765')
+        # Installation can fail before a reverse mapping exists; do not mask it.
+        subprocess.run(['adb', '-s', args.serial, 'reverse', '--remove', 'tcp:18765'],
+                       capture_output=True, timeout=45)
 
 if __name__ == '__main__':
     main()

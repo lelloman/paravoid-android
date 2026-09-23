@@ -3,9 +3,56 @@
 ## Retry/cancellation persistence
 
 `public_bootstrap.py --serial SERIAL --persistence-crash` exercises ten production
-write-boundary deaths on an installed empty/public shell. See
+write-boundary deaths and two retry-deletion deaths on an installed empty/public
+shell. `--persistence-delete` runs only the deletion subset. See
 [the persistence report](../PERSISTENCE-TESTS.md) for commands, both-API results
 and the distinction between host, installed process-death and power-loss evidence.
+
+## Release HTTPS and large valid payloads
+
+See [release HTTPS acceptance](HTTPS-RELEASE.md) for signed, non-debuggable APKs,
+real personalization, trusted/untrusted TLS, resume and credential replacement.
+See [near-limit payload acceptance](LARGE-PAYLOAD.md) for actual download,
+verification, offline activation and full AssetManager reads of a 1,000 MiB asset.
+
+## Distinct-release publication failures and late cancellation
+
+Build the ordinary empty/public A/p1 fixture. Run each of:
+
+```sh
+python3 delivery/device-tests/public_bootstrap.py --serial emulator-5586 --publication-fault io
+python3 delivery/device-tests/public_bootstrap.py --serial emulator-5586 --publication-fault death
+python3 delivery/device-tests/public_bootstrap.py --serial emulator-5586 --publication-fault cancel
+# Repeat on emulator-5584 with --server-port 18766.
+```
+
+The harness reissues the real Android components as signed p2, advances the signed
+head and lets production delivery/verifier/admission prepare it. A debugger pauses
+only the publishing thread immediately before the selection record write. A live
+p1 main and worker remain usable, while a real worker reservation is refused.
+
+- `io`: remove write permission on the exact fixture store directory, resume and
+  observe a real permission-denied IOException. Restore permissions in `finally`.
+- `death`: terminate the publication owner through JDWP without writer cleanup;
+  reopen controls through the real launcher shortcut in a fresh recovery process.
+- `cancel`: press the actual Cancel download control while publication is paused.
+  This is after the documented non-cancellable staging boundary: p2 may commit as
+  pending, but p1 remains active and the cancelled controller schedules no retry.
+
+IO/death leave selection unchanged; all three preserve the active archive hash,
+main/worker PIDs and the already-admitted security record. After ownership is
+released, the worker can reserve space again. IO/death then explicitly retry p2.
+All cases finish with confirmed offline restart and p2 startup health, never
+rollback to an earlier security floor. This is a distinct signed release with the
+same application components, not a source-code A-to-B workflow test or two
+simultaneous HTTP transfers.
+
+Passed all six cases on API 30/36.1 x86_64, 2026-09-23. Logs:
+`/tmp/paravoid-publication-{io,death,cancel}{30,36}.log`. Production code at
+`d7f7072`; no production fault switch or replacement locking implementation.
+This does not exhaust all possible scheduling orders, kernel-write interruption
+or physical power-loss behavior. Earlier host publication and installed ENOSPC
+cases below remain complementary evidence.
 
 ## Mid-write disk exhaustion
 

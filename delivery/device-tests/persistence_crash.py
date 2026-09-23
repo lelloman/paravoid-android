@@ -7,7 +7,7 @@ import tempfile
 import time
 
 
-def run(root, serial, app, adb, ui, tap, retry_response):
+def run(root, serial, app, adb, ui, tap, retry_response, deletion_only=False):
     store = 'no_backup/paravoid-v1/'
     preferences = 'no_backup/paravoid-update-preferences'
 
@@ -42,12 +42,15 @@ def run(root, serial, app, adb, ui, tap, retry_response):
     with tempfile.TemporaryDirectory(prefix='paravoid-persistence-device-') as tmp:
         subprocess.run(['javac', '--add-modules', 'jdk.jdi', '-d', tmp,
                         str(root / 'delivery/device-tests/PersistenceDeathGate.java')], check=True, timeout=45)
-        for kind in ('retry', 'cancel'):
-            name = 'PendingRetry' if kind == 'retry' else 'CancellationSignal'
+        for kind in (('delete',) if deletion_only else ('retry', 'cancel', 'delete')):
+            name = {'retry': 'PendingRetry', 'cancel': 'CancellationSignal', 'delete': 'DeliveryController'}[kind]
             source = root / ('delivery/src/com/lelloman/paravoidandroid/delivery/' + name + '.java')
             markers = [('created', 'p.store(out,' if kind == 'retry' else 'out.write(UUID'),
                        ('written', 'out.getFD().sync();'), ('synced', 'Files.move(tmp, path,'),
                        ('renamed', 'directory.force(true);'), ('directory-synced', 'Files.deleteIfExists(tmp);')]
+            if kind == 'delete':
+                markers = [('before-unlink', 'if (Files.deleteIfExists(retryFile()))'),
+                           ('after-unlink', 'directory.force(true);')]
             for index, (boundary, needle) in enumerate(markers):
                 # A real 503 creates a one-hour retry and loads the target classes.
                 tap('Check now'); await_status('WAITING_TO_RETRY')
@@ -84,14 +87,20 @@ def run(root, serial, app, adb, ui, tap, retry_response):
                             assert saved_retry is None, (boundary, saved_retry)
                         else:
                             assert saved_retry and b'retries=1' in saved_retry and b'explicit=true' in saved_retry
-                    else:
+                    elif kind == 'cancel':
                         assert saved_retry == previous_retry, 'Process must die before retry cleanup'
                         assert (saved_cancel == previous_cancel) == (index < 3)
+                    else:
+                        assert saved_cancel != previous_cancel, 'Deletion must follow cancellation publication'
+                        assert saved_retry == (previous_retry if index == 0 else None)
+                    remnants = adb('shell', 'run-as', app, 'find', 'no_backup', '-maxdepth', '1',
+                                   '-name', 'paravoid-update-preferences*.tmp').splitlines()
+                    assert len(remnants) <= 2, 'Retry/cancel deaths accumulated temporary records'
                     assert data(store + 'security') == security and data(store + 'selection') == selection
                     assert hashlib.sha256(data(active[0])).digest() == digest
                     assert adb('shell', 'pidof', app).strip() == main_pid
                     open_controls()
-                    if kind == 'cancel' and index >= 3:
+                    if (kind == 'cancel' and index >= 3) or (kind == 'delete' and index == 0):
                         await_status('CANCELLED')
                         assert data(preferences + '.retry', True) is None, 'Published cancellation revived old retry'
                     elif saved_retry is not None:
@@ -104,4 +113,6 @@ def run(root, serial, app, adb, ui, tap, retry_response):
         retry_response.clear()
         tap('Check now'); await_status('READY')
         assert adb('shell', 'pidof', app).strip() == main_pid
+        assert not adb('shell', 'run-as', app, 'find', 'no_backup', '-maxdepth', '1',
+                       '-name', 'paravoid-update-preferences*.tmp').strip()
         print('PASS explicit update succeeds after persistence crash matrix', serial, flush=True)
