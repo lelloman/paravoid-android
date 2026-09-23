@@ -72,12 +72,8 @@ abstract class PackageResourceShellTask extends DefaultTask {
         def originalSignature = new ApkVerifier.Builder(input).build().verify()
         if (!originalSignature.verified) throw new GradleException('Input APK must have a valid signature.')
         File payload = payloadResources.get().asFile
-        if (payload.length() <= 0 || payload.length() > 256L * 1024 * 1024)
-            throw new GradleException('Embedded resource archive exceeds the current 256 MiB profile.')
-        if (javaResourceArchive.get().asFile.length() > 256L * 1024 * 1024)
-            throw new GradleException('Java-resource archive exceeds 256 MiB.')
-        if (nativeResourceArchive.get().asFile.length() > 256L * 1024 * 1024)
-            throw new GradleException('Embedded native archive exceeds the current 256 MiB profile.')
+        validateArchiveSizes(completePolicy.present, payload.length(),
+            javaResourceArchive.get().asFile.length(), nativeResourceArchive.get().asFile.length())
         File unsigned = new File(temporaryDir, 'unsigned.apk')
         new ZipFile(input).withCloseable { original ->
             new ZipFile(shellResources.get().asFile).withCloseable { pinned ->
@@ -111,6 +107,18 @@ abstract class PackageResourceShellTask extends DefaultTask {
         File output = shellApk.get().asFile
         output.parentFile.mkdirs()
         Files.copy(signed.toPath(), output.toPath(), StandardCopyOption.REPLACE_EXISTING)
+    }
+
+    static void validateArchiveSizes(boolean complete, long resources, long javaResources, long nativeResources) {
+        // Complete mode streams a separately verified VPK, or no bootstrap at all.
+        // Only legacy mode embeds these archives as byte arrays with a 256 MiB cap.
+        if (complete) return
+        if (resources <= 0 || resources > 256L * 1024 * 1024)
+            throw new GradleException('Embedded resource archive exceeds the current 256 MiB profile.')
+        if (javaResources > 256L * 1024 * 1024)
+            throw new GradleException('Java-resource archive exceeds 256 MiB.')
+        if (nativeResources > 256L * 1024 * 1024)
+            throw new GradleException('Embedded native archive exceeds the current 256 MiB profile.')
     }
 
     static void writeShell(File output, ZipFile original, ZipFile pinned, byte[] payload, byte[] javaResources = null, Set<String> javaPaths = [], byte[] nativeResources = null, byte[] contract = null, byte[] policy = null, File vpk = null) {

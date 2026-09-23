@@ -11,6 +11,17 @@ import static org.junit.Assert.*
 class ResourceShellTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder()
 
+    @Test void legacySizeLimitsDoNotOverrideCompleteVpkValidation() {
+        long cap = 256L * 1024 * 1024
+        PackageResourceShellTask.validateArchiveSizes(false, cap, cap, cap)
+        [[0L, cap, cap], [cap + 1, cap, cap], [cap, cap + 1, cap], [cap, cap, cap + 1]].each { sizes ->
+            assertThrows(org.gradle.api.GradleException) {
+                PackageResourceShellTask.validateArchiveSizes(false, sizes[0], sizes[1], sizes[2])
+            }
+        }
+        PackageResourceShellTask.validateArchiveSizes(true, 1000L * 1024 * 1024, cap + 1, cap + 1)
+    }
+
     @Test void assemblesPinnedShellWithoutInstalledFallbackAndBindsPayloadHash() {
         File original = archive('original.apk', ['AndroidManifest.xml':'manifest', 'resources.arsc':'full',
             'res/layout/panel.xml':'movable', 'res/drawable/pinned.xml':'pinned', 'assets/content':'asset',
