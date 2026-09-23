@@ -21,6 +21,12 @@ public final class PersistenceDeathTest {
             if (args[0].equals("write")) {
                 if (args[1].equals("retry")) new PendingRetry(PARTITION, 1234, 3, true, signal.read()).write(retry);
                 else signal.cancel();
+            } else if (args[0].equals("delete")) {
+                try (DeliveryControllerTest.Control control = new DeliveryControllerTest.Control(false, prefs)) {
+                    control.controller.foreground(true);
+                    control.await(DeliveryController.Activity.CANCELLED);
+                    control.barrier();
+                }
             } else {
                 PendingRetry value = PendingRetry.read(retry);
                 System.out.println(signal.read() + "|" + (value == null ? "absent" : value.retries + ":" + value.cancellationEpoch));
@@ -61,6 +67,23 @@ public final class PersistenceDeathTest {
                     }
                 }
             }
+            for (int boundary = 0; boundary < 2; boundary++) {
+                Path dir = Files.createDirectory(root.resolve("delete-" + boundary));
+                Path prefs = dir.resolve("preferences"), retry = dir.resolve("preferences.retry");
+                CancellationSignal signal = new CancellationSignal(prefs);
+                signal.cancel();
+                new PendingRetry(PARTITION, 1234, 2, true, signal.read()).write(retry);
+                signal.cancel(); // Durable cancellation must invalidate any surviving retry.
+                String before = readFresh(prefs);
+                killAt(DeliveryController.class.getName(), prefs, "delete retry", boundary == 0
+                    ? "if (Files.deleteIfExists(retryFile()))" : "directory.force(true);");
+                String after = readFresh(prefs);
+                if (boundary == 0) {
+                    check(before.equals(after), "Retry disappeared before deletion");
+                    checkControllerCancellation(prefs);
+                } else check(after.equals(signal.read() + "|absent"), "Deleted retry revived after process death");
+                System.out.println("PASS cancelled retry deletion death " + (boundary == 0 ? "before unlink" : "after unlink before directory sync"));
+            }
         } finally {
             try (java.util.stream.Stream<Path> paths = Files.walk(root)) {
                 for (Path path : (Iterable<Path>) paths.sorted(Comparator.reverseOrder())::iterator) Files.delete(path);
@@ -72,13 +95,17 @@ public final class PersistenceDeathTest {
         String type = PendingRetry.class.getPackage().getName() + "." + (kind.equals("retry") ? "PendingRetry" : "CancellationSignal");
         String[] markers = {kind.equals("retry") ? "p.store(out," : "out.write(UUID", "out.getFD().sync();",
             "Files.move(tmp, path,", "directory.force(true);", "Files.deleteIfExists(tmp);"};
+        killAt(type, prefs, "write " + kind, markers[boundary]);
+    }
+
+    private static void killAt(String type, Path prefs, String action, String marker) throws Exception {
         List<String> source = Files.readAllLines(Paths.get("src", type.replace('.', '/') + ".java"));
         List<Integer> lines = new ArrayList<>();
-        for (int i = 0; i < source.size(); i++) if (source.get(i).contains(markers[boundary])) lines.add(i + 1);
+        for (int i = 0; i < source.size(); i++) if (source.get(i).contains(marker)) lines.add(i + 1);
         check(lines.size() == 1, "Update debugger marker for " + type);
         LaunchingConnector connector = Bootstrap.virtualMachineManager().defaultConnector();
         Map<String, Connector.Argument> options = connector.defaultArguments();
-        options.get("main").setValue(PersistenceDeathTest.class.getName() + " write " + kind + " " + prefs);
+        options.get("main").setValue(PersistenceDeathTest.class.getName() + " " + action + " " + prefs);
         options.get("options").setValue("-cp \"" + System.getProperty("java.class.path") + "\"");
         VirtualMachine vm = connector.launch(options);
         Process child = vm.process();
@@ -108,7 +135,7 @@ public final class PersistenceDeathTest {
                         return;
                     }
                     if (event instanceof VMDeathEvent || event instanceof VMDisconnectEvent)
-                        throw new AssertionError("Writer exited before boundary: " + type + " " + BOUNDARIES[boundary]);
+                        throw new AssertionError("Writer exited before boundary: " + type + " " + marker);
                 }
                 events.resume();
             }

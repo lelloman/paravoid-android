@@ -14,9 +14,10 @@ public final class DeliveryControllerTest {
         Runnable meteredHook;
         volatile boolean metered = true;
         Control() throws Exception { this(false); }
-        Control(boolean apkKey) throws Exception {
+        Control(boolean apkKey) throws Exception { this(apkKey, null); }
+        Control(boolean apkKey, Path persistedPreferences) throws Exception {
             setup = new DeliveryClientTest.Setup(apkKey);
-            preferences = setup.f.dir.resolve("preferences");
+            preferences = persistedPreferences == null ? setup.f.dir.resolve("preferences") : persistedPreferences;
             worker.setRemoveOnCancelPolicy(true); create();
             await(DeliveryController.Activity.IDLE);
         }

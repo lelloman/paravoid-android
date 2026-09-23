@@ -6,8 +6,8 @@ sets source-line debugger breakpoints and forcibly terminates that process while
 suspended. It does not throw a synthetic exception or allow writer `finally`
 cleanup to run. A separate fresh JVM reads each surviving record.
 
-The matrix contains 20 cases: retry/cancellation × first write/replacement ×
-five boundaries. Source formatting separates existing statements for debugger
+The write matrix contains 20 cases: retry/cancellation × first write/replacement ×
+five boundaries, plus two retry-deletion cases. Source formatting separates existing statements for debugger
 precision; no production fault hook or persistence behavior was added.
 
 | Stop before | State reached | Expected authoritative record after process death |
@@ -44,6 +44,19 @@ Passed 2026-09-23: all 20 cases, the complete delivery Java/Python suite, and An
   The test does not claim an uncommitted cancellation was acknowledged or durable.
 - Interrupted temporary files can remain. Readers ignore them; this test does
   not implement or prove bounded long-term reclamation of those files.
+
+## Retry deletion
+
+The host harness also kills a real production controller before unlinking a stale
+retry and after unlinking it but before forcing the parent directory. Cancellation
+has already been durably published. A fresh reader sees respectively the old,
+invalidated retry or no retry; in the first case a fresh controller sends no HTTP,
+removes the stale record and still accepts a new explicit check. The deletion is
+the production `clearRetry` path, not a test-side substitute.
+
+Passed 2026-09-23 along with all 20 write cases and the full delivery Java/Python
+suite: `/tmp/paravoid-retry-deletion.log`. These two cases are host process-death
+tests, not installed deletion or physical power-loss evidence.
 
 ## Installed production-controller matrix
 
