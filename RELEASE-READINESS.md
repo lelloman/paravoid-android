@@ -14,9 +14,9 @@ Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 | HTTPS/auth | Signed release HTTPS download, personalized install, revoke/replace, interrupted transfer and fail-closed grants | Passed on API 30/36.1; local TLS and scope in delivery/device-tests/HTTPS-RELEASE.md |
 | Security/signing | Signing-block ID collision audit and independent protocol/security review | Scoped internal audit and AOSP ID survey recorded in delivery/SECURITY-REVIEW-2026-09-23.md; allocation-amplification fix tested; independent reviewer/private-ID approval still needed |
 | Real app | Final-runtime Pezzottify fixed-shell A-to-B, data/workflows, incompatible rejection and forward repair | Open; downstream edits require coordinated scope |
-| Physical device | Signed release ARM64 core matrix | No device connected; device authorization needed |
+| Physical device | Signed release ARM64 core matrix | Guarded HTTPS runner and nine host safety/routing tests prepared; no physical hardware connected/executed; see delivery/device-tests/PHYSICAL-ARM64.md |
 | Packaging/regression | Large valid payload execution, publication failures, optional integrations and final matrix | Near-limit VPK runs on both APIs; final-rename IO and 159-test host bundle pass; see delivery/device-tests/LARGE-PAYLOAD.md and release-tests/README.md |
-| Distribution | Version/license/repository, production metadata/tag/release notes, repeatable validation | Local staging/standalone consumer pass; user choices and remote setup pending |
+| Distribution | Version/license/repository, production metadata/tag/release notes, repeatable validation | Default and alternate local staging/consumer pass; guarded 23-artifact candidate audit prepared; owner choices, repository-specific setup and publication remain pending; see release-tests/CANDIDATE.md |
 
 ## Scope and completion rules
 

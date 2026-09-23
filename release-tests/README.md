@@ -63,3 +63,12 @@ This supplements pre-publication validation-failure tests; it does not promise a
 transaction across every Gradle report/metadata output. Consume build artifacts
 only after the full task succeeds and validate their signed identities before
 distribution. Independent security/physical/real-app gates remain separate.
+
+The five-track integration rerun at production/tooling `1ef1ed4` passed the entire
+updated `regression.sh`: 161 JUnit tests (88 plugin, 10 Hilt, 9 Work, 33 contract,
+21 runtime), lifecycle/delivery host suites, Android source compilation, nine
+physical-runner safety/controls-routing tests and eight local-candidate tests.
+Log: `/tmp/paravoid-five-tracks-final-regression.log`. This includes the signing
+entry bound and controls launcher implementation, but not physical execution or
+authenticated Pezzottify workflows. Later documentation-only commits do not alter
+these tested surfaces.
