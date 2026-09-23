@@ -3,6 +3,7 @@ package com.lelloman.paravoidandroid.delivery;
 import java.io.*;
 import java.nio.file.*;
 import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.util.Properties;
 
 /** Non-security scheduling state, protected by the controller's attempt lock. */
@@ -41,7 +42,19 @@ final class PendingRetry {
         p.setProperty("partition", partition); p.setProperty("due", Long.toString(dueSeconds));
         p.setProperty("retries", Integer.toString(retries)); p.setProperty("explicit", Boolean.toString(explicit));
         p.setProperty("cancellationEpoch", cancellationEpoch);
-        Path tmp = Files.createTempFile(path.getParent(), "retry", ".tmp");
+        writeRecord(path, p);
+    }
+    // Serialize same-VM and cross-process writers before reusing a bounded slot.
+    // The permanent lock file must never be unlinked, including on recovery.
+    private static synchronized void writeRecord(Path path, Properties p) throws IOException {
+        try (FileChannel channel = FileChannel.open(path.resolveSibling(path.getFileName() + ".write-lock"),
+                StandardOpenOption.CREATE, StandardOpenOption.WRITE); FileLock lock = channel.lock()) {
+            if (!lock.isValid()) throw new IOException("Retry writer lock unavailable");
+            writeLocked(path, p);
+        }
+    }
+    private static void writeLocked(Path path, Properties p) throws IOException {
+        Path tmp = path.resolveSibling(path.getFileName() + ".tmp");
         try {
             try (FileOutputStream out = new FileOutputStream(tmp.toFile())) {
                 p.store(out, "Delivery retry schedule");

@@ -58,11 +58,22 @@ public final class PersistenceDeathTest {
                             check(!PendingRetry.read(retry).cancellationEpoch.equals(signal.read()), "Stale retry revived");
                             checkControllerCancellation(prefs);
                         }
+                        // A second crash at the same point must reuse, not accumulate,
+                        // the abandoned per-record slot.
+                        killWriter(kind, prefs, boundary);
+                        try (java.util.stream.Stream<Path> files = Files.list(dir)) {
+                            check(files.filter(p -> p.getFileName().toString().endsWith(".tmp")).count() <= 1,
+                                "Repeated process death accumulated temporary records");
+                        }
                         // Fresh normal writers must recover without treating abandoned tmp files
                         // as authority. A subsequent valid retry binds to the latest cancellation.
                         signal.cancel();
                         new PendingRetry(PARTITION, 1234, 1, true, signal.read()).write(retry);
                         check(readFresh(prefs).equals(signal.read() + "|1:" + signal.read()), "Recovery failed");
+                        try (java.util.stream.Stream<Path> files = Files.list(dir)) {
+                            check(files.noneMatch(p -> p.getFileName().toString().endsWith(".tmp")),
+                                "Recovered writer left abandoned temporary records");
+                        }
                         System.out.println("PASS " + kind + " " + (existing ? "replacement" : "first-write") + " death at " + BOUNDARIES[boundary]);
                     }
                 }
@@ -84,9 +95,44 @@ public final class PersistenceDeathTest {
                 } else check(after.equals(signal.read() + "|absent"), "Deleted retry revived after process death");
                 System.out.println("PASS cancelled retry deletion death " + (boundary == 0 ? "before unlink" : "after unlink before directory sync"));
             }
+            concurrentWriters(Files.createDirectory(root.resolve("concurrent")));
         } finally {
             try (java.util.stream.Stream<Path> paths = Files.walk(root)) {
                 for (Path path : (Iterable<Path>) paths.sorted(Comparator.reverseOrder())::iterator) Files.delete(path);
+            }
+        }
+    }
+
+    private static void concurrentWriters(Path dir) throws Exception {
+        Path prefs = dir.resolve("preferences"), retry = dir.resolve("preferences.retry");
+        for (String kind : new String[] {"retry", "cancel"}) {
+            List<Process> writers = new ArrayList<>();
+            java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+            try {
+                for (int i = 0; i < 8; i++) writers.add(new ProcessBuilder(
+                    System.getProperty("java.home") + "/bin/java", "-cp", System.getProperty("java.class.path"),
+                    PersistenceDeathTest.class.getName(), "write", kind, prefs.toString()).inheritIO().start());
+                List<java.util.concurrent.Future<?>> threads = new ArrayList<>();
+                for (int i = 0; i < 2; i++) threads.add(pool.submit(() -> {
+                    try {
+                        for (int j = 0; j < 25; j++) {
+                            if (kind.equals("retry")) new PendingRetry(PARTITION, 1234, 3, true).write(retry);
+                            else new CancellationSignal(prefs).cancel();
+                        }
+                    } catch (Exception failure) { throw new RuntimeException(failure); }
+                }));
+                for (Process writer : writers)
+                    check(writer.waitFor(15, TimeUnit.SECONDS) && writer.exitValue() == 0, "Concurrent process writer failed");
+                for (java.util.concurrent.Future<?> thread : threads) thread.get(15, TimeUnit.SECONDS);
+                check(PendingRetry.read(retry).retries == 3, "Concurrent retry not readable");
+                if (kind.equals("cancel")) check(!new CancellationSignal(prefs).read().isEmpty(), "Cancellation missing");
+                try (java.util.stream.Stream<Path> files = Files.list(dir)) {
+                    check(files.noneMatch(p -> p.getFileName().toString().endsWith(".tmp")), "Concurrent writers left temporary records");
+                }
+                System.out.println("PASS " + kind + " concurrent writers: two local threads and eight processes");
+            } finally {
+                pool.shutdownNow();
+                for (Process writer : writers) { writer.destroyForcibly(); writer.waitFor(10, TimeUnit.SECONDS); }
             }
         }
     }

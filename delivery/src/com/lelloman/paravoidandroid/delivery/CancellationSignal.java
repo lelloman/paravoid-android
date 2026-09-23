@@ -4,6 +4,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.util.UUID;
 
 /** Shared non-security cancellation epoch. Atomic replacement; never deletes lock files. */
@@ -23,7 +24,19 @@ final class CancellationSignal {
     }
     void cancel() throws IOException {
         Files.createDirectories(path.getParent());
-        Path tmp = Files.createTempFile(path.getParent(), "cancel", ".tmp");
+        cancelRecord(path);
+    }
+    // Same-VM serialization prevents a competing descriptor close from releasing
+    // a POSIX process lock. All cross-process writers use this permanent lock.
+    private static synchronized void cancelRecord(Path path) throws IOException {
+        try (FileChannel channel = FileChannel.open(path.resolveSibling(path.getFileName() + ".write-lock"),
+                StandardOpenOption.CREATE, StandardOpenOption.WRITE); FileLock lock = channel.lock()) {
+            if (!lock.isValid()) throw new IOException("Cancellation writer lock unavailable");
+            cancelLocked(path);
+        }
+    }
+    private static void cancelLocked(Path path) throws IOException {
+        Path tmp = path.resolveSibling(path.getFileName() + ".tmp");
         try {
             try (FileOutputStream out = new FileOutputStream(tmp.toFile())) {
                 out.write(UUID.randomUUID().toString().getBytes(StandardCharsets.US_ASCII));

@@ -42,8 +42,12 @@ Passed 2026-09-23: all 20 cases, the complete delivery Java/Python suite, and An
   simultaneous cancel/write interleavings are not exhausted by this matrix.
 - A cancellation interrupted before publication may leave its previous epoch.
   The test does not claim an uncommitted cancellation was acknowledged or durable.
-- Interrupted temporary files can remain. Readers ignore them; this test does
-  not implement or prove bounded long-term reclamation of those files.
+- Retry/cancellation writers now reuse one temporary slot per record under a
+  permanent cross-process writer lock and same-VM serialization. A process death
+  may leave that slot, but repeated deaths cannot add slots; the next successful
+  write removes it. Readers never treat it as authority. Lock files are not
+  removed. This does not sweep random temporary files left by older builds or
+  cover other record types (preferences/credential markers).
 
 ## Retry deletion
 
@@ -57,6 +61,17 @@ the production `clearRetry` path, not a test-side substitute.
 Passed 2026-09-23 along with all 20 write cases and the full delivery Java/Python
 suite: `/tmp/paravoid-retry-deletion.log`. These two cases are host process-death
 tests, not installed deletion or physical power-loss evidence.
+
+## Bounded writer slots
+
+The host matrix repeats every death before recovery, asserts at most one slot,
+then asserts no temporary records remain after a successful retry/cancel write.
+An additional contention case runs two local writer threads (25 writes each)
+alongside eight child-process writers, separately for retry and cancellation.
+Every writer must succeed; final records must parse and no slot may remain.
+This exercises the same locks/atomic publication used on Android, not a simulated
+filesystem. The full host delivery suite passed (`/tmp/paravoid-bounded-records.log`).
+Installed reruns and deletion extensions are recorded separately when complete.
 
 ## Installed production-controller matrix
 
