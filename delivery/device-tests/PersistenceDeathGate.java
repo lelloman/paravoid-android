@@ -21,6 +21,7 @@ public final class PersistenceDeathGate {
             if (locations.isEmpty()) throw new AssertionError("Missing production line information");
             for (Location location : locations) {
                 BreakpointRequest stop = vm.eventRequestManager().createBreakpointRequest(location);
+                if (args.length > 4) stop.addCountFilter(Integer.parseInt(args[4]));
                 stop.setSuspendPolicy(EventRequest.SUSPEND_ALL); stop.enable();
             }
             Files.writeString(markers.resolve("ready"), "armed\n");

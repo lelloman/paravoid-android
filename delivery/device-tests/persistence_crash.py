@@ -7,7 +7,8 @@ import tempfile
 import time
 
 
-def run(root, serial, app, adb, ui, tap, retry_response, deletion_only=False):
+def run(root, serial, app, adb, ui, tap, retry_response, deletion_only=False,
+        replacement_retry=False, first_cancel_boundary=None):
     store = 'no_backup/paravoid-v1/'
     preferences = 'no_backup/paravoid-update-preferences'
 
@@ -42,7 +43,10 @@ def run(root, serial, app, adb, ui, tap, retry_response, deletion_only=False):
     with tempfile.TemporaryDirectory(prefix='paravoid-persistence-device-') as tmp:
         subprocess.run(['javac', '--add-modules', 'jdk.jdi', '-d', tmp,
                         str(root / 'delivery/device-tests/PersistenceDeathGate.java')], check=True, timeout=45)
-        for kind in (('delete',) if deletion_only else ('retry', 'cancel', 'delete')):
+        kinds = ('delete',) if deletion_only else ('retry', 'cancel', 'delete')
+        if replacement_retry: kinds = ('retry',)
+        if first_cancel_boundary is not None: kinds = ('cancel',)
+        for kind in kinds:
             name = {'retry': 'PendingRetry', 'cancel': 'CancellationSignal', 'delete': 'DeliveryController'}[kind]
             source = root / ('delivery/src/com/lelloman/paravoidandroid/delivery/' + name + '.java')
             markers = [('created', 'p.store(out,' if kind == 'retry' else 'out.write(UUID'),
@@ -52,14 +56,19 @@ def run(root, serial, app, adb, ui, tap, retry_response, deletion_only=False):
                 markers = [('before-unlink', 'if (Files.deleteIfExists(retryFile()))'),
                            ('after-unlink', 'directory.force(true);')]
             for index, (boundary, needle) in enumerate(markers):
+                if first_cancel_boundary is not None and boundary != first_cancel_boundary:
+                    continue
                 # A real 503 creates a one-hour retry and loads the target classes.
-                tap('Check now'); await_status('WAITING_TO_RETRY')
+                if not replacement_retry:
+                    tap('Check now'); await_status('WAITING_TO_RETRY')
                 if kind == 'retry':
                     # An in-flight attempt owns the controller until cancelled;
                     # Check now intentionally does not supersede that owner.
                     tap('Cancel download'); await_status('CANCELLED')
                 previous_retry = data(preferences + '.retry', kind == 'retry')
                 previous_cancel = data(preferences + '.cancel', True)
+                if first_cancel_boundary is not None:
+                    assert previous_cancel is None, 'First cancellation requires a fresh fixture installation'
                 owner = adb('shell', 'pidof', app + ':paravoid_recovery').strip()
                 assert owner.isdigit() and owner != main_pid
                 lines = [i for i, line in enumerate(source.read_text().splitlines(), 1) if needle in line]
@@ -69,21 +78,31 @@ def run(root, serial, app, adb, ui, tap, retry_response, deletion_only=False):
                 gate = None
                 try:
                     with (case / 'log').open('w') as log:
-                        gate = subprocess.Popen(['java', '--add-modules', 'jdk.jdi', '-cp', tmp,
-                            'PersistenceDeathGate', port, str(case), name, str(lines[0])], stdout=log, stderr=log)
+                        command = ['java', '--add-modules', 'jdk.jdi', '-cp', tmp,
+                            'PersistenceDeathGate', port, str(case), name, str(lines[0])]
+                        if replacement_retry: command.append('2')
+                        gate = subprocess.Popen(command, stdout=log, stderr=log)
                         deadline = time.monotonic() + 20
                         while not (case / 'ready').exists():
                             assert gate.poll() is None and time.monotonic() < deadline, (case / 'log').read_text()
                             time.sleep(.1)
+                        # The second write is real scheduled-retry consumption, not
+                        # a mutated record or an explicit check that clears the old one.
+                        retry_response.delay_seconds = 2 if replacement_retry else 3600
                         tap('Check now' if kind == 'retry' else 'Cancel download')
                         assert gate.wait(timeout=30) == 0, (case / 'log').read_text()
                         assert (case / 'reached').exists()
+                        retry_response.delay_seconds = 3600
                     saved_retry = data(preferences + '.retry', True)
                     saved_cancel = data(preferences + '.cancel', True)
                     if kind == 'retry':
                         # Explicit Check now clears the old schedule before making HTTP.
                         assert saved_cancel == previous_cancel
-                        if index < 3:
+                        if replacement_retry:
+                            count = 1 if index < 3 else 2
+                            assert saved_retry and ('retries=' + str(count)).encode() in saved_retry
+                            assert b'explicit=true' in saved_retry
+                        elif index < 3:
                             assert saved_retry is None, (boundary, saved_retry)
                         else:
                             assert saved_retry and b'retries=1' in saved_retry and b'explicit=true' in saved_retry
@@ -105,11 +124,13 @@ def run(root, serial, app, adb, ui, tap, retry_response, deletion_only=False):
                         assert data(preferences + '.retry', True) is None, 'Published cancellation revived old retry'
                     elif saved_retry is not None:
                         await_status('WAITING_TO_RETRY')
-                    print('PASS installed ' + kind + ' death at ' + boundary + ': active process/data/security preserved; cold controller recovers', serial, flush=True)
+                    variant = ' replacement' if replacement_retry else ' first-publication' if first_cancel_boundary else ''
+                    print('PASS installed ' + kind + variant + ' death at ' + boundary + ': active process/data/security preserved; cold controller recovers', serial, flush=True)
                 finally:
                     if gate is not None and gate.poll() is None:
                         gate.terminate(); gate.wait(timeout=10)
                     adb('forward', '--remove', 'tcp:' + port)
+        tap('Cancel download'); await_status('CANCELLED')
         retry_response.clear()
         tap('Check now'); await_status('READY')
         assert adb('shell', 'pidof', app).strip() == main_pid

@@ -7,6 +7,8 @@ write-boundary deaths and two retry-deletion deaths on an installed empty/public
 shell. `--persistence-delete` runs only the deletion subset. See
 [the persistence report](../PERSISTENCE-TESTS.md) for commands, both-API results
 and the distinction between host, installed process-death and power-loss evidence.
+`persistence-matrix.sh SERIAL [PORT]` adds natural retry replacement and five
+independent first-cancellation cases, for all 20 write combinations plus deletion.
 
 ## Release HTTPS and large valid payloads
 

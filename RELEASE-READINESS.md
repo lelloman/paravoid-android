@@ -6,7 +6,7 @@ Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 
 | Gate | Remaining acceptance | Status |
 | --- | --- | --- |
-| Persistence | Retry deletion; temporary-file reclamation; remaining write combinations and explicit durability limits | Host 20 cases and installed 10/API on API 30/36.1 pass; see delivery/PERSISTENCE-TESTS.md |
+| Persistence | First/replacement retry/cancel writes, deletion, bounded temporary slots and documented durability limits | Host matrix and 22 installed boundaries/API pass on API 30/36.1; see delivery/PERSISTENCE-TESTS.md |
 | Startup | Supported factory construction and provider/Activity/service startup; later crashes excluded | Seven installed cases/API on API 30/36.1 pass; explicit scope/handler limits in integration-v1/STARTUP-FAILURES.md |
 | Recovery races | Installed stale identity, pending repair, corruption and live lease refusal | Passed on API 30/36.1; pending-repair lifecycle gap fixed; see integration-v1/STARTUP-FAILURES.md |
 | Controls access | Document and test fallback when dynamic shortcut unavailable | Product/implementation decision open |
@@ -37,6 +37,13 @@ Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 Artifact repository, license and release version; physical ARM64 test device;
 independent reviewer. Prepare local-only publication validation pending those
 choices. Do not claim these gates complete if no answer is available.
+
+Five gate groups remain open: controls fallback (extra launcher entry versus an
+app-provided entry, then implementation/test); coordinated final Pezzottify
+workflows; physical ARM64 acceptance; independent security/signing-block review;
+and actual publication configuration/version/license/repository. The selected
+local engineering/validation gates above are complete within their documented
+scope. This is not a claim that those five release gates have been waived.
 
 ## Focused evidence added during release work
 

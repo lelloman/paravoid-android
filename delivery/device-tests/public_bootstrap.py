@@ -43,6 +43,10 @@ def main():
                         help='Kill installed recovery at retry/cancellation write boundaries')
     parser.add_argument('--persistence-delete', action='store_true',
                         help='Run only the two retry-deletion process-death cases')
+    parser.add_argument('--persistence-retry-replacement', action='store_true',
+                        help='Kill natural scheduled-retry replacement at all five write boundaries')
+    parser.add_argument('--persistence-first-cancel', choices=('created', 'written', 'synced', 'renamed', 'directory-synced'),
+                        help='Kill the first cancellation publication in a fresh fixture installation')
     parser.add_argument('--write-exhaustion', action='store_true',
                         help='Require a padded VPK and inject real ENOSPC during staging with an active payload')
     parser.add_argument('--write-phase', choices=('archive', 'components'), default='archive',
@@ -61,7 +65,8 @@ def main():
     if not re.fullmatch(r'emulator-\d+', args.serial):
         parser.error('a dedicated disposable emulator serial is required')
     if sum((args.network_transitions, args.storage_pressure, args.write_exhaustion, args.persistence_crash,
-            args.persistence_delete, args.large_payload, args.publication_fault is not None)) > 1:
+            args.persistence_delete, args.persistence_retry_replacement, args.persistence_first_cancel is not None,
+            args.large_payload, args.publication_fault is not None)) > 1:
         parser.error('network, storage, persistence and large-payload cases are separate runs')
     if not 1 <= args.server_port <= 65535:
         parser.error('invalid host port')
@@ -161,7 +166,7 @@ def main():
             if '/head?' in self.path:
                 heads.append(True)
                 if retry_response.is_set():
-                    self.send_response(503); self.send_header('Retry-After', '3600')
+                    self.send_response(503); self.send_header('Retry-After', str(getattr(retry_response, 'delay_seconds', 3600)))
                     self.send_header('Content-Length', '0'); self.end_headers(); return
             else:
                 archives.append(True)
@@ -293,7 +298,8 @@ def main():
             print('PASS: near-limit signed VPK downloads, verifies, activates via confirmed restart and streams all assets offline',
                   args.serial, 'archiveBytes=' + str(archive.stat().st_size), flush=True)
             return
-        if args.write_exhaustion or args.persistence_crash or args.persistence_delete or args.publication_fault:
+        persistence = args.persistence_crash or args.persistence_delete or args.persistence_retry_replacement or args.persistence_first_cancel
+        if args.write_exhaustion or persistence or args.publication_fault:
             adb('shell', 'am', 'force-stop', APP)
             adb('shell', 'am', 'start', '-W', '-n', LAUNCHER)
             assert 'generation=A;asset=payload-asset;java=payload-java-resource' in ui()
@@ -302,9 +308,10 @@ def main():
             if args.publication_fault:
                 from publication_io import run
                 run(ROOT, args.serial, APP, archive, catalog, query, head, server, adb, ui, tap, args.publication_fault)
-            elif args.persistence_crash or args.persistence_delete:
+            elif persistence:
                 from persistence_crash import run
-                run(ROOT, args.serial, APP, adb, ui, tap, retry_response, deletion_only=args.persistence_delete)
+                run(ROOT, args.serial, APP, adb, ui, tap, retry_response, deletion_only=args.persistence_delete,
+                    replacement_retry=args.persistence_retry_replacement, first_cancel_boundary=args.persistence_first_cancel)
             else:
                 from write_pressure import run
                 run(ROOT, args.serial, APP, LAUNCHER, archive, server, adb, ui, tap,

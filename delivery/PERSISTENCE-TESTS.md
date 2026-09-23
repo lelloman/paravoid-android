@@ -38,8 +38,8 @@ Passed 2026-09-23: all 20 cases, the complete delivery Java/Python suite, and An
 - Renamed-but-not-directory-synced data remains visible after a process kill on
   the live host filesystem. This does **not** prove survival of power/cache loss.
 - Breakpoints bracket Java write calls; they do not interrupt a kernel write
-  halfway through or inject disk errors. Retry deletion interruption and arbitrary
-  simultaneous cancel/write interleavings are not exhausted by this matrix.
+  halfway through or inject disk errors. The selected deletion boundaries below
+  do not exhaust arbitrary simultaneous cancel/write interleavings.
 - A cancellation interrupted before publication may leave its previous epoch.
   The test does not claim an uncommitted cancellation was acknowledged or durable.
 - Retry/cancellation writers now reuse one temporary slot per record under a
@@ -106,9 +106,41 @@ An explicit update succeeds after the matrix. Logs:
 `/tmp/paravoid-persistence-device{30,36}.log`; build log:
 `/tmp/paravoid-persistence-device-build.log`.
 
-These device cases cover retry first publication (explicit cancellation ends the
+Those original ten device cases cover retry first publication (explicit cancellation ends the
 prior attempt before Check now) and cancellation replacement. They do not reproduce
-all host first-write/replacement combinations, retry deletion, physical power loss
-or arbitrary concurrent write schedules. Early harness runs failed on attempt
+all host first-write/replacement combinations by themselves; the extension below
+covers the complementary combinations. Neither proves physical power loss or
+arbitrary concurrent write schedules. Early harness runs failed on attempt
 ownership and adb missing-file result handling; those were corrected before both
 complete passing runs. Both disposable emulators were stopped afterward.
+
+## Complete installed write-combination matrix
+
+`bash delivery/device-tests/persistence-matrix.sh SERIAL [HOST_SERVER_PORT]` runs
+20 write cases (retry/cancel × first publication/replacement × five boundaries)
+plus the two deletion cases. Build the ordinary empty/public A/p1 fixture first
+and use only disposable emulators. Different host ports permit independent APIs
+to run concurrently; never run two fixtures on the same emulator simultaneously.
+
+The added retry-replacement mode arms the debugger for the second production
+write, then returns an actual two-second Retry-After. The first failure writes a
+schedule; the real scheduled attempt durably consumes the next retry before HTTP.
+Death must preserve retry count 1 before publication or count 2 after publication.
+No record bytes, device clocks or scheduler fields are injected. After death the
+server returns a long retry interval so recovery can be inspected deterministically.
+
+Each first-cancellation boundary starts from a fresh shell-data installation and
+activates a real signed VPK. The harness asserts that no cancellation record
+exists, then interrupts the first actual Cancel download action. This avoids
+deleting an old epoch or substituting handcrafted record bytes to manufacture the
+precondition. All cases check retained main/archive/security state and successful
+explicit checking after recovery.
+
+The complementary cases passed on both API 30/36.1 x86_64 on 2026-09-23:
+`/tmp/paravoid-replacement{30,36}.log` and
+`/tmp/paravoid-firstcancel{30,36}-{created,written,synced,renamed,directory-synced}.log`.
+Together with the ten-write and two-deletion runs above, this completes **22
+installed boundaries per API** against production `d7f7072` (the original ten
+write/deletion runs preceded the unrelated quarantine/packaging fixes). Commands
+were executed as subsets, not one invocation of the new convenience driver.
+No production code change was needed for the complementary cases.
