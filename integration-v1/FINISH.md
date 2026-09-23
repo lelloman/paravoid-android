@@ -41,16 +41,32 @@ warns about loss of ongoing/unsaved work, stops only exclusively owned same-UID
 app processes other than recovery, waits for their disappearance and launches a
 fresh launcher Intent. It never clears journal state or releases leases early.
 Shared-UID ambiguity and inability to establish a cold boundary fail closed.
-This action compiles in the combined fixture but is not yet device-validated.
+On 2026-09-23, confirmed restart passed on API 30 and 36.1 for empty-bootstrap
+offline activation and a runnable app with a live non-sticky worker service.
+Cancelling confirmation preserves existing PIDs; confirming replaces main,
+terminates the worker and preserves recovery. No adb force-stop substitutes for
+the restart action. Timeout, respawn, shared-UID and PID-race cases remain open.
 
-API 30 evidence (dedicated `emulator-5594`): the production public bootstrap/control/
+Earlier API 30 evidence (dedicated `emulator-5594`): the production public bootstrap/control/
 offline suite passed, followed by `python3 integration-v1/controls-shortcut.py
 --serial emulator-5594`, proving runnable payload -> launcher shortcut -> private
 controls. The shortcut test used the build before C's second checkpoint. After
 importing that checkpoint and adding Restart app, the combined normal/public/
 controls/offline suite passed again on API 30. It still uses adb force-stop for
-cold activation and does not validate the new restart action. API 36.1 combined
-acceptance and a shortcut rerun on the final build remain pending.
+cold activation and did not validate the new restart action. That specific gap
+is superseded by the 2026-09-23 runs above, not by a full V1 acceptance claim.
+
+Reproduce the new cases after building the normal/empty/public fixture and VPK:
+
+```sh
+python3 delivery/device-tests/public_bootstrap.py --serial <emulator> --restart-controls
+python3 integration-v1/controls-shortcut.py --serial <emulator> --restart-worker
+```
+
+The second test traverses the actual launcher shortcut UI; it refreshes drawer
+coordinates between identically named normal/shell icons. Recorded AVDs are
+Restart30 (`emulator-5586`) and Restart36 (`emulator-5584`), isolated under
+`/tmp/paravoid-restart-avds`. No phone was used.
 
 Remaining: storage coordination/reservation, validation of explicit cold-start recovery,
 cross-process cancellation/auth device coverage, quarantine controls device
