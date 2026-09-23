@@ -19,6 +19,8 @@ NS = {'m': 'http://maven.apache.org/POM/4.0.0'}
 
 
 def config_check(config):
+    if not isinstance(config, dict):
+        raise ValueError('Owner decisions must be a JSON object')
     required = ('version', 'licenseName', 'licenseUrl', 'repositoryUrl',
                 'artifactSigning', 'requireJavadoc')
     for key in required:
@@ -32,6 +34,8 @@ def config_check(config):
     if not isinstance(config['licenseName'], str) or not config['licenseName'].strip():
         raise ValueError('licenseName must be owner-approved nonempty text')
     for key in ('licenseUrl', 'repositoryUrl'):
+        if not isinstance(config[key], str):
+            raise ValueError(f'{key} must be an HTTPS URL string')
         parsed = urlsplit(config[key])
         if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError(f'{key} must be an HTTPS URL without credentials, query or fragment')

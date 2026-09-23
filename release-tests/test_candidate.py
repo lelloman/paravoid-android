@@ -56,6 +56,17 @@ class CandidateTests(unittest.TestCase):
             with self.subTest(key=key, value=value), self.assertRaises(ValueError):
                 config_check(c)
 
+    def test_malformed_json_types(self):
+        for config in (None, [], 'not an object', 42):
+            with self.subTest(config=config), self.assertRaisesRegex(ValueError, 'JSON object'):
+                config_check(config)
+        for key in ('licenseUrl', 'repositoryUrl'):
+            for value in (42, [], {}):
+                config = decisions()
+                config[key] = value
+                with self.subTest(key=key, value=value), self.assertRaisesRegex(ValueError, 'URL string'):
+                    config_check(config)
+
     def test_complete_local_candidate_and_hashes(self):
         self.fixture()
         result = audit(decisions(), self.repo)
