@@ -27,7 +27,10 @@ final class SelectionJournal {
     }
     private final Path root;
     private final AtomicRecord record;
-    SelectionJournal(Path root) { this.root = root; record = new AtomicRecord(root.resolve("selection")); }
+    SelectionJournal(Path root) { this(root, boundary -> {}); }
+    SelectionJournal(Path root, AtomicRecord.Fault fault) {
+        this.root = root; record = new AtomicRecord(root.resolve("selection"), fault);
+    }
 
     void initializeNew() throws IOException {
         ProcessLocks.requireSelection();

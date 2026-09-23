@@ -13,13 +13,16 @@ public final class LifecycleTest {
     static final class Fixture implements VpkVerifier {
         final File source; final VerifiedRelease release;
         Fixture(Path directory, int version) throws Exception {
+            this(directory, version, false);
+        }
+        Fixture(Path directory, int version, boolean reuse) throws Exception {
             source = directory.resolve("fixture-" + version + ".zip").toFile();
             List<InventoryEntry> inventory = new ArrayList<>();
-            try (ZipOutputStream zip = new ZipOutputStream(new FileOutputStream(source))) {
+            try (ZipOutputStream zip = reuse ? null : new ZipOutputStream(new FileOutputStream(source))) {
                 for (String path : Arrays.asList("code/classes.dex", "resources.apk", "java-resources.jar", "resource-ledger.json")) {
                     byte[] bytes = (path + version).getBytes(java.nio.charset.StandardCharsets.UTF_8);
                     inventory.add(new InventoryEntry(path, bytes.length, sha256(bytes)));
-                    zip.putNextEntry(new ZipEntry(path)); zip.write(bytes); zip.closeEntry();
+                    if (zip != null) { zip.putNextEntry(new ZipEntry(path)); zip.write(bytes); zip.closeEntry(); }
                 }
             }
             ExpectedArchive identity = new ExpectedArchive("release-" + version, version, "a".repeat(64),

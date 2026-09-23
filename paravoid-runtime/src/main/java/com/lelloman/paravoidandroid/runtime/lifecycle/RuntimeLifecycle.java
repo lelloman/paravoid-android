@@ -22,6 +22,7 @@ public final class RuntimeLifecycle implements Lifecycle {
     private final ShellPolicy policy;
     private final InstalledStateSource installed;
     private final java.util.function.LongSupplier usableSpace;
+    private final AtomicRecord.Fault publicationFault;
 
     /** Opens established state. Missing/damaged state never triggers initialization. Use Android no-backup storage. */
     public RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
@@ -36,9 +37,16 @@ public final class RuntimeLifecycle implements Lifecycle {
     RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
             Clock clock, boolean mainProcess, InstalledStateSource installed,
             java.util.function.LongSupplier usableSpace) throws ContractException {
+        this(root, policy, device, verifier, clock, mainProcess, installed, usableSpace, boundary -> {});
+    }
+    /** Host-only fault seam for pending-journal durability boundaries; public paths always use a no-op. */
+    RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
+            Clock clock, boolean mainProcess, InstalledStateSource installed,
+            java.util.function.LongSupplier usableSpace, AtomicRecord.Fault publicationFault) throws ContractException {
         this.root = root.toPath().toAbsolutePath().normalize(); this.mainProcess = mainProcess;
         this.policy = policy; this.installed = installed;
         this.usableSpace = Objects.requireNonNull(usableSpace);
+        this.publicationFault = Objects.requireNonNull(publicationFault);
         if (installed == null && policy.contractDescriptor().length != 0) {
             Object descriptor = StrictJson.parse(policy.contractDescriptor(), InstalledPolicyCodec.MAX_BYTES);
             if (descriptor instanceof Map && InstalledPolicyCodec.PROFILE.equals(((Map<?,?>)descriptor).get("profile")))
@@ -119,7 +127,7 @@ public final class RuntimeLifecycle implements Lifecycle {
             return admission.authorizePublication(id, current -> {
                 if (!expected.equals(current)) throw fail(Code.STALE_ADMISSION);
                 SelectionJournal.Generation published = generations.publish(prepared);
-                return new SelectionJournal(root).pending(published);
+                return new SelectionJournal(root, publicationFault).pending(published);
             });
         });
     }

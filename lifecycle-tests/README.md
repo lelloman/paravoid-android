@@ -1,5 +1,27 @@
 # Track C lifecycle handoff
 
+## Pending publication fault regression (2026-09-23)
+
+`bash lifecycle-tests/run.sh` includes `PublicationTest`: a parent holds a healthy
+version-1 process lease while a separate JVM stages version 2 through the real
+`RuntimeLifecycle` facade. A package-private, no-op-by-default journal fault seam
+injects IOException or terminates that JVM at each of three boundaries: temporary
+content synced, selection renamed, and parent directory synced (six cases).
+
+Before rename, selection stays byte-identical and cleanup removes the unreferenced
+published generation. After rename, the higher version is valid pending state even
+when the API reports IO; cleanup must retain it. Every case checks active bytes and
+the live lease, unchanged security history, rejection of a lower-version head,
+successful retry (including already-pending), and cleanup of duplicate generations.
+The full lifecycle and delivery host suites and Android fixture build are the
+validation commands for this slice.
+
+These are host filesystem/process tests using explicitly fake VPK evidence, not
+Android ENOSPC, signed-fixture, disk-cache power-loss, or every write/fsync boundary
+coverage. The seam is not exposed by public runtime constructors or shell settings.
+
+## Original track handoff
+
 Consolidated follow-up: `RuntimeLifecycle.openOrInitialize()` now publishes first
 state atomically under a permanent parent lock. A checksummed parent anchor
 distinguishes unfinished first setup from an established store that disappeared;
