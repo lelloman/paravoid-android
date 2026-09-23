@@ -32,6 +32,37 @@ class ApplicationManifestTest {
         }
     }
 
+    @Test void completeControlsLauncherIsPublicAliasToPrivateRecoveryOnly() {
+        def task = fixture('', 'android:permission="example.PRIVATE"'); task.complete.set(true); task.rewrite()
+        def factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+        factory.namespaceAware = true
+        def document = factory.newDocumentBuilder().parse(task.outputManifest.get().asFile)
+        def aliases = document.getElementsByTagName('activity-alias')
+        assertEquals(1, aliases.length)
+        def alias = aliases.item(0)
+        assertEquals('com.lelloman.paravoidandroid.runtime.UpdatesLauncher', alias.getAttributeNS(ApplicationManifestTask.ANDROID, 'name'))
+        assertEquals('com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity', alias.getAttributeNS(ApplicationManifestTask.ANDROID, 'targetActivity'))
+        assertEquals('true', alias.getAttributeNS(ApplicationManifestTask.ANDROID, 'exported'))
+        assertTrue(alias.hasAttributeNS(ApplicationManifestTask.ANDROID, 'permission'))
+        assertEquals('', alias.getAttributeNS(ApplicationManifestTask.ANDROID, 'permission'))
+        assertEquals('App updates', alias.getAttributeNS(ApplicationManifestTask.ANDROID, 'label'))
+        assertEquals('android.intent.action.MAIN', alias.getElementsByTagName('action').item(0).getAttributeNS(ApplicationManifestTask.ANDROID, 'name'))
+        assertEquals('android.intent.category.LAUNCHER', alias.getElementsByTagName('category').item(0).getAttributeNS(ApplicationManifestTask.ANDROID, 'name'))
+        def target = document.getElementsByTagName('activity').find { it.getAttributeNS(ApplicationManifestTask.ANDROID, 'name').endsWith('ShellUpdatesActivity') }
+        assertEquals('false', target.getAttributeNS(ApplicationManifestTask.ANDROID, 'exported'))
+        assertEquals(':paravoid_recovery', target.getAttributeNS(ApplicationManifestTask.ANDROID, 'process'))
+        assertEquals('example.Main', new Properties().with { load(task.payloadMetadata.get().asFile.newInputStream()); getProperty('activities') })
+    }
+
+    @Test void launcherCanBeDisabledAndIsNeverAddedToLegacyProfile() {
+        [[true, false], [false, true], [false, false]].each { settings ->
+            def task = fixture(''); task.complete.set(settings[0]); task.controlsLauncher.set(settings[1]); task.rewrite()
+            assertFalse(task.outputManifest.get().asFile.text.contains('activity-alias'))
+        }
+        def project = ProjectBuilder.builder().withProjectDir(temporary.newFolder()).build()
+        assertTrue(project.objects.newInstance(ParavoidApplicationExtension).controlsLauncher.get())
+    }
+
     @Test void completeProfileRejectsUnsupportedComponentModesBeforeSigning() {
         ['activity', 'service', 'receiver', 'provider'].each { kind ->
             ['directBootAware', 'isolatedProcess'].each { attribute ->
@@ -50,7 +81,8 @@ class ApplicationManifestTest {
 
     @Test void completeProfileRejectsReservedShellComponents() {
         ['com.lelloman.paravoidandroid.runtime.LauncherActivity',
-         'com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity'].each { name ->
+         'com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity',
+         'com.lelloman.paravoidandroid.runtime.UpdatesLauncher'].each { name ->
             ['activity', 'service', 'receiver', 'provider'].each { kind ->
                 def task = fixture("<${kind} android:name=\"${name}\" />")
                 task.complete.set(true)

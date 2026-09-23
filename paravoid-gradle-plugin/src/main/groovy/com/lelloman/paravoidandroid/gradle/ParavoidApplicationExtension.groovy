@@ -15,10 +15,13 @@ abstract class ParavoidApplicationExtension {
         signing = objects.newInstance(ParavoidSigningExtension)
         bootstrap.convention('embedded')
         packaging.convention('dexOnly')
+        controlsLauncher.convention(true)
         releaseId.convention(payloadVersion.map { 'p' + it })
     }
     abstract Property<String> getBootstrap()
     abstract Property<String> getPackaging()
+    /** Complete-profile shell launcher entry independent of dynamic shortcut support. */
+    abstract Property<Boolean> getControlsLauncher()
     abstract Property<Long> getPayloadVersion()
     abstract Property<String> getReleaseId()
     void updates(Action<? super ParavoidUpdatesExtension> action) { action.execute(updates) }

@@ -19,7 +19,8 @@ abstract class ApplicationManifestTask extends DefaultTask {
     @OutputFile abstract RegularFileProperty getPayloadMetadata()
     @Input abstract Property<Boolean> getComplete()
     @Input abstract Property<Boolean> getDebugHttpAllowed()
-    ApplicationManifestTask() { complete.convention(false); debugHttpAllowed.convention(false) }
+    @Input abstract Property<Boolean> getControlsLauncher()
+    ApplicationManifestTask() { complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(true) }
 
     @TaskAction void rewrite() {
         def factory = DocumentBuilderFactory.newInstance()
@@ -39,7 +40,8 @@ abstract class ApplicationManifestTask extends DefaultTask {
         if (complete.get()) {
             def reservedNames = [
                 'com.lelloman.paravoidandroid.runtime.LauncherActivity',
-                'com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity'
+                'com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity',
+                'com.lelloman.paravoidandroid.runtime.UpdatesLauncher'
             ] as Set
             ['activity', 'service', 'receiver', 'provider'].each { kind ->
                 def nodes = app.getElementsByTagName(kind)
@@ -116,6 +118,23 @@ abstract class ApplicationManifestTask extends DefaultTask {
             recovery.setAttributeNS(ANDROID, 'android:exported', 'false')
             recovery.setAttributeNS(ANDROID, 'android:theme', '@android:style/Theme.Material.Light.NoActionBar')
             app.appendChild(recovery)
+            if (controlsLauncher.get()) {
+                // Only this shell-owned alias is exported. The target stays private and
+                // executes in the payload-free recovery process, even on a cold launch.
+                def alias = document.createElement('activity-alias')
+                alias.setAttributeNS(ANDROID, 'android:name', 'com.lelloman.paravoidandroid.runtime.UpdatesLauncher')
+                alias.setAttributeNS(ANDROID, 'android:targetActivity', 'com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity')
+                alias.setAttributeNS(ANDROID, 'android:label', 'App updates')
+                alias.setAttributeNS(ANDROID, 'android:exported', 'true')
+                alias.setAttributeNS(ANDROID, 'android:permission', '')
+                def filter = document.createElement('intent-filter')
+                def action = document.createElement('action')
+                action.setAttributeNS(ANDROID, 'android:name', 'android.intent.action.MAIN')
+                def category = document.createElement('category')
+                category.setAttributeNS(ANDROID, 'android:name', 'android.intent.category.LAUNCHER')
+                filter.appendChild(action); filter.appendChild(category); alias.appendChild(filter)
+                app.appendChild(alias)
+            }
             def marker = document.createElement('meta-data')
             marker.setAttributeNS(ANDROID, 'android:name', 'paravoid.complete'); marker.setAttributeNS(ANDROID, 'android:value', 'true')
             app.appendChild(marker)

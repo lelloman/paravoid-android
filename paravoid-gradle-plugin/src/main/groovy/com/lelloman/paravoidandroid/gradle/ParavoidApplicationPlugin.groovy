@@ -110,6 +110,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             }
             def manifest = project.tasks.register("prepare${cap}ParavoidManifest", ApplicationManifestTask) {
                 it.complete.set(complete)
+                controlsLauncher.set(extension.controlsLauncher)
                 debugHttpAllowed.set(complete ? extension.updates.debugHttpAllowed : project.providers.provider { false })
                 outputManifest.set(project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/AndroidManifest.xml"))
                 payloadMetadata.set(project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/payload.properties"))
