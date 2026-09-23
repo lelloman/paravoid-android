@@ -68,7 +68,31 @@ coordinates between identically named normal/shell icons. Recorded AVDs are
 Restart30 (`emulator-5586`) and Restart36 (`emulator-5584`), isolated under
 `/tmp/paravoid-restart-avds`. No phone was used.
 
-Remaining: storage coordination/reservation, validation of explicit cold-start recovery,
-cross-process cancellation/auth device coverage, quarantine controls device
-validation and current-APK refresh coordination. C's broader startup-failure and
+## Quarantine confirmation
+
+`quarantine-controls.py` passed on both Restart30 and Restart36 on 2026-09-23.
+It installs the production signed embedded fixture whose Application deliberately
+throws. Cancelling retry leaves the checksummed selection journal unchanged;
+confirming retries the exact active identity with no healthy fallback or pending
+replacement. Confirmed shell restart then actually executes the broken payload,
+which re-quarantines. The recovery PID survives, and ordinary re-entry proves the
+recovery process has no generation mappings or lease descriptors. No adb force-stop
+stands in for the cold-restart action; journal decoding is read-only test evidence.
+
+Build and run (only dedicated disposable emulators; the fixture app is replaced):
+
+```sh
+./gradlew -p compatibility/complete-v1 assembleParavoidAndroidDebug \
+  -Pbootstrap=embedded -Pgeneration=broken -PpayloadVersion=2 -Pauthentication=public
+python3 integration-v1/quarantine-controls.py --serial <emulator> --avd <owned-avd> \
+  --apk compatibility/complete-v1/build/outputs/paravoid/paravoidAndroidDebug/shell.apk
+```
+
+Do not run this build while a delivery test is serving files from the same build
+directory. These tests cover intact startup-failed generations, not corruption,
+stale-dialog identity races or retry with a pending forward repair.
+
+Remaining: storage coordination/reservation, cold-restart edge cases,
+cross-process cancellation/auth device coverage, quarantine race/corruption cases
+and current-APK refresh coordination. C's broader startup-failure and
 independent security-review gates remain open. Do not mark V1 complete here.
