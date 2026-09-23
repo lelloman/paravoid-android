@@ -7,7 +7,10 @@ No HTTP server, payload UI integration, or dynamic shortcut is needed to enter.
 import argparse
 import importlib.util
 from pathlib import Path
+import re
 import sys
+import time
+import xml.etree.ElementTree as ET
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +42,21 @@ def main():
     assert not d.markers(), 'Fallback ran payload initialization'
     d.run('shell', 'uiautomator', 'dump', '/sdcard/paravoid-controls-ui.xml')
     assert 'check now' in d.run('shell', 'cat', '/sdcard/paravoid-controls-ui.xml').lower()
+    # Starting a new controls instance may precede the old one's onStop. The
+    # outgoing instance must not clear the incoming instance's observer.
+    d.run('shell', 'am', 'start', '-W', '-n', alias)
+    d.run('shell', 'uiautomator', 'dump', '/sdcard/paravoid-controls-ui.xml')
+    nodes = ET.fromstring(d.run('shell', 'cat', '/sdcard/paravoid-controls-ui.xml')).iter('node')
+    cancel = next(n for n in nodes if n.get('text', '').lower() == 'cancel download')
+    x1, y1, x2, y2 = map(int, re.findall(r'\d+', cancel.get('bounds')))
+    d.run('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
+    for attempt in range(10):
+        d.run('shell', 'uiautomator', 'dump', '/sdcard/paravoid-controls-ui.xml')
+        if 'Update: CANCELLED' in d.run('shell', 'cat', '/sdcard/paravoid-controls-ui.xml'):
+            break
+        time.sleep(.2)
+    else:
+        raise AssertionError('Reopened controls lost their observer after previous Activity stopped')
     # Existing healthy payload: removing shortcuts does not remove the manifest entry.
     d.launch(); d.healthy(1)
     before = d.state()
@@ -48,7 +66,7 @@ def main():
     d.recovery()
     assert d.state() == before, 'Opening public controls changed selection'
     assert not d.run('shell', 'pidof', app, check=False).strip(), 'Opening controls restarted payload'
-    print('PASS manifest launcher: first-ever cold entry, healthy offline entry after shortcut removal, payload-free recovery, extras inert')
+    print('PASS manifest launcher: cold entry, reopened observer, healthy offline entry after shortcut removal, payload-free recovery, extras inert')
     d.stop()
 
 

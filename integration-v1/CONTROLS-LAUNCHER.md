@@ -41,3 +41,18 @@ assertion now compares case-insensitively. No production change was needed.
 API 30 Restart30 / emulator-5586 passed the same installed test using that same
 embedded shell artifact; `/tmp/paravoid-controls-api30.log`. The fixture was
 force-stopped afterward. Neither run establishes every OEM launcher's appearance.
+
+## Reopened-screen observer regression
+
+The Pezzottify experiment exposed an Android lifecycle ordering bug: a new
+controls Activity subscribed before the old Activity stopped, and the old
+`listen(null)` call detached the new observer. Delivery continued but visible
+status froze. `72f5816` gives each Activity a stable listener and removes it only
+if it still owns the controller subscription; queued callbacks check ownership.
+
+The installed script now opens another controls instance and requires Cancel
+download to visibly render `Update: CANCELLED`. On API 36.1 this fails on the
+pre-fix shell (`/tmp/paravoid-observer-baseline36.log`) and passes on the fixed
+shell (`/tmp/paravoid-observer-fixed36.log`). Full delivery host tests, including
+old-stop-after-new-start, current unsubscribe and old-screen resubscribe, plus
+Android source compilation passed (`/tmp/paravoid-controls-observer-host.log`).
