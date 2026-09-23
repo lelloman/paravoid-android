@@ -3,6 +3,7 @@ package com.lelloman.paravoidandroid.delivery;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.nio.channels.FileChannel;
 import java.util.UUID;
 
 /** Shared non-security cancellation epoch. Atomic replacement; never deletes lock files. */
@@ -28,6 +29,9 @@ final class CancellationSignal {
                 out.write(UUID.randomUUID().toString().getBytes(StandardCharsets.US_ASCII)); out.getFD().sync();
             }
             Files.move(tmp, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            try (FileChannel directory = FileChannel.open(path.getParent(), StandardOpenOption.READ)) {
+                directory.force(true);
+            }
         } finally { Files.deleteIfExists(tmp); }
     }
 }

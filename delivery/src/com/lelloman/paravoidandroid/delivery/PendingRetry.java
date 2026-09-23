@@ -2,6 +2,7 @@ package com.lelloman.paravoidandroid.delivery;
 
 import java.io.*;
 import java.nio.file.*;
+import java.nio.channels.FileChannel;
 import java.util.Properties;
 
 /** Non-security scheduling state, protected by the controller's attempt lock. */
@@ -44,6 +45,9 @@ final class PendingRetry {
         try {
             try (FileOutputStream out = new FileOutputStream(tmp.toFile())) { p.store(out, "Delivery retry schedule"); out.getFD().sync(); }
             Files.move(tmp, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            try (FileChannel directory = FileChannel.open(path.getParent(), StandardOpenOption.READ)) {
+                directory.force(true);
+            }
         } finally { Files.deleteIfExists(tmp); }
     }
 }

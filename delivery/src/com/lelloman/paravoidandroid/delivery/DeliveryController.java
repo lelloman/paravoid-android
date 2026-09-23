@@ -4,6 +4,7 @@ import com.lelloman.paravoidandroid.contract.*;
 import com.lelloman.paravoidandroid.contract.Protocol.*;
 import java.io.*;
 import java.nio.file.*;
+import java.nio.channels.FileChannel;
 import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.function.BooleanSupplier;
@@ -53,7 +54,13 @@ public final class DeliveryController {
     }
     private Path retryFile() { return preferenceFile.resolveSibling(preferenceFile.getFileName() + ".retry"); }
     private void clearRetry() {
-        try { Files.deleteIfExists(retryFile()); }
+        try {
+            if (Files.deleteIfExists(retryFile())) {
+                try (FileChannel directory = FileChannel.open(retryFile().getParent(), StandardOpenOption.READ)) {
+                    directory.force(true);
+                }
+            }
+        }
         catch (IOException failure) { fail("PREFERENCES_IO"); }
     }
     private void releaseAttempt() {

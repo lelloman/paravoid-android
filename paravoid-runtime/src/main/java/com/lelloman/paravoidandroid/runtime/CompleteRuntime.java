@@ -40,6 +40,8 @@ final class CompleteRuntime {
         lifecycle = new RuntimeLifecycle(new File(app.getNoBackupFilesDir(), "paravoid-v1"), policy, scope,
             new CompleteVpkVerifier(), environment, mainProcess, source);
         lifecycle.openOrInitialize();
+        try { LegacyDeliveryCleanup.reclaim(app.getNoBackupFilesDir(), app.getPackageName()); }
+        catch (IOException ignored) { /* Old partials are disposable; retry cleanup on next start. */ }
         // Delivery's OS transfer lock serializes shared partials; credential and
         // authentication suppression must be visible in every app process.
         DeliveryClient client = new DeliveryClient(policy, new SignedMetadataVerifier(), lifecycle, environment,
