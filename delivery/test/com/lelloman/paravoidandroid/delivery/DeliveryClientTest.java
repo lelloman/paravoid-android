@@ -210,7 +210,10 @@ public final class DeliveryClientTest {
         }
         try (Setup s = new Setup(true)) {
             s.head(); s.f.responses.add(new Fake(200, ARCHIVE));
-            s.life.duringStage = () -> s.client.installedCredential(new byte[] {2});
+            s.life.duringStage = () -> {
+                s.client.installedCredential(new byte[] {2});
+                DeliveryLocksTest.probe(s.f.dir.resolve("transfer.lock"), "BUSY");
+            };
             s.client.check(s.scope, true, false);
             check(s.life.stages == 1); // Borrowed source survives refresh until stage returns.
             try (DirectoryStream<Path> files = Files.newDirectoryStream(s.f.dir, "*.part")) {

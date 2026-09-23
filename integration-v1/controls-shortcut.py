@@ -41,22 +41,31 @@ if args.restart_worker:
     old_main = adb('shell', 'pidof', app).strip()
     old_worker = adb('shell', 'pidof', app + ':worker').strip()
     assert old_main and old_worker and old_main != old_worker
-adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
 size = re.search(r'(\d+)x(\d+)', adb('shell', 'wm', 'size'))
 w, h = map(int, size.groups())
-adb('shell', 'input', 'swipe', str(w // 2), str(h * 9 // 10), str(w // 2), str(h // 4), '400')
-time.sleep(1)
-icons = [n for n in nodes() if n.attrib.get('text') == 'Paravoid complete fixture']
+
+
+def drawer_icons():
+    # HOME is asynchronous; swiping before the launcher transition settles can
+    # leave us on the home screen instead of opening the drawer (especially API 36).
+    for _ in range(3):
+        adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+        time.sleep(.75)
+        adb('shell', 'input', 'swipe', str(w // 2), str(h * 9 // 10), str(w // 2), str(h // 4), '400')
+        time.sleep(1)
+        icons = [n for n in nodes() if n.attrib.get('text') == 'Paravoid complete fixture']
+        if icons:
+            return icons
+    return []
+
+
+icons = drawer_icons()
 assert icons, 'Fixture icon not visible in launcher drawer'
 opened = False
 for index in range(len(icons)):
     # Back after a non-shortcut icon can close the whole drawer on newer launchers.
     # Reopen it and resolve fresh bounds instead of tapping stale coordinates.
-    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
-    time.sleep(.5)
-    adb('shell', 'input', 'swipe', str(w // 2), str(h * 9 // 10), str(w // 2), str(h // 4), '400')
-    time.sleep(1)
-    current_icons = [n for n in nodes() if n.attrib.get('text') == 'Paravoid complete fixture']
+    current_icons = drawer_icons()
     assert len(current_icons) > index, 'Fixture icon disappeared from drawer'
     icon = current_icons[index]
     x, y = point(icon)

@@ -78,6 +78,35 @@ package replacement supplies a new grant while that request is outstanding.
 A newly authorized download must stage, and revocation must preserve offline use.
 The observer records only whether Authorization was present, never its contents.
 
+The auth suite also checks recovery-to-main suppression with an unexpired grant
+and an eligible automatic check. It ages **only the non-security scheduling
+timestamp** while the app is stopped; it does not advance device time or change
+grant/denial/replay state. Main must update its scheduling timestamp without issuing
+HTTP. A launcher-shortcut explicit retry then restores access. Finally, main alone
+starts an archive request whose response is held by the server. Recovery opens via
+the real shortcut and cancels it: the server must observe socket EOF before serving
+the response, no pending payload may appear, and main must survive. These assertions
+must not be described as seven hours of real elapsed-time testing or cancellation
+after staging handoff.
+
+`lock_probe.py --serial emulator-NNNN --avd ExpectedName` compiles the production
+delivery lock primitive plus its probe for ART. For both attempt and transfer
+paths, repeated failed same-VM claims must leave another ART process excluded;
+normal close and owner death must permit a fresh claim. This is shell-UID primitive
+evidence, not app-component or HTTP testing. It uses and deletes only a uniquely
+named emulator scratch directory. The installed auth suite supplies separate
+app-sandbox/process/HTTP evidence.
+
+Both gates passed on 2026-09-23 with implementation `6f1e8de`: Restart30
+(`emulator-5586`, API 30) and Restart36 (`emulator-5584`, API 36.1), x86_64.
+The installed auth suite also revalidated unusable grants, persistent 403,
+signature-preserving APK credential replacement during outstanding HTTP and
+offline execution after revocation. API 36 initially exposed a test-driver HOME
+transition race; the shortcut driver now waits and retries drawer opening before
+asserting icon presence, and the entire auth suite passed on rerun.
+Credential replacement during scheduled retry/staging, cancellation at retry
+persistence boundaries, metering transitions and real HTTPS remain separate gates.
+
 The auth test uses the production carrier insertion primitive to create private
 debug-HTTP test APKs, including intentionally invalid inputs. This is **not** proof
 of the production HTTPS-only personalization CLI on-device; its strict verified

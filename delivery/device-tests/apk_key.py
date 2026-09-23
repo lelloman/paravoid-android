@@ -11,6 +11,8 @@ import json
 import os
 from pathlib import Path
 import re
+import select
+import socket
 import subprocess
 import sys
 import tempfile
@@ -90,12 +92,24 @@ def main():
     requests = []  # Booleans only: never retain or print request credentials.
     old_download = threading.Event()
     release_old = threading.Event()
+    hold_main = threading.Event()
+    main_download = threading.Event()
+    main_disconnected = threading.Event()
+    release_main = threading.Event()
     class ObservedHandler(Handler):
         def do_GET(self):
             requests.append(self.headers.get('Authorization') is not None)
             if '/releases/' in self.path and self.headers.get('Authorization') == 'Bearer ' + tokens[0]:
                 old_download.set()
                 release_old.wait(30)
+            if '/releases/' in self.path and hold_main.is_set():
+                main_download.set()
+                deadline = time.monotonic() + 120
+                while not release_main.is_set() and time.monotonic() < deadline:
+                    readable, _, _ = select.select([self.connection], [], [], .1)
+                    if readable and self.connection.recv(1, socket.MSG_PEEK) == b'':
+                        main_disconnected.set()
+                        return
             super().do_GET()
     server = Server(('127.0.0.1', 18765), catalog)
     server.RequestHandlerClass = ObservedHandler
@@ -141,7 +155,26 @@ def main():
             print('PASS: APK credential replacement during active request stages with new grant')
             catalog.revoke(tokens[1]); tap('Check now'); expect('Update access unavailable')
             count = len(requests)
-            adb('shell', 'am', 'force-stop', APP); launch()
+            preference_path = 'no_backup/paravoid-update-preferences'
+            remote_preferences = '/data/local/tmp/' + Path(tmp).name + '-preferences'
+            def allow_automatic_check():
+                # Test-only non-security scheduler state: make the six-hour throttle eligible.
+                # Do not alter wall time, signed grants, denial markers or replay history.
+                saved = adb('shell', 'run-as', APP, 'cat', preference_path)
+                assert 'checks=true' in saved and 'downloads=true' in saved
+                aged, matches = re.subn(r'(?m)^lastAutomaticCheck=\d+$', 'lastAutomaticCheck=1', saved)
+                assert matches == 1
+                local = Path(tmp) / 'preferences'
+                local.write_text(aged)
+                adb('push', str(local), remote_preferences)
+                try:
+                    adb('shell', 'run-as', APP, 'cp', remote_preferences, preference_path)
+                finally:
+                    adb('shell', 'rm', '-f', remote_preferences)
+            adb('shell', 'am', 'force-stop', APP)
+            allow_automatic_check()
+            assert int(time.time()) < now + 3600, 'Grant expiry must not mask suppression'
+            launch()
             for _ in range(15):
                 try:
                     probe = adb('shell', 'run-as', APP, 'cat', 'shared_prefs/probe.xml')
@@ -152,12 +185,46 @@ def main():
                 time.sleep(.5)
             else:
                 raise AssertionError('revocation prevented offline use of accepted payload')
-            # Main/recovery suppression currently uses different runtime directories.
             print('PASS: server revocation preserves accepted payload execution')
-            print('Requests after switching from recovery to main:', len(requests) - count)
+            for _ in range(30):
+                saved = adb('shell', 'run-as', APP, 'cat', preference_path)
+                match = re.search(r'(?m)^lastAutomaticCheck=(\d+)$', saved)
+                if match and int(match[1]) > 1:
+                    break
+                time.sleep(.2)
+            else:
+                raise AssertionError('Main never attempted an eligible automatic check')
+            time.sleep(2)
+            assert len(requests) == count, 'Recovery denial must suppress main, independent of throttle'
+            print('PASS: recovery 403 suppresses fresh main with eligible throttle and unexpired grant')
+            shortcut = [sys.executable, str(ROOT / 'integration-v1/controls-shortcut.py'), '--serial', args.serial]
+            subprocess.run(shortcut, check=True, timeout=120)
+            catalog.grant(tokens[1], APP, ['stable'], [release['releaseId']])
+            tap('Retry update access'); expect('Update: READY')
+            assert len(requests) > count, 'Explicit recovery retry must lift shared denial'
+            # Start only main, with an eligible check. Its archive response remains blocked
+            # until recovery cancels it; server observes socket EOF before any response.
+            adb('shell', 'am', 'force-stop', APP)
+            allow_automatic_check()
+            hold_main.set(); launch()
+            assert main_download.wait(15), 'Main did not start the held archive request'
+            absent = subprocess.run(['adb', '-s', args.serial, 'shell', 'pidof', APP + ':paravoid_recovery'],
+                                    text=True, capture_output=True, timeout=45)
+            assert not absent.stdout.strip(), 'Download owner must be main, not recovery'
+            main_pid = adb('shell', 'pidof', APP).strip()
+            subprocess.run(shortcut, check=True, timeout=120)
+            assert not main_disconnected.is_set(), 'Request ended before cancellation'
+            tap('Cancel download')
+            assert main_disconnected.wait(10), 'Recovery cancellation did not disconnect main HTTP'
+            release_main.set()
+            last = expect('Update: CANCELLED')
+            assert 'Pending: none' in last, 'Pre-handoff cancellation must not stage'
+            assert adb('shell', 'pidof', APP).strip() == main_pid
+            assert all(requests)
+            print('PASS: main HTTP cancelled by recovery; socket closed before response, no pending payload, main survives')
             print('Device:', args.serial, 'API', sdk)
     finally:
-        release_old.set(); server.shutdown(); server.server_close()
+        release_old.set(); release_main.set(); server.shutdown(); server.server_close()
         adb('reverse', '--remove', 'tcp:18765')
 
 if __name__ == '__main__':
