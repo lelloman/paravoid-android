@@ -67,8 +67,12 @@ host evidence; this integration adds the installed intact-quarantine path only.
 
 Still unresolved, not silently waived:
 
-- Simultaneous installed writers under exhaustion, actual power/cache-loss
+- Broader installed writer/death/cancellation interleavings, actual power/cache-loss
   behavior and raw retry/cancellation temporary-write/rename interruption cases.
+  Follow-up: overlapping HTTP-staging/embedded admission under real exhaustion now
+  passes on both APIs at archive and component writes; see
+  `delivery/device-tests/README.md`. This does not cover two HTTP downloads or
+  two different releases racing end-to-end.
 - Additional early component/factory startup failures, corrupt/pending-repair UI
   device races and durable discovery of controls on unsupported/throttled launchers.
 - Large artifact limits, real-app updates under the final combined runtime,

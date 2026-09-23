@@ -39,11 +39,15 @@ def main():
                         help='Require a padded VPK and inject real ENOSPC during staging with an active payload')
     parser.add_argument('--write-phase', choices=('archive', 'components'), default='archive',
                         help='Select the write-exhaustion boundary (default: archive copy)')
+    parser.add_argument('--competing-writer', action='store_true',
+                        help='Probe installed worker-process storage admission during write exhaustion')
     parser.add_argument('--restart-controls', action='store_true',
                         help='Activate through confirmed shell controls, never adb force-stop')
     parser.add_argument('--storage-pressure', action='store_true',
                         help='Allocate a disposable app-private filler; test low-space rejection and 512 MiB admission')
     args = parser.parse_args()
+    if args.competing_writer and not args.write_exhaustion:
+        parser.error('--competing-writer requires --write-exhaustion')
     if args.write_phase != 'archive' and not args.write_exhaustion:
         parser.error('--write-phase requires --write-exhaustion')
     if not re.fullmatch(r'emulator-\d+', args.serial):
@@ -236,7 +240,8 @@ def main():
             subprocess.run([sys.executable, str(ROOT / 'integration-v1/controls-shortcut.py'), '--serial', args.serial],
                            check=True, timeout=120)
             from write_pressure import run
-            run(ROOT, args.serial, APP, LAUNCHER, archive, server, adb, ui, tap, args.write_phase)
+            run(ROOT, args.serial, APP, LAUNCHER, archive, server, adb, ui, tap,
+                args.write_phase, args.competing_writer)
             return
         if args.storage_pressure:
             assert free_bytes() < 600 * 1048576

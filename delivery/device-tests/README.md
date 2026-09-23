@@ -2,6 +2,47 @@
 
 ## Mid-write disk exhaustion
 
+### Competing installed writer
+
+Add `--competing-writer` to `--write-exhaustion` (also works with
+`--write-phase components`). The complete fixture's worker provider invokes the
+installed runtime's real `reserveEmbedded(size)` through fixture-only reflection;
+no production API, fake capacity or replacement lock implementation is introduced.
+It returns its PID so the harness verifies that recovery, main and worker are
+distinct processes. An uncontended reservation must first succeed and close.
+
+With recovery paused inside an actual staging write, the worker must receive
+`UNAVAILABLE`, both before and after filling the disk. After recovery fails with
+real ENOSPC and releases its claim, the worker must receive
+`INSUFFICIENT_STORAGE` while the filler remains. After freeing space it must be
+admitted and close its claim successfully. Existing assertions check unchanged
+selection/security, active archive bytes and main PID, no retry schedule,
+successful explicit retry and offline payload launch; the worker PID also survives.
+
+This tests overlapping installed admission attempts (HTTP staging versus embedded
+reservation), including cleanup by the new owner, not two simultaneous HTTP
+downloads or staging two different releases. Exclusive admission intentionally
+prevents a second writer from starting. It does not establish physical power-loss
+safety or all cancellation interleavings. The reflective provider is test-fixture
+code only, not a supported downstream integration surface.
+
+Commands for this gate (after the padded fixture build):
+
+```sh
+python3 delivery/device-tests/public_bootstrap.py --serial emulator-5586 --write-exhaustion --competing-writer
+python3 delivery/device-tests/public_bootstrap.py --serial emulator-5584 --server-port 18766 --write-exhaustion --competing-writer
+# Repeat each with --write-phase components for the materialization boundary.
+```
+
+Passed all four runs on 2026-09-23, Restart30/API 30 and Restart36/API 36.1,
+x86_64, with runtime `892b727` and this fixture/harness change. Logs:
+`/tmp/paravoid-competing{30,36}.log` and
+`/tmp/paravoid-competing-components{30,36}.log`. Normal/shell/VPK builds and
+`bash lifecycle-tests/run.sh` / `bash delivery/test.sh` also passed
+(`/tmp/paravoid-competing-{build,host,delivery}.log`). No production fix was needed.
+
+### Setup and existing single-writer evidence
+
 On a **disposable emulator only**, prepare the fixture with
 `python3 compatibility/complete-v1/prepare.py --pressure-mib 32`, then build the
 normal APK, public empty shell and generation A/version 1 VPK using the commands

@@ -7,7 +7,7 @@ import time
 import zipfile
 
 
-def run(root, serial, app, launcher, archive, server, adb, ui, tap, phase='archive'):
+def run(root, serial, app, launcher, archive, server, adb, ui, tap, phase='archive', competing=False):
     assert phase in ('archive', 'components')
     assert archive.stat().st_size > 32 * 1024 * 1024, 'Build with prepare.py --pressure-mib 32'
     store = 'no_backup/paravoid-v1/'
@@ -22,6 +22,17 @@ def run(root, serial, app, launcher, archive, server, adb, ui, tap, phase='archi
     main_pid = adb('shell', 'pidof', app).strip()
     owner = adb('shell', 'pidof', app + ':paravoid_recovery').strip()
     assert owner.isdigit() and main_pid.isdigit()
+    worker_pid = None
+    def reserve():
+        result = adb('shell', 'content', 'call', '--uri', 'content://' + app + '.worker',
+                     '--method', 'probe.reserve-space', '--arg', str(archive.stat().st_size))
+        assert 'pid=' + worker_pid in result, result
+        return result
+    if competing:
+        assert 'generation=A' in adb('shell', 'content', 'query', '--uri', 'content://' + app + '.worker')
+        worker_pid = adb('shell', 'pidof', app + ':worker').strip()
+        assert worker_pid.isdigit() and worker_pid not in (owner, main_pid)
+        assert 'result=ADMITTED' in reserve(), 'Worker probe must first succeed without contention'
     source = root / 'paravoid-runtime/src/main/java/com/lelloman/paravoidandroid/runtime/lifecycle/GenerationStore.java'
     lines = [i for i, line in enumerate(source.read_text().splitlines(), 1)
              if 'hash.update(buffer, 0, count); if (output != null) output.write' in line]
@@ -70,6 +81,9 @@ def run(root, serial, app, launcher, archive, server, adb, ui, tap, phase='archi
                     written = int(adb('shell', 'run-as', app, 'stat', '-c', '%s', partial[0]))
                     assert 0 < written < expected_size, 'Must interrupt actual component materialization'
                 security, selection = data(store + 'security'), data(store + 'selection')
+                if competing:
+                    assert 'result=UNAVAILABLE' in reserve(), 'Worker bypassed live writer admission'
+                    assert int(adb('shell', 'run-as', app, 'stat', '-c', '%s', staging[0])) == size
                 adb('shell', 'run-as', app, 'mkdir', '-p', 'files')
                 count = free_bytes() // 1048576 + 256
                 # Actual allocated blocks, not sparse length. Bound writes by measured
@@ -78,9 +92,27 @@ def run(root, serial, app, launcher, archive, server, adb, ui, tap, phase='archi
                                        'of=' + filler, 'bs=1048576', 'count=' + str(count)],
                                       text=True, capture_output=True, timeout=240)
                 assert fill.returncode != 0 and 'No space left on device' in fill.stdout + fill.stderr
+                if competing:
+                    assert 'result=UNAVAILABLE' in reserve(), 'Disk pressure bypassed writer ownership'
+                    assert security == data(store + 'security') and selection == data(store + 'selection')
                 (markers / 'resume').touch()
                 wait('enospc')
+                if competing:
+                    # Wait for the real failed writer to unwind and release its claim,
+                    # with the disk still full. A second writer must now fail capacity.
+                    deadline = time.monotonic() + 30
+                    while True:
+                        result = reserve()
+                        if 'result=INSUFFICIENT_STORAGE' in result:
+                            break
+                        assert 'result=UNAVAILABLE' in result, result
+                        assert time.monotonic() < deadline, 'Writer claim not released after IO'
+                        time.sleep(.1)
                 adb('shell', 'run-as', app, 'rm', '-f', filler)
+                if competing:
+                    assert 'result=ADMITTED' in reserve(), 'Worker admission did not recover after freeing space'
+                    assert adb('shell', 'pidof', app + ':worker').strip() == worker_pid
+                    print('PASS: distinct installed worker refused during live writer/full disk; rejected for capacity after owner IO; admitted after freeing space', serial, flush=True)
                 assert gate.wait(timeout=10) == 0
                 for _ in range(15):
                     state = ui()
