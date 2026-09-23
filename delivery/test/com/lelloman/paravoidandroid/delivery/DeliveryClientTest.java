@@ -16,6 +16,8 @@ public final class DeliveryClientTest {
     static final class Life implements Lifecycle {
         CredentialScope credential;
         int observations, stages, credentialDenials;
+        int reservations, releasedReservations;
+        boolean reserved;
         Clock clock;
         VerifiedHead last;
         Action duringStage;
@@ -27,12 +29,20 @@ public final class DeliveryClientTest {
             return new AdmissionResult(head.status, head.release == null ? null : new AdmissionId("test-admission"), head.release);
         }
         public StageResult stageDownloaded(File archive, AdmissionId admission) throws ContractException {
+            check(reserved);
             try {
                 if (duringStage != null) duringStage.run();
                 check(Arrays.equals(ARCHIVE, Files.readAllBytes(archive.toPath())));
             } catch (Exception e) { throw new AssertionError(e); }
             check(admission.value.equals("test-admission")); stages++;
             return new StageResult(StageStatus.PENDING, last.release);
+        }
+        public DownloadReservation reserveDownload(AdmissionId admission) {
+            check(!reserved); reserved = true; reservations++;
+            return new DownloadReservation() {
+                public StageResult stage(File archive) throws ContractException { return stageDownloaded(archive, admission); }
+                public void close() { check(reserved); reserved = false; releasedReservations++; }
+            };
         }
         public StageResult stageEmbedded(File archive) { throw new AssertionError("delivery must not stage embedded"); }
         public LifecycleSnapshot snapshot() {
@@ -130,6 +140,7 @@ public final class DeliveryClientTest {
             s.head(); s.f.responses.add(new Fake(200, ARCHIVE));
             DeliveryClient.Result result = s.client.check(s.scope, true, false);
             check(result.stage.status == StageStatus.PENDING); check(s.life.stages == 1);
+            check(s.life.reservations == 1 && s.life.releasedReservations == 1 && !s.life.reserved);
             check(!Files.exists(abandoned));
             try (DirectoryStream<Path> files = Files.newDirectoryStream(s.f.dir, "*.part")) { check(!files.iterator().hasNext()); }
             s.cached(); s.client.check(s.scope, false, false);
@@ -211,6 +222,7 @@ public final class DeliveryClientTest {
             check(s.f.requests == 1 && s.life.stages == 0);
             check(s.life.observations == 1); // Storage rejection never undoes authenticated head observation.
             check(s.life.snapshot().availability == Availability.RUNNABLE);
+            check(s.life.reservations == 1 && s.life.releasedReservations == 1 && !s.life.reserved);
         }
         System.out.println("DeliveryClientTest: " + TransportTest.assertions + " assertions passed");
     }

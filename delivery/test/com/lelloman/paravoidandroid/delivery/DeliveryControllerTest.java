@@ -63,6 +63,7 @@ public final class DeliveryControllerTest {
             check(reading.await(5, TimeUnit.SECONDS)); cancelFromProcess(c.preferences);
             c.await(DeliveryController.Activity.CANCELLED); c.barrier();
             check(archive.disconnected && c.setup.life.stages == 0 && c.setup.f.requests == 2);
+            check(c.setup.life.reservations == 1 && c.setup.life.releasedReservations == 1 && !c.setup.life.reserved);
         }
         try (Control c = new Control()) {
             c.setup.f.responses.add(new Fake(429, new byte[0]).put("Retry-After", "3600"));

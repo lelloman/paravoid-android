@@ -103,13 +103,12 @@ final class CompleteRuntime {
         return CompleteGenerationLoader.load(app, lease, parent);
     }
     private void stageEmbedded() throws Exception {
-        Path temporary = Files.createTempFile(app.getNoBackupFilesDir().toPath(), "paravoid-embedded-", ".vpk");
-        try {
-            try (ZipFile apk = new ZipFile(environment.currentBaseApk())) {
-                ZipEntry entry = apk.getEntry("assets/paravoid/payload.vpk");
-                if (entry == null || entry.getSize() < 1 || entry.getSize() > Protocol.MAX_ARCHIVE_BYTES)
-                    throw new IOException("Embedded VPK missing or too large");
-                try (InputStream in = apk.getInputStream(entry); OutputStream out = Files.newOutputStream(temporary)) {
+        try (ZipFile apk = new ZipFile(environment.currentBaseApk())) {
+            ZipEntry entry = apk.getEntry("assets/paravoid/payload.vpk");
+            if (entry == null || entry.getSize() < 1 || entry.getSize() > Protocol.MAX_ARCHIVE_BYTES)
+                throw new IOException("Embedded VPK missing or too large");
+            try (RuntimeLifecycle.EmbeddedReservation reservation = lifecycle.reserveEmbedded(entry.getSize())) {
+                try (InputStream in = apk.getInputStream(entry); OutputStream out = new FileOutputStream(reservation.sourceFile())) {
                     byte[] buffer = new byte[8192]; int n; long total = 0;
                     while ((n = in.read(buffer)) != -1) {
                         total += n; if (total > entry.getSize()) throw new IOException("Embedded VPK size mismatch");
@@ -117,9 +116,9 @@ final class CompleteRuntime {
                     }
                     if (total != entry.getSize()) throw new IOException("Truncated embedded VPK");
                 }
+                reservation.stage();
             }
-            lifecycle.stageEmbedded(temporary.toFile());
-        } finally { Files.deleteIfExists(temporary); }
+        }
     }
     void applicationCreated() throws ContractException { if (lease != null) lease.applicationCreated(); }
     void failed() {

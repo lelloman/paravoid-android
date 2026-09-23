@@ -32,7 +32,8 @@ final class GenerationStore {
         ProcessLocks.requireOutsideSelection();
         Path staging = null;
         try {
-            // Reservation is serialized by the facade's preparation lock. No selection lock is held.
+            // Recheck actual capacity under preparation: the update reservation cannot
+            // prevent unrelated apps from consuming disk space. No selection lock is held.
             long sourceSize = expected == null ? Files.size(source.toPath()) : expected.archiveSize;
             long required = Math.addExact(Math.multiplyExact(sourceSize, 2), 64L * 1024 * 1024);
             if (sourceSize < 1 || sourceSize > Protocol.MAX_ARCHIVE_BYTES) throw fail(Code.LIMIT_EXCEEDED);
@@ -49,7 +50,9 @@ final class GenerationStore {
             long materialized = 0;
             for (InventoryEntry entry : release.inventory) {
                 materialized = Math.addExact(materialized, entry.size);
-                if (entry.size < 0 || materialized > 2L * 1024 * 1024 * 1024) throw fail(Code.LIMIT_EXCEEDED);
+                // The verified outer VPK is STORED. Nested APK/JAR entries are not
+                // extracted here, so materialized outer inventory cannot exceed it.
+                if (entry.size < 0 || materialized > sourceSize) throw fail(Code.LIMIT_EXCEEDED);
             }
             if (root.toFile().getUsableSpace() < materialized + 64L * 1024 * 1024)
                 throw fail(Code.INSUFFICIENT_STORAGE);

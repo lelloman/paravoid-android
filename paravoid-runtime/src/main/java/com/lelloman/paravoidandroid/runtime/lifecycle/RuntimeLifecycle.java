@@ -21,6 +21,7 @@ public final class RuntimeLifecycle implements Lifecycle {
     private final boolean mainProcess;
     private final ShellPolicy policy;
     private final InstalledStateSource installed;
+    private final java.util.function.LongSupplier usableSpace;
 
     /** Opens established state. Missing/damaged state never triggers initialization. Use Android no-backup storage. */
     public RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
@@ -29,8 +30,15 @@ public final class RuntimeLifecycle implements Lifecycle {
     }
     public RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
             Clock clock, boolean mainProcess, InstalledStateSource installed) throws ContractException {
+        this(root, policy, device, verifier, clock, mainProcess, installed, root::getUsableSpace);
+    }
+    /** Package-private disk-capacity seam for host fault tests, never a shell configuration option. */
+    RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
+            Clock clock, boolean mainProcess, InstalledStateSource installed,
+            java.util.function.LongSupplier usableSpace) throws ContractException {
         this.root = root.toPath().toAbsolutePath().normalize(); this.mainProcess = mainProcess;
         this.policy = policy; this.installed = installed;
+        this.usableSpace = Objects.requireNonNull(usableSpace);
         if (installed == null && policy.contractDescriptor().length != 0) {
             Object descriptor = StrictJson.parse(policy.contractDescriptor(), InstalledPolicyCodec.MAX_BYTES);
             if (descriptor instanceof Map && InstalledPolicyCodec.PROFILE.equals(((Map<?,?>)descriptor).get("profile")))
@@ -60,6 +68,50 @@ public final class RuntimeLifecycle implements Lifecycle {
     }
     @Override public StageResult stageDownloaded(File archive, AdmissionId id) throws ContractException {
         ExpectedArchive expected = admission.resolve(id);
+        // Direct callers already own a source archive: only the private copy and
+        // materialization remain. Delivery instead holds its reservation across HTTP.
+        try (SpaceAdmission.Claim claim = reserveSpace(expected.archiveSize, 2)) {
+            return stageReserved(archive, id, expected);
+        }
+    }
+    @Override public DownloadReservation reserveDownload(AdmissionId id) throws ContractException {
+        ExpectedArchive expected = admission.resolve(id);
+        SpaceAdmission.Claim claim = reserveSpace(expected.archiveSize, 3);
+        try {
+            if (!expected.equals(admission.resolve(id))) throw fail(Code.STALE_ADMISSION);
+            return new DownloadReservation() {
+                private boolean staged;
+                @Override public StageResult stage(File archive) throws ContractException {
+                    claim.check();
+                    if (staged) throw fail(Code.UNAVAILABLE);
+                    staged = true;
+                    if (!expected.equals(admission.resolve(id))) throw fail(Code.STALE_ADMISSION);
+                    return stageReserved(archive, id, expected);
+                }
+                @Override public void close() throws ContractException { claim.close(); }
+            };
+        } catch (ContractException | RuntimeException failure) {
+            try { claim.close(); } catch (ContractException closeFailure) { failure.addSuppressed(closeFailure); }
+            throw failure;
+        }
+    }
+    private SpaceAdmission.Claim reserveSpace(long size, int copies) throws ContractException {
+        long required = SpaceAdmission.required(size, copies);
+        SpaceAdmission.Claim claim = SpaceAdmission.acquire(root);
+        try {
+            // Only a new space owner can reap a prior process's embedded input.
+            // Public cleanup() must not touch an input being copied during a reservation.
+            try { Files.deleteIfExists(root.resolve("embedded-source.vpk")); }
+            catch (IOException failure) { throw fail(Code.IO); }
+            cleanup(); // Only abandoned preparation and unprotected/unleased history.
+            if (usableSpace.getAsLong() < required) throw fail(Code.INSUFFICIENT_STORAGE);
+            return claim;
+        } catch (ContractException | RuntimeException failure) {
+            try { claim.close(); } catch (ContractException closeFailure) { failure.addSuppressed(closeFailure); }
+            throw failure;
+        }
+    }
+    private StageResult stageReserved(File archive, AdmissionId id, ExpectedArchive expected) throws ContractException {
         cleanup();
         return preparation(() -> {
             cleanAbandonedStaging();
@@ -72,7 +124,41 @@ public final class RuntimeLifecycle implements Lifecycle {
         });
     }
     @Override public StageResult stageEmbedded(File archive) throws ContractException {
-        cleanup();
+        final long size;
+        try { size = Files.size(archive.toPath()); }
+        catch (IOException failure) { throw fail(Code.IO); }
+        try (SpaceAdmission.Claim claim = reserveSpace(size, 2)) {
+            return stageEmbeddedReserved(archive);
+        }
+    }
+    /** Shell adapter reserves before copying the embedded APK entry to private temporary storage. */
+    public EmbeddedReservation reserveEmbedded(long archiveSize) throws ContractException {
+        return new EmbeddedReservation(reserveSpace(archiveSize, 3), archiveSize);
+    }
+    public final class EmbeddedReservation implements AutoCloseable {
+        private final SpaceAdmission.Claim claim;
+        private final long size;
+        private final Path source = root.resolve("embedded-source.vpk");
+        private boolean staged, closed;
+        private EmbeddedReservation(SpaceAdmission.Claim claim, long size) { this.claim = claim; this.size = size; }
+        public File sourceFile() throws ContractException { claim.check(); return source.toFile(); }
+        public StageResult stage() throws ContractException {
+            claim.check();
+            if (staged) throw fail(Code.UNAVAILABLE);
+            staged = true;
+            try { if (Files.size(source) != size) throw fail(Code.INTEGRITY); }
+            catch (IOException failure) { throw fail(Code.IO); }
+            return stageEmbeddedReserved(source.toFile());
+        }
+        public void close() throws ContractException {
+            if (closed) return;
+            claim.check();
+            try { Files.deleteIfExists(source); }
+            catch (IOException failure) { throw fail(Code.IO); }
+            finally { closed = true; claim.close(); }
+        }
+    }
+    private StageResult stageEmbeddedReserved(File archive) throws ContractException {
         return preparation(() -> {
             cleanAbandonedStaging();
             GenerationStore.Prepared prepared = generations.prepare(archive, null);

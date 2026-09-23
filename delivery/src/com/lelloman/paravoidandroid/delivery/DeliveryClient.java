@@ -55,10 +55,7 @@ public final class DeliveryClient {
     public DeliveryClient(ShellPolicy policy, MetadataVerifier verifier, Lifecycle lifecycle, Clock clock, File noBackupDirectory) {
         this(policy, verifier, lifecycle, clock, noBackupDirectory.toPath(),
                 url -> (java.net.HttpURLConnection) url.openConnection(), (directory, size) -> {
-                    // Conservative reservation: B source + C private copy + maximum materialization + headroom.
-                    long required = 2 * size + (2L << 30) + (64L << 20);
-                    if (directory.toFile().getUsableSpace() < required)
-                        throw new ContractException(ContractException.Code.INSUFFICIENT_STORAGE, "Insufficient update storage");
+                    // RuntimeLifecycle owns admission/cleanup and the shared update-space claim.
                 });
     }
     DeliveryClient(ShellPolicy policy, MetadataVerifier verifier, Lifecycle lifecycle, Clock clock, Path directory,
@@ -205,13 +202,15 @@ public final class DeliveryClient {
             try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "*.part")) {
                 for (Path file : files) if (!file.equals(partial)) Files.deleteIfExists(file);
             }
-            storage.reserve(directory, expected.archiveSize);
-            current(captured, cancel);
-            transport.download(archiveUri, partial, expected.archiveSize, expected.archiveSha256, cancel);
-            current(captured, cancel);
-            handedOff = true;
-            StageResult staged = lifecycle.stageDownloaded(partial.toFile(), admission.admission);
-            return new Result(admission.status, staged);
+            try (DownloadReservation reservation = lifecycle.reserveDownload(admission.admission)) {
+                storage.reserve(directory, expected.archiveSize); // Additional host-test fault seam only.
+                current(captured, cancel);
+                transport.download(archiveUri, partial, expected.archiveSize, expected.archiveSha256, cancel);
+                current(captured, cancel);
+                handedOff = true;
+                StageResult staged = reservation.stage(partial.toFile());
+                return new Result(admission.status, staged);
+            }
         } catch (HttpTransport.Failure failure) {
             if (failure.status == 401 || failure.status == 403) synchronized (this) {
                 if (session == captured && captured.partition.equals(readMarker("credential-scope"))) {

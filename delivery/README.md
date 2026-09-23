@@ -28,11 +28,14 @@ and imported the committed interface slice from `v1/packaging`. Resolved:
   outcome including 304, `setCredentialScope` for replacement, and borrowed-file
   synchronous staging followed by B cleanup. C remains the freshness authority.
 
-Still needed for production completion:
-- Storage reservation API: C's bounded materialization requirement and optional
-  history eviction must precede B's download; B must not delete C's storage. Current
-  client conservatively requires two archive copies + 2 GiB materialization + 64 MiB
-  headroom. It never evicts C's history; concurrent storage reservations are pending.
+Storage integration now uses `Lifecycle.reserveDownload`: one cross-process claim
+spans HTTP transfer and staging, with lifecycle-owned cleanup and a budget of three
+archive copies + 64 MiB. This replaces the fixed 2 GiB materialization allowance.
+It serializes cooperating writers, not physical disk allocation; staging still
+rechecks actual capacity. Cancellation/failure closes the claim, and process death
+releases its OS lock. See V1 §9 and `lifecycle-tests/SpaceAdmissionTest.java`.
+
+Historical track handoff (consult the local remaining-gaps handoff for current gates):
 - C's snapshots, recovery routing, retention and explicit confirmed retry actions.
 - A's complete VPK verifier and real executable A/B archives. Real
   `SignedMetadataVerifier` and checked-in metadata vectors now test the client;
@@ -54,7 +57,7 @@ and a shell-owned Android update/bootstrap/recovery screen. See `android/README.
 and `tools/README.md` for exact integration and limitations.
 
 Remaining integration: A's pinned shell-policy carrier and build wiring, C's
-runtime/recovery routing, APK-replacement notifications, storage reservation/eviction,
+runtime/recovery routing, APK-replacement notifications,
 Android backup exclusion proof and device tests. Personalization has no v4 support
 and requires externally supplied APK-pinned policy until its carrier is defined.
 No production-ready claim. Tests never install on a device or publish anything.

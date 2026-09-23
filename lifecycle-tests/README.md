@@ -39,6 +39,13 @@ only the registry's sole descriptor after unlocking. Lock files remain permanent
 
 ## Validation
 
+- `SpaceAdmissionTest` covers the shared update-space claim: cross-JVM exclusion
+  and death release, same-JVM descriptor safety, exact budget boundaries, cancellation,
+  credential invalidation, protected active/pending bytes and replay floors. Embedded
+  extraction input survives ordinary cleanup, is reaped after an abandoned owner,
+  and is deleted before release; stale close cannot remove a new owner's input.
+  These are host tests with fixture verification and injected capacity, **not**
+  emulator disk-exhaustion evidence or physical disk preallocation.
 - `bash lifecycle-tests/run.sh`: host subprocess storage/admission/selection/facade
   tests, including process death, interrupted publication, corruption, credential
   replacement, signed metadata vectors, trials, re-download and protected cleanup.
