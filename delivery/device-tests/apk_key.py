@@ -38,11 +38,17 @@ def main():
                         help='Host-side port; adb reverse keeps the APK endpoint at 18765')
     parser.add_argument('--retry-replacement', action='store_true',
                         help='Replace the installed credential while a one-hour retry is durably scheduled')
+    parser.add_argument('--retry-crash', action='store_true',
+                        help='SIGKILL app processes during all three retries; verify durable budget exhaustion')
+    parser.add_argument('--staging-replacement-only', action='store_true',
+                        help='Use JDWP to replace the APK after real VPK verification, before publication')
     args = parser.parse_args()
     if not re.fullmatch(r'emulator-\d+', args.serial):
         parser.error('a dedicated disposable emulator serial is required')
     if not 1 <= args.server_port <= 65535:
         parser.error('invalid host server port')
+    if args.staging_replacement_only and (args.retry_crash or args.retry_replacement):
+        parser.error('staging replacement is a separate run from retry tests')
     def adb(*parts):
         return subprocess.check_output(['adb', '-s', args.serial, *parts], text=True, stderr=subprocess.STDOUT, timeout=45)
     def launch():
@@ -81,10 +87,14 @@ def main():
             audience='http://127.0.0.1:18765/', grantId='device-' + str(index), keyId='device-' + str(index),
             key=tokens[index], issuedAt=now-1000, expiresAt=now-10 if expired else now+3600))
     archive = output / 'payload.vpk'
+    head_archive_hash = hashlib.sha256(archive.read_bytes()).hexdigest()
     envelope = (output / 'release.json').read_bytes()
     release = json.loads(base64.b64decode(json.loads(envelope)['body']))
     assert release['shellContractId'] == policy['contractId']
     sdk = int(adb('shell', 'getprop', 'ro.build.version.sdk').strip())
+    root_crash = args.retry_crash and adb('shell', 'id', '-u').strip() == '0'
+    if args.retry_crash and sdk == 30 and not root_crash:
+        raise AssertionError('This API 30 crash gate requires adb -s SERIAL root before starting the suite')
     abis = adb('shell', 'getprop', 'ro.product.cpu.abilist64').strip().split(',')
     catalog = Catalog('apkKey')
     catalog.add_head(APP, dict(contract=policy['contractId'], channel='stable', sdk=str(sdk), abis=','.join(abis),
@@ -92,12 +102,16 @@ def main():
         shellContractId=policy['contractId'], channel='stable', sdk=sdk, abis=abis, runtimeAbi=1, formatVersion=1,
         headRevision=1, issuedAt=now, expiresAt=now+3600, status='available', release=dict(
         releaseId=release['releaseId'], payloadVersion=release['payloadVersion'],
-        manifestSha256=hashlib.sha256(envelope).hexdigest(), archiveSha256=hashlib.sha256(archive.read_bytes()).hexdigest(),
+        manifestSha256=hashlib.sha256(envelope).hexdigest(), archiveSha256=head_archive_hash,
         archiveSize=archive.stat().st_size))))
     catalog.add_archive(APP, release['releaseId'], archive)
     requests = []  # Booleans only: never retain or print request credentials.
     credential_ids = []  # Fixture indices, never bearer values.
     retry_head = threading.Event()
+    retry_seconds = 3600
+    crash_heads = threading.Event()
+    release_crash = threading.Event()
+    held_heads = []  # Disconnect events only, no request credentials.
     old_download = threading.Event()
     release_old = threading.Event()
     hold_main = threading.Event()
@@ -112,9 +126,24 @@ def main():
             if '/head?' in self.path and retry_head.is_set():
                 retry_head.clear()
                 self.send_response(429)
-                self.send_header('Retry-After', '3600')
+                self.send_header('Retry-After', str(retry_seconds))
                 self.send_header('Content-Length', '0')
                 self.end_headers()
+                return
+            if '/head?' in self.path and crash_heads.is_set():
+                disconnected = threading.Event()
+                held_heads.append(disconnected)
+                deadline = time.monotonic() + 120
+                while not release_crash.is_set() and time.monotonic() < deadline:
+                    readable, _, _ = select.select([self.connection], [], [], .1)
+                    if readable:
+                        try:
+                            eof = self.connection.recv(1, socket.MSG_PEEK) == b''
+                        except ConnectionResetError:
+                            eof = True
+                        if eof:
+                            disconnected.set()
+                            return
                 return
             if '/releases/' in self.path and self.headers.get('Authorization') == 'Bearer ' + tokens[0]:
                 old_download.set()
@@ -148,6 +177,60 @@ def main():
             expired = carrier('expired', grant(0, True))
             first = carrier('first', grant(0))
             replacement = carrier('replacement', grant(1))
+            if args.staging_replacement_only:
+                gate_dir = Path(tmp) / 'gate'
+                gate_dir.mkdir()
+                subprocess.run(['javac', '--add-modules', 'jdk.jdi', '-d', str(gate_dir),
+                                str(ROOT / 'delivery/device-tests/StagingGate.java')], check=True, timeout=45)
+                catalog.grant(tokens[0], APP, ['stable'], [release['releaseId']])
+                adb('install', '-r', str(first)); adb('shell', 'pm', 'clear', APP); launch()
+                assert old_download.wait(15), 'Initial archive request not held'
+                owner = adb('shell', 'pidof', APP + ':paravoid_recovery').strip()
+                assert owner.isdigit()
+                port = adb('forward', 'tcp:0', 'jdwp:' + owner).strip()
+                assert port.isdigit()
+                gate = None
+                def marker(name):
+                    deadline = time.monotonic() + 30
+                    while time.monotonic() < deadline:
+                        if (gate_dir / name).exists():
+                            return
+                        if gate.poll() is not None:
+                            raise AssertionError('Debugger exited before ' + name)
+                        time.sleep(.1)
+                    raise AssertionError('Debugger did not reach ' + name)
+                def private_bytes(path):
+                    return subprocess.check_output(['adb', '-s', args.serial, 'exec-out', 'run-as', APP,
+                                                    'cat', path], timeout=45)
+                try:
+                    with (gate_dir / 'log').open('w') as log:
+                        gate = subprocess.Popen(['java', '--add-modules', 'jdk.jdi', '-cp', str(gate_dir),
+                                                 'StagingGate', port, str(gate_dir)], stdout=log, stderr=log)
+                        marker('ready'); release_old.set(); marker('verified')
+                        store = 'no_backup/paravoid-v1/'
+                        staged = adb('shell', 'run-as', APP, 'find', store + 'staging', '-name', 'archive.vpk').splitlines()
+                        assert len(staged) == 1
+                        assert hashlib.sha256(private_bytes(staged[0])).hexdigest() == head_archive_hash
+                        assert not adb('shell', 'run-as', APP, 'ls', store + 'generations').strip()
+                        security = private_bytes(store + 'security')
+                        catalog.revoke(tokens[0]); catalog.grant(tokens[1], APP, ['stable'], [release['releaseId']])
+                        count = len(requests)
+                        adb('install', '-r', str(replacement))
+                        marker('disconnected'); assert gate.wait(timeout=10) == 0
+                        assert security == private_bytes(store + 'security'), 'Interrupted staging must not reset security history'
+                        assert not adb('shell', 'run-as', APP, 'ls', store + 'generations').strip(), 'Old staging was published'
+                        launch(); expect('Pending: ' + release['releaseId'])
+                        assert credential_ids[count:] and all(i == 1 for i in credential_ids[count:])
+                        assert not adb('shell', 'run-as', APP, 'ls', store + 'staging').strip()
+                        adb('shell', 'am', 'force-stop', APP); launch()
+                        expect('generation=A;asset=payload-asset;java=payload-java-resource')
+                        print('PASS: verified private staging interrupted by APK replacement; no old publication, security preserved, new-grant retry and payload launch succeed')
+                        print('Device:', args.serial, 'API', sdk)
+                finally:
+                    if gate is not None and gate.poll() is None:
+                        gate.terminate(); gate.wait(timeout=10)
+                    adb('forward', '--remove', 'tcp:' + port)
+                return
             for name, apk in [('missing', source), ('invalid', invalid), ('expired', expired)]:
                 adb('install', '-r', str(apk)); adb('shell', 'pm', 'clear', APP); launch()
                 expect('Update access unavailable')
@@ -239,6 +322,53 @@ def main():
             assert adb('shell', 'pidof', APP).strip() == main_pid
             assert all(requests)
             print('PASS: main HTTP cancelled by recovery; socket closed before response, no pending payload, main survives')
+            if args.retry_crash:
+                hold_main.clear(); retry_seconds = 5; crash_heads.set(); retry_head.set()
+                tap('Retry update access')
+                for index, consumed in enumerate((2, 3, 4)):
+                    deadline = time.monotonic() + 20
+                    while len(held_heads) <= index and time.monotonic() < deadline:
+                        time.sleep(.1)
+                    assert len(held_heads) == index + 1, 'Expected exactly one interrupted retry request'
+                    saved_retry = adb('shell', 'run-as', APP, 'cat', preference_path + '.retry')
+                    assert int(re.search(r'(?m)^retries=(\d+)$', saved_retry)[1]) == consumed
+                    assert not held_heads[index].is_set(), 'Request ended before crash injection'
+                    # Background Activities first so framework UI recovery cannot race
+                    # the controlled relaunch. Kill only validated fixture-owned PIDs.
+                    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+                    killed = []
+                    for process_name in (APP, APP + ':paravoid_recovery'):
+                        result = subprocess.run(['adb', '-s', args.serial, 'shell', 'pidof', process_name],
+                                                text=True, capture_output=True, timeout=45)
+                        for pid in result.stdout.split():
+                            assert pid.isdigit()
+                            # API 30's toybox kill applet misparses numeric signals
+                            # under run-as; use the shell builtin with a digits-only PID.
+                            if root_crash:
+                                adb('shell', 'sh', '-c', "'kill -9 " + pid + "'")
+                            else:
+                                adb('shell', 'run-as', APP, 'sh', '-c', "'kill -9 " + pid + "'")
+                            killed.append(pid)
+                    assert killed and held_heads[index].wait(10), 'Owner death did not close held HTTP'
+                    assert saved_retry == adb('shell', 'run-as', APP, 'cat', preference_path + '.retry')
+                    launch()
+                count = len(requests)
+                for _ in range(40):
+                    pending_retry = subprocess.run(['adb', '-s', args.serial, 'shell', 'run-as', APP,
+                                                    'test', '-e', preference_path + '.retry'], timeout=45)
+                    if pending_retry.returncode == 1:
+                        break
+                    time.sleep(.25)
+                else:
+                    raise AssertionError('Exhausted retry record was not cleared after restart')
+                expect('generation=A;asset=payload-asset;java=payload-java-resource')
+                time.sleep(2)
+                assert len(requests) == count and len(held_heads) == 3, 'Restart reset the retry budget'
+                crash_heads.clear(); release_crash.set(); retry_seconds = 3600
+                subprocess.run(shortcut, check=True, timeout=120)
+                tap('Retry update access'); expect('Update: READY')
+                assert len(requests) >= count + 2, 'Explicit new attempt must remain possible after exhaustion'
+                print('PASS: SIGKILL during retries preserves counters 2/3/4; restart sends no fourth retry; active app and explicit retry work')
             if args.retry_replacement:
                 hold_main.clear(); retry_head.set()
                 tap('Retry update access'); expect('Update: WAITING_TO_RETRY')
@@ -264,7 +394,7 @@ def main():
                 print('PASS: APK credential replacement discards old one-hour retry; only replacement key requests, active payload survives')
             print('Device:', args.serial, 'API', sdk)
     finally:
-        release_old.set(); release_main.set(); server.shutdown(); server.server_close()
+        release_old.set(); release_main.set(); release_crash.set(); server.shutdown(); server.server_close()
         adb('reverse', '--remove', 'tcp:18765')
 
 if __name__ == '__main__':

@@ -130,6 +130,47 @@ explicit retry, HTTP-time APK replacement and the new persisted-delay replacemen
 The final-build runs passed after the checkpoint/monitor lock-order correction;
 both emulators were stopped afterward. No phone or publication was involved.
 
+## Retry process-death and verified-staging replacement gates
+
+`apk_key.py --retry-crash` adds a deterministic process-death test. A real HTTP 429
+starts the retry cycle; each subsequent head response is held while the script
+checks the persisted consumed-retry counter (2, 3, then 4), backgrounds the UI,
+and sends SIGKILL to the fixture's resolved main/recovery PIDs. Each fresh launch
+must consume the next retry, never reset the budget. After the third interrupted
+retry, a restart must clear exhausted retry state without another HTTP request;
+the active payload and an explicit new retry must still work. No retry records or
+clocks are edited. This covers death after durable retry consumption, **not** every
+instruction around temporary-file rename, power loss, or filesystem corruption.
+
+The API 30 Google APIs image requires `adb -s SERIAL root` **before** this crash
+suite: signals from `run-as` to app processes were denied on this image. Its toybox
+kill applet also misparses numeric signals under `run-as`, so the driver uses the
+shell builtin. API 36.1 uses unprivileged `run-as` signal injection. These are test
+harness requirements on disposable emulators, never production app permissions.
+
+`apk_key.py --staging-replacement-only` runs a separate, shorter staging test.
+It requires a JDK with `jdk.jdi` and a debuggable fixture APK. The test-only
+`StagingGate.java` attaches over a temporary adb JDWP forward and suspends only the
+delivery thread at normal return from the production `verifyDownloaded` method.
+It checks the private archive's hash and absence of published generations, then
+installs an APK carrying a replacement grant. The old VM must disconnect, the
+security record must remain byte-identical, and no old generation may be published.
+A fresh process must use only the new credential, clean abandoned staging, stage
+successfully and launch the payload. No production fault hooks or verifier bypasses
+are added, and debugger forwards are removed afterward.
+
+This staging gate starts from an empty shell and uses normal base-APK replacement,
+which kills old processes. It is not evidence for a surviving stale process, an
+already-active generation under staging interruption, or a non-debuggable release
+APK. Host authority/lease tests cover separate logic boundaries.
+
+Both new gates passed on 2026-09-23 on Restart30/API 30 (`emulator-5586`) and
+Restart36/API 36.1 (`emulator-5584`), x86_64, with the production implementation
+unchanged from `5a7dcdc`. Retry runs included `--retry-crash --retry-replacement`;
+the staging gate ran separately with `--staging-replacement-only`. The complete
+host delivery suite also passed. API 30 adb root was used only for crash injection
+and restored afterward; both emulators were stopped. No phone or publication.
+
 The auth test uses the production carrier insertion primitive to create private
 debug-HTTP test APKs, including intentionally invalid inputs. This is **not** proof
 of the production HTTPS-only personalization CLI on-device; its strict verified
