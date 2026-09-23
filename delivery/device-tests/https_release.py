@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Non-debuggable release APK + real personalization CLI + validated TLS, on an explicit emulator."""
+"""Signed release HTTPS acceptance: disposable emulator, or explicitly opted-in physical ARM64."""
 import argparse
 import base64
 import hashlib
@@ -23,14 +23,19 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'delivery/reference'))
 from server import Catalog, Server, Handler
+from physical_safety import preflight, validate_apk_badging
 
 APP = 'com.lelloman.paravoidcompat.complete.paravoid'
 NORMAL = 'com.lelloman.paravoidcompat.complete'
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--serial', required=True)
 parser.add_argument('--server-port', type=int, default=18765)
+parser.add_argument('--physical-arm64', action='store_true')
+parser.add_argument('--allow-fixture-install', help='Exact comma-separated fixture package IDs; new installs only')
 args = parser.parse_args()
-assert re.fullmatch(r'emulator-\d+', args.serial), 'Disposable emulator required'
+if not args.physical_arm64:
+    assert re.fullmatch(r'emulator-\d+', args.serial), 'Disposable emulator required (physical use requires explicit opt-in)'
+    assert args.allow_fixture_install is None, 'Fixture consent is only for physical mode'
 assert 1 <= args.server_port <= 65535
 
 
@@ -86,10 +91,20 @@ def controls():
     raise AssertionError('Release shell controls shortcut not found')
 
 
-assert adb('shell', 'getprop', 'ro.kernel.qemu').strip() == '1'
+if args.physical_arm64:
+    preflight(adb, args.serial, args.allow_fixture_install)
+else:
+    assert adb('shell', 'getprop', 'ro.kernel.qemu').strip() == '1'
 fixture = ROOT / 'compatibility/complete-v1'
 output = fixture / 'build/outputs/paravoid/paravoidAndroidRelease'
 source, archive = output / 'shell.apk', output / 'payload.vpk'
+if args.physical_arm64:
+    aapt = Path(os.environ['ANDROID_HOME']) / 'build-tools/36.0.0/aapt2'
+    for apk_file, expected_package in ((source, APP),
+            (fixture / 'build/outputs/apk/normal/release/complete-v1-normal-release.apk', NORMAL)):
+        badging = subprocess.run([str(aapt), 'dump', 'badging', str(apk_file)],
+            capture_output=True, text=True, check=True, timeout=60).stdout
+        validate_apk_badging(badging, expected_package)
 with zipfile.ZipFile(source) as apk:
     policy = json.loads(apk.read('assets/paravoid/shell-policy.json'))
 distribution = policy['descriptor']['distribution']
@@ -100,7 +115,7 @@ release = json.loads(base64.b64decode(json.loads(envelope)['body']))
 assert release['shellContractId'] == policy['contractId']
 sdk = int(adb('shell', 'getprop', 'ro.build.version.sdk').strip())
 abis = adb('shell', 'getprop', 'ro.product.cpu.abilist64').strip().split(',')
-assert sdk in (30, 36)
+assert sdk >= 30 if args.physical_arm64 else sdk in (30, 36)
 now = int(time.time())
 
 
@@ -155,9 +170,15 @@ def start_server(name):
 
 
 server = None
+reverse_created = False
 try:
+    if args.physical_arm64:
+        # Recheck directly before the first mutation, after artifact parsing.
+        preflight(adb, args.serial, args.allow_fixture_install)
     adb('reverse', 'tcp:18765', 'tcp:' + str(args.server_port))
-    adb('uninstall', NORMAL, check=False); adb('uninstall', APP, check=False)
+    reverse_created = True
+    if not args.physical_arm64:
+        adb('uninstall', NORMAL, check=False); adb('uninstall', APP, check=False)
     adb('install', fixture / 'build/outputs/apk/normal/release/complete-v1-normal-release.apk')
     adb('shell', 'am', 'start', '-W', '-n', NORMAL + '/.MainActivity')
     expect('generation=A;asset=payload-asset;java=payload-java-resource')
@@ -211,4 +232,7 @@ try:
 finally:
     if server is not None:
         server.shutdown(); server.server_close()
-    adb('reverse', '--remove', 'tcp:18765')
+    if reverse_created:
+        adb('reverse', '--remove', 'tcp:18765')
+    if args.physical_arm64:
+        print('Physical fixture packages retained; no package/data cleanup performed.', flush=True)

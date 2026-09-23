@@ -25,6 +25,10 @@ normal and shell packages. Distinct host ports permit concurrent runs. It uses
 adb reverse and the real launcher shortcut, not a private runtime control API.
 It removes its port mapping and shuts down its server even after failure.
 
+For separately authorized, dedicated physical ARM64 hardware, see
+[PHYSICAL-ARM64.md](PHYSICAL-ARM64.md). Physical opt-in refuses existing fixture
+packages/data and does not uninstall them; no physical pass is claimed yet.
+
 `prepare_https.py` generates ignored TLS/signing material under the fixture's
 build directory. It regenerates the CA, so rebuild the APK after running it.
 Only this acceptance variant trusts the generated CA through Android's network
