@@ -4,7 +4,6 @@ import com.lelloman.paravoidandroid.contract.*;
 import com.lelloman.paravoidandroid.contract.Protocol.*;
 import java.io.*;
 import java.nio.file.*;
-import java.nio.channels.*;
 import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.function.BooleanSupplier;
@@ -40,8 +39,7 @@ public final class DeliveryController {
     private long operation;
     private Activity activity = Activity.IDLE;
     private String error;
-    private FileChannel attemptChannel;
-    private FileLock attemptLock;
+    private DeliveryLocks.Claim attemptLock;
     private final CancellationSignal cancellation;
     private String cancellationEpoch;
     private ScheduledFuture<?> cancellationWatch;
@@ -50,12 +48,8 @@ public final class DeliveryController {
     // OS releases this lock on process death; never hold a lifecycle selection lock.
     private boolean claimAttempt() throws IOException {
         Files.createDirectories(preferenceFile.getParent());
-        attemptChannel = FileChannel.open(preferenceFile.resolveSibling(preferenceFile.getFileName() + ".attempt"),
-                StandardOpenOption.CREATE, StandardOpenOption.WRITE);
-        try { attemptLock = attemptChannel.tryLock(); }
-        catch (OverlappingFileLockException busy) { /* Another controller in this VM. */ }
-        if (attemptLock != null) return true;
-        attemptChannel.close(); attemptChannel = null; return false;
+        attemptLock = DeliveryLocks.tryAcquire(preferenceFile.resolveSibling(preferenceFile.getFileName() + ".attempt"));
+        return attemptLock != null;
     }
     private Path retryFile() { return preferenceFile.resolveSibling(preferenceFile.getFileName() + ".retry"); }
     private void clearRetry() {
@@ -64,13 +58,10 @@ public final class DeliveryController {
     }
     private void releaseAttempt() {
         if (cancellationWatch != null) { cancellationWatch.cancel(false); cancellationWatch = null; }
-        try { if (attemptLock != null) attemptLock.release(); }
+        try { if (attemptLock != null) attemptLock.close(); }
         catch (IOException failure) { fail("IO"); }
         finally {
             attemptLock = null;
-            try { if (attemptChannel != null) attemptChannel.close(); }
-            catch (IOException failure) { fail("IO"); }
-            attemptChannel = null;
         }
     }
 

@@ -113,6 +113,11 @@ public final class DeliveryControllerTest {
             c.setup.f.responses.add(new Fake(429, new byte[0]).put("Retry-After", "3600"));
             c.controller.checkNow(); c.await(DeliveryController.Activity.WAITING_TO_RETRY);
             check(c.setup.f.requests == 1); check(c.worker.getQueue().size() == 1);
+            DeliveryController peer = new DeliveryController(c.setup.client, c.setup.life, c.setup.scope, c.setup.clock,
+                c.preferences.toFile(), () -> true, c.worker, Runnable::run);
+            peer.checkNow(); c.barrier();
+            DeliveryLocksTest.probe(c.preferences.resolveSibling("preferences.attempt"), "BUSY");
+            check(c.setup.f.requests == 1); // Busy same-VM controller must not admit another process.
             c.controller.cancelDownload(); c.await(DeliveryController.Activity.CANCELLED); c.barrier();
             check(c.worker.getQueue().isEmpty()); check(c.setup.f.requests == 1);
         }

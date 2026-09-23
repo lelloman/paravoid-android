@@ -6,7 +6,6 @@ import java.io.*;
 import java.net.URI;
 import java.nio.file.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.channels.*;
 import java.util.*;
 
 /** Blocking worker-thread delivery orchestration; never selects or executes a payload. */
@@ -120,17 +119,11 @@ public final class DeliveryClient {
     // Never unlink the file synchronously borrowed by stageDownloaded, including
     // when another process refreshes its installed grant. Its owner cleans up on return.
     private void cleanupIdlePartials() throws IOException {
-        try (FileChannel channel = FileChannel.open(directory.resolve("transfer.lock"),
-                StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
-            FileLock lock;
-            try { lock = channel.tryLock(); }
-            catch (OverlappingFileLockException busy) { return; }
+        try (DeliveryLocks.Claim lock = DeliveryLocks.tryAcquire(directory.resolve("transfer.lock"))) {
             if (lock == null) return;
-            try {
-                try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "*.part")) {
-                    for (Path file : files) Files.deleteIfExists(file);
-                }
-            } finally { lock.release(); }
+            try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "*.part")) {
+                for (Path file : files) Files.deleteIfExists(file);
+            }
         }
     }
 
@@ -161,12 +154,9 @@ public final class DeliveryClient {
         }
         Path partial = null;
         boolean handedOff = false;
-        FileChannel lockChannel = null;
-        FileLock lock = null;
+        DeliveryLocks.Claim lock = null;
         try {
-            lockChannel = FileChannel.open(directory.resolve("transfer.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
-            try { lock = lockChannel.tryLock(); }
-            catch (OverlappingFileLockException busy) { /* Same-JVM second controller. */ }
+            lock = DeliveryLocks.tryAcquire(directory.resolve("transfer.lock"));
             if (lock == null) throw new ContractException(ContractException.Code.UNAVAILABLE, "Another process is checking updates");
             current(captured, cancel);
             // Only the current transfer owner may lift suppression. A stale/busy
@@ -225,11 +215,8 @@ public final class DeliveryClient {
                     if (partial != null && (handedOff || session != captured
                             || !captured.partition.equals(readMarker("credential-scope")))) Files.deleteIfExists(partial);
                 } finally {
-                    try { if (lock != null) lock.release(); }
-                    finally {
-                        try { if (lockChannel != null) lockChannel.close(); }
-                        finally { if (active == cancel) active = null; }
-                    }
+                    try { if (lock != null) lock.close(); }
+                    finally { if (active == cancel) active = null; }
                 }
             }
         }

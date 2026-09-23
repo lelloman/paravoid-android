@@ -131,6 +131,7 @@ public final class DeliveryClientTest {
                     StandardOpenOption.WRITE); java.nio.channels.FileLock lock = channel.lock()) {
                 check(lock.isValid());
                 contractFailure(ContractException.Code.UNAVAILABLE, () -> peer.check(s.scope, false, true));
+                DeliveryLocksTest.probe(s.f.dir.resolve("transfer.lock"), "BUSY");
             }
             contractFailure(ContractException.Code.CREDENTIAL_UNAVAILABLE, () -> s.client.check(s.scope, false, false));
             check(s.f.requests == 1); // Busy retry must not erase a denial without an attempt.

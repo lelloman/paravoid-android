@@ -35,6 +35,14 @@ It serializes cooperating writers, not physical disk allocation; staging still
 rechecks actual capacity. Cancellation/failure closes the claim, and process death
 releases its OS lock. See V1 §9 and `lifecycle-tests/SpaceAdmissionTest.java`.
 
+Attempt and transfer exclusion use one permanent channel per canonical lock path
+in each process. A failed same-process acquisition must not close a second
+descriptor: that can release the first owner's POSIX lock. Lock files are never
+unlinked, and channels live until process exit; claims release only their locks.
+Host subprocess tests cover busy client/controller attempts, repeated contention,
+normal release and process death. Preferences use a separate class-synchronized
+read/modify/write lock, with no concurrently open descriptors in that path.
+
 Historical track handoff (consult the local remaining-gaps handoff for current gates):
 - C's snapshots, recovery routing, retention and explicit confirmed retry actions.
 - A's complete VPK verifier and real executable A/B archives. Real
