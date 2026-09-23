@@ -1,0 +1,25 @@
+plugins {
+    id 'com.lelloman.paravoid'
+    id 'com.lelloman.paravoid.hilt' apply false
+    id 'com.lelloman.paravoid.work' apply false
+}
+android {
+    namespace 'com.lelloman.paravoidreleaseconsumer'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.lelloman.paravoidreleaseconsumer'
+        minSdk 30
+        targetSdk 36
+        versionCode 1
+        versionName '1'
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
+}
+paravoid {
+    packaging = 'complete'; bootstrap = 'embedded'; payloadVersion = 1L
+    updates { trustPolicyFile = layout.projectDirectory.file('build/keys/trust.json') }
+    signing { keyId = 'fixture'; privateKeyFile = layout.projectDirectory.file('build/keys/release.der') }
+}
+dependencies {
+    implementation "com.lelloman.paravoid:paravoid-runtime:${providers.gradleProperty('paravoidVersion').getOrElse('0.1.0-dev')}"
+}

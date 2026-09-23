@@ -1,0 +1,20 @@
+pluginManagement {
+    repositories {
+        maven { url = uri(providers.gradleProperty('paravoidRepository').get()) }
+        google(); mavenCentral(); gradlePluginPortal()
+    }
+    plugins {
+        id 'com.lelloman.paravoid' version providers.gradleProperty('paravoidVersion').getOrElse('0.1.0-dev')
+        id 'com.lelloman.paravoid.hilt' version providers.gradleProperty('paravoidVersion').getOrElse('0.1.0-dev')
+        id 'com.lelloman.paravoid.work' version providers.gradleProperty('paravoidVersion').getOrElse('0.1.0-dev')
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        maven { url = uri(providers.gradleProperty('paravoidRepository').get()) }
+        google(); mavenCentral()
+    }
+}
+rootProject.name = 'paravoid-published-consumer'
+// Deliberately no includeBuild, project dependency or local source substitution.

@@ -1,7 +1,9 @@
 plugins { id 'com.android.library' }
+apply from: '../gradle/local-publication.gradle'
 android {
     namespace 'com.lelloman.paravoidandroid.runtime'
     compileSdk 36
+    publishing { singleVariant('release') { withSourcesJar() } }
     sourceSets.main.java.srcDirs('../delivery/src', '../delivery/android/src')
     defaultConfig {
         minSdk 26
@@ -17,3 +19,4 @@ dependencies {
     implementation project(':paravoid-contract')
     testImplementation 'junit:junit:4.13.2'
 }
+afterEvaluate { publishing.publications.create('release', MavenPublication) { from components.release } }

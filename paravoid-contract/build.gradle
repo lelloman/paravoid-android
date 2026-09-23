@@ -1,11 +1,13 @@
 plugins { id 'java-library' }
 
 group = 'com.lelloman.paravoid'
-version = '0.1.0-dev'
+apply from: '../gradle/local-publication.gradle'
 java {
+    withSourcesJar()
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
 }
+publishing { publications { library(MavenPublication) { from components.java } } }
 dependencies { testImplementation 'junit:junit:4.13.2' }
 
 tasks.register('generateMetadataVectors', JavaExec) {

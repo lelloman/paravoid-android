@@ -3,17 +3,18 @@ plugins {
     id 'java-gradle-plugin'
 }
 group = 'com.lelloman.paravoid'
-version = '0.1.0-dev'
+apply from: '../gradle/local-publication.gradle'
 repositories { google(); mavenCentral() }
 configurations { hiltTestPlugin { extendsFrom implementation, runtimeOnly } }
 dependencies {
-    implementation 'com.lelloman.paravoid:paravoid-gradle-plugin:0.1.0-dev'
+    implementation "com.lelloman.paravoid:paravoid-gradle-plugin:${project.version}"
     implementation 'org.ow2.asm:asm:9.7'
     testImplementation gradleTestKit()
     testImplementation 'junit:junit:4.13.2'
     hiltTestPlugin 'com.google.dagger:hilt-android-gradle-plugin:2.57.2'
 }
 java {
+    withSourcesJar()
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
 }

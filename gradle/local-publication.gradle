@@ -1,0 +1,27 @@
+// Local staging only. Remote repositories/credentials are deliberately not configured.
+apply plugin: 'maven-publish'
+group = 'com.lelloman.paravoid'
+version = providers.gradleProperty('paravoidVersion').getOrElse('0.1.0-dev')
+
+publishing {
+    repositories {
+        maven {
+            name = 'LocalStaging'
+            url = uri(providers.gradleProperty('paravoidRepository').getOrElse(
+                layout.buildDirectory.dir('local-repository').get().asFile.absolutePath))
+            if (url.scheme != 'file') throw new GradleException('Local staging requires a file repository, not a remote URL.')
+        }
+    }
+    publications.withType(MavenPublication).configureEach {
+        pom {
+            name = project.name
+            description = 'Paravoid Android shell and signed application payload tooling'
+            url = 'https://github.com/lelloman/paravoid-android'
+            scm {
+                url = 'https://github.com/lelloman/paravoid-android'
+                connection = 'scm:git:https://github.com/lelloman/paravoid-android.git'
+            }
+            // License is a release-owner decision; do not invent one for staging.
+        }
+    }
+}

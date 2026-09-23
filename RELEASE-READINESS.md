@@ -16,7 +16,7 @@ Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 | Real app | Final-runtime Pezzottify fixed-shell A-to-B, data/workflows, incompatible rejection and forward repair | Open; downstream edits require coordinated scope |
 | Physical device | Signed release ARM64 core matrix | No device connected; device authorization needed |
 | Packaging/regression | Large limits, publication failures, optional integrations and final exact-revision matrix | Open |
-| Distribution | Version/license/repository, local artifact consumption, metadata/tag/release notes, repeatable validation | User choices needed; external publication not authorized here |
+| Distribution | Version/license/repository, production metadata/tag/release notes, repeatable validation | Local staging/standalone consumer pass; user choices and remote setup pending |
 
 ## Scope and completion rules
 
