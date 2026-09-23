@@ -59,3 +59,7 @@ code at `52aea67`, with this fixture/harness. Build log:
 `/tmp/paravoid-https-release30.log` and `/tmp/paravoid-https-release36.log`.
 Earlier harness runs incorrectly expected persisted error UI after process death;
 the corrected assertions above verify transport and retained-app behavior.
+
+The full suite passed again on both APIs after the persistence, recovery and
+packaging fixes, production `d7f7072`: `/tmp/paravoid-final-https30.log` and
+`/tmp/paravoid-final-https36.log`; build `/tmp/paravoid-final-release-build.log`.

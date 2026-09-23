@@ -10,12 +10,12 @@ Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 | Startup | Supported factory construction and provider/Activity/service startup; later crashes excluded | Seven installed cases/API on API 30/36.1 pass; explicit scope/handler limits in integration-v1/STARTUP-FAILURES.md |
 | Recovery races | Installed stale identity, pending repair, corruption and live lease refusal | Passed on API 30/36.1; pending-repair lifecycle gap fixed; see integration-v1/STARTUP-FAILURES.md |
 | Controls access | Document and test fallback when dynamic shortcut unavailable | Product/implementation decision open |
-| Storage/processes | Selected distinct-release contention/death/cancel and publication I/O; review restart identity/stalls | Installed exhaustion/admission passes; broader gates open |
+| Storage/processes | Selected distinct-release contention/death/cancel and publication I/O; restart identity/stall limits | Selected matrix passed on both APIs; see delivery/device-tests/README.md and V1.md restart limits |
 | HTTPS/auth | Signed release HTTPS download, personalized install, revoke/replace, interrupted transfer and fail-closed grants | Passed on API 30/36.1; local TLS and scope in delivery/device-tests/HTTPS-RELEASE.md |
-| Security/signing | Signing-block ID/v4 disposition, vector audit, independent protocol/security review | Open; independent reviewer needed |
+| Security/signing | Signing-block ID collision audit and independent protocol/security review | Review packet in RELEASE-SECURITY-REVIEW.md; v4 refusal defined/tested, not v4 regeneration support; reviewer needed |
 | Real app | Final-runtime Pezzottify fixed-shell A-to-B, data/workflows, incompatible rejection and forward repair | Open; downstream edits require coordinated scope |
 | Physical device | Signed release ARM64 core matrix | No device connected; device authorization needed |
-| Packaging/regression | Large valid payload execution, publication failures, optional integrations and final exact-revision matrix | Exact structural bounds pass; broader acceptance open |
+| Packaging/regression | Large valid payload execution, publication failures, optional integrations and final matrix | Near-limit VPK runs on both APIs; final-rename IO and 159-test host bundle pass; see delivery/device-tests/LARGE-PAYLOAD.md and release-tests/README.md |
 | Distribution | Version/license/repository, production metadata/tag/release notes, repeatable validation | Local staging/standalone consumer pass; user choices and remote setup pending |
 
 ## Scope and completion rules
@@ -47,7 +47,13 @@ choices. Do not claim these gates complete if no answer is available.
   guard probe, 4,096/4,097 entries, 255/256-byte names and 1 MiB/+1 envelope reads.
   Sparse size rejection is not verification/loading of a valid 1 GiB payload;
   structural envelope reads are not acceptance of unsigned metadata.
-- Combined regression: 153 plugin/Hilt/Work/contract/runtime tests passed, plus
+- Combined regression: 159 plugin/Hilt/Work/contract/runtime tests passed, plus
   lifecycle/delivery host suites. Fixture dependency gaps found by the initial
   run were corrected and rerun; see `release-tests/README.md`. This is current
   build/host evidence, not completion of open device/security/real-app gates.
+- Final ordinary public/restart controls and signed release HTTPS reruns passed
+  on API 30/36.1 against production `d7f7072`. Logs:
+  `/tmp/paravoid-final-public{30,36}.log`, `/tmp/paravoid-final-https{30,36}.log`.
+  Local publication/standalone consumer passed again at `4815fb3`:
+  `/tmp/paravoid-final-publication.log`, local repository
+  `/tmp/paravoid-local-publication.ZkIgPX`. No remote publication or phone use.
