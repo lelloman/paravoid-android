@@ -5,6 +5,10 @@ Public distribution targets GitHub/JitPack; Fucina remains internal. See
 and the remaining remote-release boundary. The commands below retain the
 original internal/local Maven coordinates and do not upload to Fucina.
 
+`CHANGELOG.md` records downstream-visible changes and migration steps. Use
+`python3 release-tests/changes.py --from <installed> --to <target>` for a
+multi-version upgrade, or `--verify <version>` before staging a tagged release.
+
 `bash release-tests/regression.sh` runs the plugin, optional Hilt/Work, contract,
 runtime, lifecycle and delivery host suites plus Android delivery compilation.
 It accepts the Gradle/cache/offline variables below and deliberately does not

@@ -8,6 +8,8 @@ candidate. Read `RELEASE-READINESS.md` for the other release gates.
 Before staging, the owner must select:
 
 - A coordinated release version (not the development default or a snapshot).
+- A dated `CHANGELOG.md` section for that exact version, including migration
+  guidance for downstream apps. Move relevant Unreleased entries into it.
 - A license, its canonical URL, and any required source-tree license/notice files.
   Setting a POM field does not itself license the repository.
 - The actual HTTPS artifact repository and its repository-specific metadata,
@@ -35,6 +37,7 @@ Stage using the selected version and license, along with the environment describ
 in `README.md`:
 
 ```sh
+python3 release-tests/changes.py --verify '<version>'
 PARAVOID_VERSION='<version>' \
 PARAVOID_LICENSE_NAME='<license name>' \
 PARAVOID_LICENSE_URL='<canonical HTTPS license URL>' \
@@ -74,6 +77,11 @@ Copy this outline into the actual version's release notes once decisions are fin
 - Normal/shell packaging and updates configuration migration instructions.
 - Behavior changes, known limitations and security review reference.
 - Artifact destination, signature-verification instructions, source license/notices.
+
+Use the version's `CHANGELOG.md` section as the release's user-facing changes and
+migration text. Generate a combined view for a consumer skipping versions with
+`python3 release-tests/changes.py --from <installed> --to <target>`. Never
+rewrite notes or move a tag after publication; add corrections in a later release.
 
 Before remote release: approve the actual source commit, run the standalone
 consumer against that exact staged version, resolve every open readiness gate,

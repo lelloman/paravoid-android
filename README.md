@@ -40,6 +40,24 @@ on a device.
 are available; remote publication, release metadata and security acceptance are
 not implied by a successful local build.
 
+## Paravoid release changes
+
+[CHANGELOG.md](CHANGELOG.md) is the downstream upgrade record for the plugin,
+runtime and optional integrations. The six modules use one coordinated version.
+Each tagged release gets a dated entry with migration guidance. An app moving
+across several versions can read all intervening entries with:
+
+```sh
+python3 release-tests/changes.py --from 0.1.0 --to 0.3.0
+```
+
+Use the exact versions of the installed and target Paravoid dependencies; the
+command refuses unknown versions and does not silently omit skipped releases.
+JitPack's optional `v` tag prefix is accepted (for example, `v0.1.0`).
+The current entries are **Unreleased** until the first public version is approved.
+Releases are intended to follow ready changes rather than a calendar schedule;
+commits and JitPack commit builds are not tagged Paravoid releases.
+
 ## Agreed downstream architecture
 
 The downstream developer keeps an ordinary Android application project. The

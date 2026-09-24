@@ -22,10 +22,10 @@ class JitPackInstallTests(unittest.TestCase):
             self.assertNotIn('publishToMavenLocal', result.stdout)
 
     def test_jitpack_environment_and_all_included_builds(self):
-        result = self.run_install(GROUP='com.github.owner', ARTIFACT='project', VERSION='v0.1.0-alpha01')
+        result = self.run_install(GROUP='com.github.owner', ARTIFACT='project', VERSION='test-commit')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('-PparavoidGroup=com.github.owner.project', result.stdout)
-        self.assertIn('-PparavoidVersion=v0.1.0-alpha01', result.stdout)
+        self.assertIn('-PparavoidVersion=test-commit', result.stdout)
         for module in ('api', 'contract', 'runtime', 'gradle-plugin', 'hilt', 'work'):
             self.assertIn(':paravoid-' + module + ':publishToMavenLocal', result.stdout)
 
@@ -40,4 +40,10 @@ class JitPackInstallTests(unittest.TestCase):
     def test_unsafe_group_refused(self):
         result = self.run_install(VERSION='test', PARAVOID_GROUP='../escape')
         self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn('publishToMavenLocal', result.stdout)
+
+    def test_release_tag_without_notes_refused_before_gradle(self):
+        result = self.run_install(VERSION='v999.0.0')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('No release notes for v999.0.0', result.stderr)
         self.assertNotIn('publishToMavenLocal', result.stdout)

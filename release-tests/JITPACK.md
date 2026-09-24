@@ -92,6 +92,14 @@ Never move/reuse a released tag. Fucina CI may run these same local checks; an
 internal package-registry deployment needs its actual URL/authentication policy
 and is not silently configured by this change.
 
+Version tags matching `vMAJOR.MINOR.PATCH` (including prereleases) are rejected
+by the JitPack install script unless that source commit contains matching dated
+`CHANGELOG.md` notes with a Migration section. Changelog headings omit the
+optional `v` prefix. Publish the same notes with the
+GitHub release. Downstream apps can run `release-tests/changes.py --from ...
+--to ...` to see every version between their installed and target versions.
+Commit-based JitPack builds remain development artifacts, not versioned releases.
+
 References: [JitPack build/custom commands and module coordinates](https://docs.jitpack.io/building/),
 [Android publishing](https://docs.jitpack.io/android/).
 

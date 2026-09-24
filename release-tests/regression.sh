@@ -14,6 +14,5 @@ bash lifecycle-tests/run.sh
 bash delivery/test.sh
 bash delivery/check-android.sh
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s delivery/device-tests -p 'test_*.py'
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s release-tests -p test_candidate.py
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s release-tests -p test_jitpack.py
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s release-tests -p 'test_*.py'
 echo 'PASS host/build regression bundle (not installed-device or release approval)'

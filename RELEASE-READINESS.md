@@ -16,7 +16,7 @@ and in the linked reports. Do not substitute host tests for installed tests or i
 | Real app | Final-runtime Pezzottify fixed-shell A-to-B, data/workflows, incompatible rejection and forward repair | Logged-out API 30 matrix passes with final-runtime producer-built A/B/4/5, preference/Room checks, incompatible/reused-identity refusal, quarantine/repair and offline relaunch; authenticated workflows still need approved backend/account; see release-tests/PEZZOTTIFY.md |
 | Physical device | Signed release ARM64 core matrix | Guarded HTTPS runner and nine host safety/routing tests prepared; no physical hardware connected/executed; see delivery/device-tests/PHYSICAL-ARM64.md |
 | Packaging/regression | Large valid payload execution, publication failures, optional integrations and final matrix | Near-limit VPK runs on both APIs; final-rename IO and 159-test host bundle pass; see delivery/device-tests/LARGE-PAYLOAD.md and release-tests/README.md |
-| Distribution | Version/license/repository, production metadata/tag/release notes, repeatable validation | GitHub/JitPack selected; six-module JitPack-coordinate and original internal publication/consumer tests pass locally; license/tag and actual remote build/consumer remain pending; see release-tests/JITPACK.md |
+| Distribution | Version/license/repository, production metadata/tag/release notes, repeatable validation | GitHub/JitPack selected; changelog and skipped-version comparison added, with a version-tag notes gate. Six-module local publication/consumer tests pass; license/tag and actual remote build/consumer remain pending; see release-tests/JITPACK.md |
 
 ## Scope and completion rules
 

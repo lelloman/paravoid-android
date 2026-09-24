@@ -11,6 +11,10 @@ paravoid_group=${PARAVOID_GROUP:-${GROUP:-com.github.lelloman}.${ARTIFACT:-parav
 [[ "$paravoid_group" =~ ^[A-Za-z0-9_]+(\.[A-Za-z0-9_-]+)+$ ]] || {
     echo 'Invalid Maven group.' >&2; exit 1;
 }
+# A version tag is a public release: its downstream notes must ship in that commit.
+if [[ "$paravoid_version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+    python3 release-tests/changes.py --verify "$paravoid_version"
+fi
 paravoid_gradle=${PARAVOID_GRADLE:-./gradlew}
 common=(--no-daemon --max-workers=2 --console=plain
     "-PparavoidGroup=$paravoid_group" "-PparavoidVersion=$paravoid_version")
