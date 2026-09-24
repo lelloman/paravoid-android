@@ -3,7 +3,6 @@
 This is the bounded release checklist, not a declaration of readiness. Original
 acceptance baseline: `509cb65`; later evidence names its tested revisions below
 and in the linked reports. Do not substitute host tests for installed tests or independent review.
-Keep `REMAINING-GAPS.md` as the untracked detailed local history.
 
 | Gate | Remaining acceptance | Status |
 | --- | --- | --- |
