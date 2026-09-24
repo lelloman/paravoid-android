@@ -1,14 +1,17 @@
 # Controls launcher fallback
 
-The complete profile defaults `paravoid.controlsLauncher` to true. It emits a
-public MAIN/LAUNCHER alias named
+The complete profile defaults `paravoid.controlsLauncher` to false. Apps can
+render their own update UI from `ParavoidUpdates.get()`; see README.md and V1.md
+section 9. Setting `paravoid { controlsLauncher = true }` emits a public
+MAIN/LAUNCHER alias named
 `com.lelloman.paravoidandroid.runtime.UpdatesLauncher`, targeting the existing
 private `ShellUpdatesActivity` in `:paravoid_recovery`. No extra payload Activity,
 resource ID, custom launcher integration, or dynamic shortcut is necessary.
 The alias uses the application icon and the label `App updates`.
 
-Opting out is an explicit integrator choice; see V1.md section 9. Adding/removing
-the alias changes the installed shell contract and requires rebuilding the shell.
+The complete-v1 fixture explicitly enables the alias for this launcher test.
+Adding/removing the alias changes the installed shell contract and requires
+rebuilding the shell.
 External apps may open the exported UI, but it does not interpret incoming
 actions/extras as commands; restart and quarantine retry remain confirmed UI
 operations. Opening controls may run the existing automatic discovery policy,

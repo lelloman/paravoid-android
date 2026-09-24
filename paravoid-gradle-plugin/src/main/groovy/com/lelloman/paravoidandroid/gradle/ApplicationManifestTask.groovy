@@ -20,7 +20,7 @@ abstract class ApplicationManifestTask extends DefaultTask {
     @Input abstract Property<Boolean> getComplete()
     @Input abstract Property<Boolean> getDebugHttpAllowed()
     @Input abstract Property<Boolean> getControlsLauncher()
-    ApplicationManifestTask() { complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(true) }
+    ApplicationManifestTask() { complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false) }
 
     @TaskAction void rewrite() {
         def factory = DocumentBuilderFactory.newInstance()

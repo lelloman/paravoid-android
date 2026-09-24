@@ -59,12 +59,14 @@ final class CompleteRuntime {
             ShellUpdatesActivity.installController(controller);
             ShellUpdatesActivity.installRestartAction(result -> ShellRestart.restart(app, result));
         }
+        if (mainProcess && !shellOnly && policy.updatesEnabled) ParavoidUpdates.install(controller);
         if (mainProcess || shellOnly) ShellControlShortcut.install(app);
         app.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
             public void onActivityCreated(Activity activity, Bundle state) {}
             public void onActivityStarted(Activity activity) {}
             public void onActivityResumed(Activity activity) {
                 if (policy.updatesEnabled && (mainProcess || shellOnly)) controller.foreground();
+                if (mainProcess && !shellOnly) controller.refreshSnapshot();
                 if (!mainProcess || shellOnly || lease == null || uiHealthy || activity instanceof LauncherActivity) return;
                 View view = activity.getWindow().getDecorView();
                 ViewTreeObserver.OnDrawListener listener = new ViewTreeObserver.OnDrawListener() {

@@ -31,6 +31,7 @@ android {
 }
 paravoid {
     packaging = 'complete'
+    controlsLauncher = true // Exercise the optional recovery launcher in the fixture.
     minifyPayload = providers.gradleProperty('minifyPayload').map { it.toBoolean() }.orElse(false)
     payloadProguardFiles.from(layout.projectDirectory.file('payload-rules.pro'))
     bootstrap = providers.gradleProperty('bootstrap').getOrElse('embedded')

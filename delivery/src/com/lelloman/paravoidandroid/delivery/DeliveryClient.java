@@ -14,8 +14,11 @@ public final class DeliveryClient {
     interface Storage { void reserve(Path directory, long archiveSize) throws IOException, ContractException; }
     public static final class Result {
         public final HeadStatus status;
+        public final ExpectedArchive available; // verified offer, even when automatic transfer is disabled
         public final StageResult stage; // null when checking only or no release was offered
-        Result(HeadStatus status, StageResult stage) { this.status = status; this.stage = stage; }
+        Result(HeadStatus status, ExpectedArchive available, StageResult stage) {
+            this.status = status; this.available = available; this.stage = stage;
+        }
     }
     private static final class Session {
         final CredentialScope credential;
@@ -197,7 +200,7 @@ public final class DeliveryClient {
             // monitor. Never invoke its checkpoint while holding this monitor.
             checkpoint.check();
             if (!download || admission.status != HeadStatus.AVAILABLE || !permission.allowed())
-                return new Result(admission.status, null);
+                return new Result(admission.status, admission.release, null);
             ExpectedArchive expected = admission.release;
             validCredential(captured.credential);
             URI archiveUri = transport.archiveUri(scope.applicationId, expected.releaseId);
@@ -216,7 +219,7 @@ public final class DeliveryClient {
                 downloading = false; // Successful checkpoint is the non-cancellable staging boundary.
                 handedOff = true;
                 StageResult staged = reservation.stage(partial.toFile());
-                return new Result(admission.status, staged);
+                return new Result(admission.status, admission.release, staged);
             }
         } catch (HttpTransport.Failure failure) {
             if (failure.status == 401 || failure.status == 403) synchronized (this) {

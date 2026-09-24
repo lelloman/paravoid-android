@@ -24,10 +24,10 @@ Baseline 7425642; B branch v1/delivery-finish. No runtime/shared edits made.
    Test: small archive on <2 GiB free storage succeeds; genuinely insufficient
    storage preserves selected payload and replay history; simultaneous staging
    cannot promise the same space twice.
-4. The runnable app needs an accessible shell-owned updates route. Private
-   ShellUpdatesActivity exists but no UI route is available in the complete fixture.
-   On API 36.1 both ordinary and complete launches pass; a shell `am start` is denied
-   by the private Activity boundary (correct). Empty mode remains testable.
+4. The runnable app needs an accessible shell-owned updates route. This earlier
+   integration gap is resolved by the app-facing `ParavoidUpdates` API; the
+   complete fixture also explicitly enables the optional shell launcher alias.
+   The ordinary bootstrap launcher still reaches recovery when no payload runs.
 5. Snapshot needs a precise retryable quarantined identity, or documented assurance
    that RECOVERY + active is sufficient and retryQuarantined rejects other causes.
    UI confirms the captured identity and never infers rollback safety.

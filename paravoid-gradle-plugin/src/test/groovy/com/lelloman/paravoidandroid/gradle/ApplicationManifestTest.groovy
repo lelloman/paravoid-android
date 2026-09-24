@@ -17,6 +17,7 @@ class ApplicationManifestTest {
         String output = task.outputManifest.get().asFile.text
         assertTrue(output.contains('paravoid.complete'))
         assertTrue(output.contains('com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity'))
+        assertFalse(output.contains('activity-alias'))
         assertTrue(output.contains('android:process=":paravoid_recovery"'))
         assertTrue(output.contains('android:process=":worker"'))
         assertTrue(output.contains('android.permission.ACCESS_NETWORK_STATE'))
@@ -33,7 +34,7 @@ class ApplicationManifestTest {
     }
 
     @Test void completeControlsLauncherIsPublicAliasToPrivateRecoveryOnly() {
-        def task = fixture('', 'android:permission="example.PRIVATE"'); task.complete.set(true); task.rewrite()
+        def task = fixture('', 'android:permission="example.PRIVATE"'); task.complete.set(true); task.controlsLauncher.set(true); task.rewrite()
         def factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
         factory.namespaceAware = true
         def document = factory.newDocumentBuilder().parse(task.outputManifest.get().asFile)
@@ -60,7 +61,7 @@ class ApplicationManifestTest {
             assertFalse(task.outputManifest.get().asFile.text.contains('activity-alias'))
         }
         def project = ProjectBuilder.builder().withProjectDir(temporary.newFolder()).build()
-        assertTrue(project.objects.newInstance(ParavoidApplicationExtension).controlsLauncher.get())
+        assertFalse(project.objects.newInstance(ParavoidApplicationExtension).controlsLauncher.get())
     }
 
     @Test void completeProfileRejectsUnsupportedComponentModesBeforeSigning() {

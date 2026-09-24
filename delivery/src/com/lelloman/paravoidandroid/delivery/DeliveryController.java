@@ -15,14 +15,17 @@ public final class DeliveryController {
     private static final ScheduledExecutorService SIGNALS = Executors.newSingleThreadScheduledExecutor(task -> {
         Thread thread = new Thread(task, "paravoid-cancellation"); thread.setDaemon(true); return thread;
     });
-    public enum Activity { IDLE, CHECKING, WAITING_TO_RETRY, READY, CANCELLED, ERROR }
+    public enum Activity { IDLE, CHECKING, WAITING_TO_RETRY, AVAILABLE, READY, CANCELLED, ERROR }
     public static final class Snapshot {
         public final LifecycleSnapshot lifecycle;
         public final DeliveryPreferences preferences;
         public final Activity activity;
+        public final ExpectedArchive available;
         public final String errorCode; // fixed locally-generated code only, never exception/server text
-        Snapshot(LifecycleSnapshot lifecycle, DeliveryPreferences preferences, Activity activity, String error) {
-            this.lifecycle = lifecycle; this.preferences = preferences; this.activity = activity; errorCode = error;
+        Snapshot(LifecycleSnapshot lifecycle, DeliveryPreferences preferences, Activity activity,
+                ExpectedArchive available, String error) {
+            this.lifecycle = lifecycle; this.preferences = preferences; this.activity = activity;
+            this.available = available; errorCode = error;
         }
     }
     public interface Listener { void changed(Snapshot snapshot); }
@@ -40,6 +43,7 @@ public final class DeliveryController {
     private ScheduledFuture<?> pendingRetry;
     private long operation;
     private Activity activity = Activity.IDLE;
+    private ExpectedArchive available;
     private String error;
     private DeliveryLocks.Claim attemptLock;
     private final CancellationSignal cancellation;
@@ -89,6 +93,8 @@ public final class DeliveryController {
     public void listen(Listener listener) { this.listener.set(listener); worker.execute(this::publish); }
     /** A stopped screen must not detach a newer screen's observer. */
     public void unlisten(Listener expected) { listener.compareAndSet(expected, null); }
+    /** Refresh shared lifecycle state after work in another app process. */
+    public void refreshSnapshot() { worker.execute(this::publish); }
     /** Resolve bootstrap from lifecycle state, never from the caller's process or Activity. */
     public void foreground() {
         worker.execute(() -> {
@@ -118,7 +124,7 @@ public final class DeliveryController {
                                 saved.credentialPartition != null && !saved.credentialPartition.equals(partition)
                                         ? 0 : saved.lastAutomaticCheckSeconds, partition));
                 applyPreferences();
-                activity = Activity.IDLE; error = null;
+                activity = Activity.IDLE; available = null; error = null;
             } catch (ContractException failure) { fail(failure.code.name()); }
             catch (IOException failure) { fail("IO"); }
             publish();
@@ -137,7 +143,7 @@ public final class DeliveryController {
         worker.execute(() -> {
             if (attempts.generation() != cancelledOperation) return;
             if (pendingRetry != null) pendingRetry.cancel(false);
-            attempts.finish(operation); activity = Activity.CANCELLED; error = null;
+            attempts.finish(operation); activity = Activity.CANCELLED; available = null; error = null;
             if (attemptLock != null) clearRetry();
             releaseAttempt(); publish();
         });
@@ -241,7 +247,7 @@ public final class DeliveryController {
     }
     private void run(long token, boolean explicit) {
         if (!attempts.current(token)) return;
-        activity = Activity.CHECKING; error = null; publish();
+        activity = Activity.CHECKING; available = null; error = null; publish();
         try {
             if (!cancellationEpoch.equals(cancellation.read())) { cancelLocal(); return; }
             if (attempts.retryCount() > 0) {
@@ -261,7 +267,9 @@ public final class DeliveryController {
                         || client.isDownloading() && !transferAllowed(explicit))
                     throw new HttpTransport.Failure("cancelled");
             }, () -> transferAllowed(explicit));
-            activity = result.stage == null ? Activity.IDLE : Activity.READY;
+            available = result.available;
+            activity = result.stage != null ? Activity.READY :
+                result.available != null ? Activity.AVAILABLE : Activity.IDLE;
             if (result.status == HeadStatus.SHELL_UPDATE_REQUIRED) error = "SHELL_UPDATE_REQUIRED";
             else if (result.status == HeadStatus.NO_COMPATIBLE_RELEASE) error = "NO_COMPATIBLE_RELEASE";
         } catch (ContractException failure) { fail(failure.code.name()); }
@@ -291,7 +299,7 @@ public final class DeliveryController {
         }
         attempts.finish(token); clearRetry(); releaseAttempt(); publish();
     }
-    private void fail(String code) { activity = Activity.ERROR; error = code; }
+    private void fail(String code) { activity = Activity.ERROR; available = null; error = code; }
     private boolean transferAllowed(boolean explicit) throws IOException {
         if (explicit) return true;
         DeliveryPreferences current = DeliveryPreferences.read(preferenceFile);
@@ -304,7 +312,7 @@ public final class DeliveryController {
         LifecycleSnapshot state = null;
         try { state = lifecycle.snapshot(); }
         catch (ContractException failed) { fail(failed.code.name()); }
-        Snapshot snapshot = new Snapshot(state, preferences, activity, error);
+        Snapshot snapshot = new Snapshot(state, preferences, activity, available, error);
         callbacks.execute(() -> { if (listener.get() == target) target.changed(snapshot); });
     }
 }

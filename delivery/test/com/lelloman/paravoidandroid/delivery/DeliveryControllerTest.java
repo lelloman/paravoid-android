@@ -70,6 +70,14 @@ public final class DeliveryControllerTest {
             check(oldCalls.get() > observed); // Returning to the old Activity can subscribe again.
         }
         try (Control c = new Control()) {
+            c.controller.preferences(new DeliveryPreferences(true, false, false)); c.barrier();
+            c.setup.head();
+            c.controller.foreground(true);
+            DeliveryController.Snapshot offered = c.await(DeliveryController.Activity.AVAILABLE);
+            check(offered.available != null && offered.available.releaseId.equals("r1"));
+            check(offered.lifecycle.pending == null && c.setup.f.requests == 1);
+        }
+        try (Control c = new Control()) {
             c.metered = false;
             c.controller.preferences(new DeliveryPreferences(true, true, true)); c.barrier();
             Fake head = c.setup.head(); head.onResponse = () -> c.metered = true;

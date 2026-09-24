@@ -16,7 +16,7 @@ abstract class ParavoidApplicationExtension {
         signing = objects.newInstance(ParavoidSigningExtension)
         bootstrap.convention('embedded')
         packaging.convention('dexOnly')
-        controlsLauncher.convention(true)
+        controlsLauncher.convention(false)
         minifyPayload.convention(false)
         releaseId.convention(payloadVersion.map { 'p' + it })
     }

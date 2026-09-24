@@ -76,6 +76,7 @@ def run(device, fixture, reference):
         device.launch()
         device.healthy(1)
         device.await_(lambda: device.state()['pending'] is not None, 'HTTP B pending')
+        device.await_(lambda: device.markers().get('update', '').endswith('available=true'), 'app-owned update observer')
         assert device.state()['active']['version'] == 1 and device.state()['pending']['version'] == 3
         device.run('shell', 'am', 'startservice', '-n', fixture.SHELL + '/' + fixture.PACKAGE + '.ProbeService$Worker', '-a', 'hold')
         assert 'generation=A' in device.run('shell', 'content', 'query', '--uri', 'content://' + fixture.SHELL + '.worker')

@@ -2,10 +2,15 @@ package com.lelloman.paravoidcompat.complete;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.TextView;
+import com.lelloman.paravoidandroid.runtime.ParavoidUpdates;
 import java.nio.charset.StandardCharsets;
 
 public final class MainActivity extends Activity {
+    private ParavoidUpdates.Subscription updateSubscription;
+    private TextView updateStatus;
     public MainActivity() { StartupProbe.hit("activity-constructor"); }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -28,8 +33,32 @@ public final class MainActivity extends Activity {
                     new android.content.ComponentName(this, ProbeJob.class)).setMinimumLatency(86400000).build());
             }
             getSharedPreferences("probe", 0).edit().putString("activity", text).commit();
-            TextView view = new TextView(this); view.setText(text); setContentView(view);
+            LinearLayout layout = new LinearLayout(this);
+            layout.setOrientation(LinearLayout.VERTICAL);
+            TextView view = new TextView(this); view.setText(text); layout.addView(view);
+            updateStatus = new TextView(this); layout.addView(updateStatus);
+            Button check = new Button(this); check.setText("Check for updates");
+            check.setOnClickListener(clicked -> ParavoidUpdates.get().checkNow());
+            layout.addView(check);
+            Button controls = new Button(this); controls.setText("Update controls");
+            controls.setOnClickListener(clicked -> ParavoidUpdates.get().openControls(this));
+            layout.addView(controls);
+            setContentView(layout);
         } catch (Exception error) { throw new IllegalStateException(error); }
+    }
+    @Override public void onStart() {
+        super.onStart();
+        updateSubscription = ParavoidUpdates.get().observe(update -> {
+            if (updateStatus == null) return;
+            String label = update.updateAvailable() ? "Update available" : "Up to date";
+            updateStatus.setText(label + " (" + update.phase + ")");
+            getSharedPreferences("probe", 0).edit().putString("update", update.phase.name() + ";available=" + update.updateAvailable()).apply();
+        });
+    }
+    @Override public void onStop() {
+        if (updateSubscription != null) updateSubscription.close();
+        updateSubscription = null;
+        super.onStop();
     }
     private static String read(java.io.InputStream input) throws java.io.IOException {
         java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
