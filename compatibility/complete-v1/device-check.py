@@ -8,6 +8,7 @@ import argparse
 import base64
 import hashlib
 from pathlib import Path
+import re
 import shutil
 import struct
 import subprocess
@@ -46,7 +47,7 @@ def command(args, *, binary=False, check=True, timeout=180, **kwargs):
     return result.stdout
 
 
-def build():
+def build(minify=False):
     command(['python3', ROOT / 'prepare.py'])
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
     for generation, version, bootstrap in [('A', 1, 'embedded'), ('broken', 2, 'embedded'),
@@ -55,11 +56,21 @@ def build():
         args = [REPO / 'gradlew', '-p', ROOT, 'assembleNormalDebug', 'assembleParavoidAndroidDebug',
                 '--offline', '--no-daemon', '--max-workers=2', f'-Pgeneration={generation}',
                 f'-PpayloadVersion={version}', f'-Pbootstrap={bootstrap}']
+        if minify:
+            args.append('-PminifyPayload=true')
         if generation not in ('A', 'empty'):
             args.append('-Pbaseline')
         output = command(args, cwd=REPO, timeout=600)
         (ARTIFACTS / f'{generation}-build.log').write_text(output)
         source = ROOT / 'build/outputs/paravoid/paravoidAndroidDebug'
+        if minify:
+            mapping = source / 'payload-mapping.txt'
+            text = mapping.read_text()
+            assert text.startswith('# compiler: R8\n')
+            assert re.search(r'^com\.lelloman\.paravoidcompat\.complete\.StartupProbe -> '
+                             r'(?!com\.lelloman\.paravoidcompat\.complete\.StartupProbe:)[^:]+:$',
+                             text, re.MULTILINE), 'R8 did not obfuscate the payload probe'
+            shutil.copyfile(mapping, ARTIFACTS / f'{generation}-mapping.txt')
         shutil.copyfile(source / 'shell.apk', ARTIFACTS / f'{generation}.apk')
         check_shell(ARTIFACTS / f'{generation}.apk', bootstrap)
         if bootstrap == 'embedded':
@@ -295,11 +306,12 @@ def test(d):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--build', action='store_true')
+    parser.add_argument('--minify', action='store_true', help='Build fixture VPKs with the experimental R8 payload pass')
     parser.add_argument('--serial')
     parser.add_argument('--avd')
     args = parser.parse_args()
     if args.build:
-        build()
+        build(args.minify)
     if args.serial or args.avd:
         assert args.serial and args.avd
         device = Device(args.serial, args.avd)

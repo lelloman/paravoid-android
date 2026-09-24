@@ -25,6 +25,10 @@ extracted libraries and process-death restoration. It also verifies Hilt and
 non-Hilt lazy WorkManager configuration with `paravoid-work`. Other matrix rows are not
 implicitly verified on API 29.
 
+The [minification fixture](minification/README.md) builds a normal APK and a
+Paravoid APK, then compares unshrunk and R8-minified payload DEX files. Its
+build and installed-app checks pass on a fresh API 36.1 x86_64 emulator.
+
 | Area | Evidence / status | Important remaining cases |
 | --- | --- | --- |
 | APK-provisioned update keys | [Provisioning probe](provisioning/README.md): 10 host tests and 24 device stages on API 30 and 36.1; normal/shell public/key requests, revocation and APK-delivered replacement with app data retained | Harmless unsigned downloads only; provisional APK record, no issuer validation, signed VPK delivery, empty bootstrap or activation |

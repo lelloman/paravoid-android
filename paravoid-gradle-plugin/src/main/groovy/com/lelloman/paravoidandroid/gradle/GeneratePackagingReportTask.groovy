@@ -44,7 +44,7 @@ abstract class GeneratePackagingReportTask extends DefaultTask {
                     assets: 'Ordinary application/library assets', javaResources: 'Merged non-class Java resources',
                     nativeLibraries: 'Application/library native libraries; shell retains only ABI markers']],
             ledger: [entries: ledger.entries.size(), tombstones: ledger.entries.count { it.removed }],
-            unsupportedFeatures: ['R8/resource shrinking', 'Core-library desugaring', 'Shell AAB/split APK distribution',
+            unsupportedFeatures: ['AGP minification/resource shrinking', 'Core-library desugaring', 'Shell AAB/split APK distribution',
                 'Activity aliases or multiple launcher destinations', 'Isolated/direct-boot payload components'],
             validation: 'Build-time packaging evidence; not installed-device or release-readiness acceptance']
         String text = "Paravoid complete packaging report\nApplication: ${report.applicationId}\nContract: ${policy.contractId}\n" +

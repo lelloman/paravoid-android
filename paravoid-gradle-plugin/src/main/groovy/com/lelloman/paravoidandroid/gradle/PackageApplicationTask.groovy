@@ -9,6 +9,7 @@ import org.gradle.process.ExecOperations
 import org.objectweb.asm.*
 import org.objectweb.asm.commons.*
 import javax.inject.Inject
+import javax.xml.parsers.DocumentBuilderFactory
 import java.nio.file.Files
 import java.util.zip.*
 
@@ -20,15 +21,19 @@ abstract class PackageApplicationTask extends DefaultTask {
     @Classpath abstract ListProperty<RegularFile> getAllJars()
     @Classpath abstract ListProperty<Directory> getAllDirectories()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getMetadata()
+    @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getManifestFile()
     @Classpath abstract RegularFileProperty getD8Jar()
     @Classpath abstract RegularFileProperty getAndroidJar()
     @Input abstract Property<Integer> getMinSdk()
+    @Input abstract Property<Boolean> getMinifyPayload()
+    @InputFiles @PathSensitive(PathSensitivity.RELATIVE) abstract ConfigurableFileCollection getPayloadProguardFiles()
     @Nested abstract ListProperty<PayloadTransformer> getPayloadTransformers()
     @OutputFile abstract RegularFileProperty getShellClasses()
     @OutputFile abstract RegularFileProperty getBundleFile()
+    @Optional @OutputFile abstract RegularFileProperty getMappingFile()
     @Inject abstract ExecOperations getExecOperations()
 
-    PackageApplicationTask() { payloadTransformers.convention([]) }
+    PackageApplicationTask() { payloadTransformers.convention([]); minifyPayload.convention(false) }
 
     @TaskAction void pack() {
         Properties info = new Properties()
@@ -108,12 +113,29 @@ abstract class PackageApplicationTask extends DefaultTask {
         }
         File dexZip = new File(temporaryDir, 'dex.zip')
         Files.deleteIfExists(dexZip.toPath())
-        execOperations.javaexec {
-            classpath(d8Jar.get().asFile)
-            mainClass.set('com.android.tools.r8.D8')
-            args '--release', '--min-api', minSdk.get().toString(), '--lib', androidJar.get().asFile.absolutePath,
-                '--classpath', shell.absolutePath, '--output', dexZip.absolutePath, payload.absolutePath
-        }.assertNormalExitValue()
+        if (minifyPayload.get()) {
+            File rules = new File(temporaryDir, 'payload-rules.pro')
+            rules.text = keepRules(manifestFile.get().asFile, payload)
+            File mapping = mappingFile.get().asFile
+            mapping.parentFile.mkdirs()
+            execOperations.javaexec {
+                classpath(d8Jar.get().asFile)
+                mainClass.set('com.android.tools.r8.R8')
+                args '--release', '--min-api', minSdk.get().toString(), '--lib', androidJar.get().asFile.absolutePath,
+                    '--classpath', shell.absolutePath, '--output', dexZip.absolutePath,
+                    '--pg-conf', rules.absolutePath, '--pg-map-output', mapping.absolutePath
+                payloadProguardFiles.files.each { args '--pg-conf', it.absolutePath }
+                args payload.absolutePath
+            }.assertNormalExitValue()
+        } else {
+            Files.deleteIfExists(mappingFile.get().asFile.toPath())
+            execOperations.javaexec {
+                classpath(d8Jar.get().asFile)
+                mainClass.set('com.android.tools.r8.D8')
+                args '--release', '--min-api', minSdk.get().toString(), '--lib', androidJar.get().asFile.absolutePath,
+                    '--classpath', shell.absolutePath, '--output', dexZip.absolutePath, payload.absolutePath
+            }.assertNormalExitValue()
+        }
         File bundle = bundleFile.get().asFile
         bundle.parentFile.mkdirs()
         new ZipFile(dexZip).withCloseable { dex ->
@@ -129,6 +151,41 @@ abstract class PackageApplicationTask extends DefaultTask {
                 entries.each { entry -> PackageApplicationTask.write(zip, entry.name, dex.getInputStream(entry).withCloseable { it.readAllBytes() }) }
             }
         }
+    }
+
+    private static String keepRules(File manifest, File payload) {
+        def factory = DocumentBuilderFactory.newInstance()
+        factory.namespaceAware = true
+        factory.setFeature('http://apache.org/xml/features/disallow-doctype-decl', true)
+        def document = factory.newDocumentBuilder().parse(manifest)
+        String android = 'http://schemas.android.com/apk/res/android'
+        Set<String> names = new TreeSet<>()
+        ['application', 'activity', 'service', 'receiver', 'provider', 'instrumentation'].each { tag ->
+            def elements = document.getElementsByTagName(tag)
+            (0..<elements.length).each { index ->
+                String name = elements.item(index).getAttributeNS(android, 'name')
+                if (name) names.add(name)
+            }
+        }
+        def metadata = document.getElementsByTagName('meta-data')
+        (0..<metadata.length).each { index ->
+            def element = metadata.item(index)
+            if (element.getAttributeNS(android, 'name') in ['paravoid.application', 'paravoid.componentFactory']) {
+                String name = element.getAttributeNS(android, 'value')
+                if (name) names.add(name)
+            }
+        }
+        // The shell and Android look these classes up by their original names. Their
+        // callback methods and constructors must survive R8's whole-program analysis.
+        Set<String> payloadNames = new TreeSet<>()
+        new ZipFile(payload).withCloseable { zip ->
+            names.each { name ->
+                if (zip.getEntry(name.replace('.', '/') + '.class') != null) payloadNames.add(name)
+            }
+        }
+        payloadNames.collect { "-keep class ${it} { *; }" }.join('\n') + '\n' +
+            '-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod\n' +
+            '-keep class * implements android.os.Parcelable { public static final android.os.Parcelable$Creator CREATOR; }\n'
     }
 
     private static void add(Map<String, byte[]> classes, String name, byte[] bytes) {

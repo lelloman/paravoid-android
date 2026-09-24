@@ -120,11 +120,15 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             def pack = project.tasks.register("package${cap}ParavoidApplication", PackageApplicationTask) {
                 dependsOn(nativeValidation)
                 metadata.set(manifest.flatMap { it.payloadMetadata })
+                manifestFile.set(manifest.flatMap { it.outputManifest })
                 minSdk.set(variant.minSdk.apiLevel)
+                minifyPayload.set(extension.minifyPayload)
+                payloadProguardFiles.from(extension.payloadProguardFiles)
                 d8Jar.set(components.sdkComponents.sdkDirectory.map { it.file("build-tools/${android.buildToolsVersion}/lib/d8.jar") })
                 androidJar.set(components.sdkComponents.sdkDirectory.map { it.file("platforms/android-${android.compileSdk}/android.jar") })
                 shellClasses.set(project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/shell.jar"))
                 bundleFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/module.zip"))
+                mappingFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/payload-mapping.txt"))
             }
             variant.artifacts.forScope(ScopedArtifacts.Scope.ALL).use(pack)
                 .toTransform(ScopedArtifact.CLASSES.INSTANCE, { it.allJars }, { it.allDirectories }, { it.shellClasses })

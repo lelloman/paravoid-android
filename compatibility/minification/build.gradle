@@ -1,0 +1,24 @@
+plugins { id 'com.lelloman.paravoid' }
+
+android {
+    namespace 'com.lelloman.paravoidcompat.minification'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.lelloman.paravoidcompat.minification'
+        minSdk 28
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+paravoid {
+    minifyPayload = providers.gradleProperty('minifyPayload').map { it.toBoolean() }.orElse(false)
+    payloadProguardFiles.from(layout.projectDirectory.file('payload-rules.pro'))
+}
+
+dependencies { implementation project(':paravoid-runtime') }

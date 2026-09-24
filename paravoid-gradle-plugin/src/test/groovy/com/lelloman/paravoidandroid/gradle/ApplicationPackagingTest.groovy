@@ -16,6 +16,40 @@ import static org.junit.Assert.*
 class ApplicationPackagingTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder()
 
+    @Test void optInPayloadMinificationKeepsManifestEntriesAndWritesMapping() {
+        File root = fixture()
+        write(root, 'app/src/main/java/example/Unused.java',
+            'package example; public class Unused { public static String value() { return "unused"; } }')
+        write(root, 'app/src/main/java/example/CustomKeep.java',
+            'package example; public class CustomKeep { public static String value() { return "kept"; } }')
+        write(root, 'app/src/main/java/example/Obfuscatable.java',
+            'package example; public class Obfuscatable { public static String value() { return "renamed"; } }')
+        write(root, 'app/payload-rules.pro', '''
+            -keep class example.CustomKeep { *; }
+            -keep,allowobfuscation class example.Obfuscatable { *; }
+        ''')
+        new File(root, 'app/build.gradle') << '''
+            paravoid {
+                minifyPayload = true
+                payloadProguardFiles.from(layout.projectDirectory.file('payload-rules.pro'))
+            }
+        '''
+        run(root, ':app:assembleParavoidAndroidDebug').build()
+        File output = new File(root, 'app/build/outputs/paravoid/paravoidAndroidDebug')
+        String mapping = new File(output, 'payload-mapping.txt').text
+        assertTrue(mapping.contains('example.MainActivity -> example.MainActivity:'))
+        assertTrue(mapping.contains('example.MyApplication -> example.MyApplication:'))
+        assertTrue(mapping.contains('example.CustomKeep -> example.CustomKeep:'))
+        assertTrue((mapping =~ /example\.Obfuscatable -> (?!example\.Obfuscatable:)[^:]+:/).find())
+        new ZipFile(new File(output, 'module.zip')).withCloseable { zip ->
+            String payload = dexText(zip)
+            assertTrue(payload.contains('Lexample/MainActivity;'))
+            assertTrue(payload.contains('Lexample/MyApplication;'))
+            assertTrue(payload.contains('Lexample/CustomKeep;'))
+            assertFalse(payload.contains('Lexample/Unused;'))
+        }
+    }
+
     @Test void completeProfileRejectsLegacyResourceShellWithoutRunningPackagingDependencies() {
         File root = fixture()
         File build = new File(root, 'app/build.gradle')

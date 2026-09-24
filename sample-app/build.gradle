@@ -1,4 +1,8 @@
 plugins { id 'com.lelloman.paravoid' }
+paravoid {
+    minifyPayload = providers.gradleProperty('paravoid.minifyPayload').map { it.toBoolean() }.orElse(false)
+    payloadProguardFiles.from(layout.projectDirectory.file('payload-rules.pro'))
+}
 android {
     namespace 'com.lelloman.paravoidandroid.sample'
     compileSdk 36

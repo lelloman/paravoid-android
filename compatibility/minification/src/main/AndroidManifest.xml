@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:name=".ProbeApplication" android:label="Paravoid R8 probe">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <receiver android:name=".ProbeReceiver" android:exported="false"/>
+        <provider android:name=".ProbeProvider"
+            android:authorities="${applicationId}.probe" android:exported="false"/>
+    </application>
+</manifest>

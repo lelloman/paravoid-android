@@ -31,6 +31,8 @@ android {
 }
 paravoid {
     packaging = 'complete'
+    minifyPayload = providers.gradleProperty('minifyPayload').map { it.toBoolean() }.orElse(false)
+    payloadProguardFiles.from(layout.projectDirectory.file('payload-rules.pro'))
     bootstrap = providers.gradleProperty('bootstrap').getOrElse('embedded')
     payloadVersion = providers.gradleProperty('payloadVersion').map { Long.valueOf(it) }.getOrElse(1L)
     if (providers.gradleProperty('baseline').present) baselineDirectory = layout.projectDirectory.dir('build/accepted')

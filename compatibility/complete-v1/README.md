@@ -115,6 +115,23 @@ APK. Accepted B then runs offline. API 30's SELinux policy rejects `run-as kill`
 against the app; the fixture-only `probe.die` receiver performs abrupt self-death
 instead. This is not a production runtime control.
 
+To repeat those checks with the experimental payload R8 pass, build fresh
+disposable signed fixtures and run the installed-app and local HTTP update tests:
+
+```sh
+python3 compatibility/complete-v1/device-check.py --build --minify
+python3 compatibility/complete-v1/device-check.py --serial emulator-5584 --avd ParavoidR8
+python3 compatibility/complete-v1/download-check.py --serial emulator-5584 --avd ParavoidR8
+```
+
+The fixture's `payload-rules.pro` retains names used by its JNI library. The
+minified build saves per-generation mappings in `build/device-cases/` and checks
+that R8 obfuscated a payload class. On a fresh API 36.1 x86_64 emulator, both
+device suites passed with minified A and B VPKs: the installed A shell downloaded
+signed B from the local reference server, activated B after a cold process
+restart, and ran B after the server stopped. This is a local test catalog, not
+an upload to an external store.
+
 The complete fixture reuses the existing JNI library without modifying it.
 Application construction verifies `JNI_OnLoad`, `FindClass` callbacks,
 `DT_NEEDED` dependencies, C++ shared runtime and `dlopen` before providers or

@@ -17,9 +17,20 @@ It is under release acceptance, not yet a production-ready published v1. See
 [combined validation evidence](parallel-finish/INTEGRATION.md).
 
 Complete mode targets AGP 8.13.2 and Android API 30+, produces a standalone shell
-APK and VPK, and rejects shrinking and shell AAB distribution. Normal packaging
+APK and VPK, and rejects AGP shrinking and shell AAB distribution. Normal packaging
 retains ordinary APK/AAB builds. Older DEX/resource-shell experiments below have
 narrower capabilities and must not be confused with the complete profile.
+
+An experimental, payload-only R8 path is available with `paravoid.minifyPayload = true`.
+It shrinks, optimizes, and obfuscates the payload before DEX packaging and writes
+`build/outputs/paravoid/<variant>/payload-mapping.txt`. Manifest components and
+Paravoid's class-name entry points are retained automatically. Apps that load
+other classes by name must supply rules through `paravoid.payloadProguardFiles.from(...)`.
+AGP `minifyEnabled` and resource shrinking remain unsupported for Paravoid variants;
+this opt-in has not passed the complete-profile release acceptance gate.
+The [minification test app](compatibility/minification/README.md) builds both
+payloads, checks the R8 mapping and DEX contents, and shows runtime probe results
+on a device.
 
 [Local Maven staging and standalone consumer validation](release-tests/README.md)
 are available; remote publication, release metadata and security acceptance are
@@ -255,7 +266,7 @@ This remains an entry-point and code-packaging experiment:
   platform default or AndroidX `CoreComponentFactory` are rejected in Paravoid mode.
   Additional non-launcher app/library Activities are accepted. Alias support and
   arbitrary custom component factories are not implied by the revised design.
-- Unsupported Application inheritance, shrinking and core library desugaring are
+- Unsupported Application inheritance, AGP shrinking and core library desugaring are
   rejected. Multi-DEX payloads are supported within the bundle limits below.
   Runtime/API package names are reserved for
   shell infrastructure.
@@ -567,7 +578,7 @@ slice has no automatic repair UI or external resource-selection API.
 
 Requirements: matching plugin/runtime, minSdk 30+, one unfiltered standalone APK,
 ordinary keystore signing configured on the build type, no direct-boot/isolated
-components, and at most 256 MiB of embedded resource archive. Existing shrinking
+components, and at most 256 MiB of embedded resource archive. AGP shrinking
 and desugaring restrictions still apply. Custom signing/rotation pipelines are not
 supported by this task. Private signing credentials are excluded from task cache
 keys; signed output is always regenerated and never build-cached.
@@ -683,6 +694,7 @@ and payload-update compatibility remain future coverage.
 | `compatibility/hilt-work` | Hilt workers, lazy/explicit Application configuration and cold injected Room writes |
 | `compatibility/resources` | Local resource-pack switching with public API 30+ loaders |
 | `compatibility/language` | Compiler plugins, reflection and implicit discovery probe |
+| [`compatibility/minification`](compatibility/minification/README.md) | Standalone R8 payload shrinking and obfuscation probe |
 | `compatibility/views` | Bindings, custom Views, fragment state and configuration contexts |
 | `compatibility/jni` | Native dependencies, library discovery, callbacks and startup |
 | `compatibility/network` | HTTP/HTTPS, Retrofit adapters, Moshi KSP, cancellation and caching |
