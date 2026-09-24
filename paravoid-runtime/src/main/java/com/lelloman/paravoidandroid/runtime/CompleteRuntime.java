@@ -54,9 +54,14 @@ final class CompleteRuntime {
                 ConnectivityManager network = (ConnectivityManager) app.getSystemService(Context.CONNECTIVITY_SERVICE);
                 return network == null || network.isActiveNetworkMetered();
             }, Executors.newSingleThreadScheduledExecutor(), main::post);
-        if (policy.updatesEnabled) controller.refreshInstalledApk(environment.currentBaseApk());
+        if (policy.updatesEnabled && !(shellOnly && CrashRecovery.instance != null))
+            controller.refreshInstalledApk(environment.currentBaseApk());
         if (shellOnly) {
             ShellUpdatesActivity.installController(controller);
+            if (CrashRecovery.instance != null) {
+                CrashRecovery.instance.coordinator = new RecoveryCoordinator(app, client, lifecycle, scope, policy,
+                    environment, CrashRecovery.instance.records, CrashRecovery.instance.providerClass);
+            }
             ShellUpdatesActivity.installRestartAction(result -> ShellRestart.restart(app, result));
         }
         if (mainProcess && !shellOnly && policy.updatesEnabled) ParavoidUpdates.install(controller);
@@ -65,7 +70,8 @@ final class CompleteRuntime {
             public void onActivityCreated(Activity activity, Bundle state) {}
             public void onActivityStarted(Activity activity) {}
             public void onActivityResumed(Activity activity) {
-                if (policy.updatesEnabled && (mainProcess || shellOnly)) controller.foreground();
+                if (policy.updatesEnabled && (mainProcess || shellOnly) &&
+                        !(shellOnly && CrashRecovery.instance != null)) controller.foreground();
                 if (mainProcess && !shellOnly) controller.refreshSnapshot();
                 if (!mainProcess || shellOnly || lease == null || uiHealthy || activity instanceof LauncherActivity) return;
                 View view = activity.getWindow().getDecorView();
@@ -93,6 +99,10 @@ final class CompleteRuntime {
     ClassLoader load(ClassLoader parent) throws Exception {
         if (shellOnly) throw new IllegalStateException("Recovery process cannot load payload code");
         LifecycleSnapshot state = lifecycle.snapshot();
+        if (CrashRecovery.instance != null) {
+            CrashRecovery.instance.identity(policy.shellContractId, state.active);
+            if (CrashRecovery.instance.blocked()) throw new CrashRecovery.Required();
+        }
         if (policy.bootstrap == Bootstrap.EMBEDDED && state.active == null && state.pending == null) stageEmbedded();
         try { lease = lifecycle.acquireForProcess(); }
         catch (ContractException error) {
@@ -106,6 +116,10 @@ final class CompleteRuntime {
             stageEmbedded(); lease = lifecycle.acquireForProcess();
         }
         installStartupObserver();
+        if (CrashRecovery.instance != null) {
+            CrashRecovery.instance.identity(policy.shellContractId, lease.release().identity);
+            CrashRecovery.instance.install();
+        }
         return CompleteGenerationLoader.load(app, lease, parent);
     }
     private void stageEmbedded() throws Exception {

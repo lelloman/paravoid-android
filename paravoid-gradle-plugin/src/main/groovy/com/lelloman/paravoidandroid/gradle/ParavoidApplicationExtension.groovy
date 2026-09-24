@@ -9,9 +9,11 @@ import org.gradle.api.Action
 import javax.inject.Inject
 
 abstract class ParavoidApplicationExtension {
+    final ParavoidCrashRecoveryExtension crashRecovery
     final ParavoidUpdatesExtension updates
     final ParavoidSigningExtension signing
     @Inject ParavoidApplicationExtension(ObjectFactory objects) {
+        crashRecovery = objects.newInstance(ParavoidCrashRecoveryExtension)
         updates = objects.newInstance(ParavoidUpdatesExtension)
         signing = objects.newInstance(ParavoidSigningExtension)
         bootstrap.convention('embedded')
@@ -30,6 +32,7 @@ abstract class ParavoidApplicationExtension {
     abstract ConfigurableFileCollection getPayloadProguardFiles()
     abstract Property<Long> getPayloadVersion()
     abstract Property<String> getReleaseId()
+    void crashRecovery(Action<? super ParavoidCrashRecoveryExtension> action) { action.execute(crashRecovery) }
     void updates(Action<? super ParavoidUpdatesExtension> action) { action.execute(updates) }
     void signing(Action<? super ParavoidSigningExtension> action) { action.execute(signing) }
     /** Optional, read-only input: <directory>/<variant>/resource-ledger.json. */

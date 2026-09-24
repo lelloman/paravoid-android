@@ -16,7 +16,7 @@ public final class UnavailableComponents {
     public static final class Screen extends Activity {
         @Override public void onCreate(Bundle state) {
             super.onCreate(state);
-            startActivity(new Intent(this, ShellUpdatesActivity.class));
+            startActivity(new Intent(this, CrashRecovery.instance != null ? CrashRecoveryActivity.class : ShellUpdatesActivity.class));
             finish();
         }
     }

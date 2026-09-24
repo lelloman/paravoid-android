@@ -12,6 +12,7 @@ public class ProbeService extends Service {
     public static final class Foreground extends ProbeService {}
     public IBinder onBind(Intent intent) { return null; }
     public int onStartCommand(Intent intent, int flags, int id) {
+        if(intent!=null && "crash".equals(intent.getAction())) throw new IllegalStateException("Recovery secondary process fixture");
         if (this instanceof Worker && (intent == null || "sticky".equals(intent.getAction()))) {
             NotificationManager manager = getSystemService(NotificationManager.class);
             manager.createNotificationChannel(new NotificationChannel("sticky-probe", "Sticky worker probe", NotificationManager.IMPORTANCE_LOW));

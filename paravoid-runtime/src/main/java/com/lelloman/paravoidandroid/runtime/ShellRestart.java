@@ -13,7 +13,9 @@ import java.util.function.Consumer;
 
 /** Only called after explicit destructive-restart confirmation in shell controls. */
 final class ShellRestart {
-    static void restart(Application app, Consumer<Boolean> result) {
+    interface BeforeLaunch { void run() throws Exception; }
+    static void restart(Application app, Consumer<Boolean> result) { restart(app, () -> {}, result); }
+    static void restart(Application app, BeforeLaunch beforeLaunch, Consumer<Boolean> result) {
         Handler main = new Handler(Looper.getMainLooper());
         RestartProcessGate gate = new RestartProcessGate(new RestartProcessGate.Platform() {
             public boolean exclusiveUid() {
@@ -34,7 +36,10 @@ final class ShellRestart {
             public void sleep() { SystemClock.sleep(100); }
         }, Process.myUid(), Process.myPid(), app.getPackageName());
         new Thread(() -> {
-            final boolean ready = gate.stop();
+            boolean prepared = gate.stop();
+            if (prepared) try { beforeLaunch.run(); }
+            catch (Exception unavailable) { prepared=false; }
+            final boolean ready = prepared;
             main.post(() -> {
                 boolean launched = false;
                 if (ready && gate.readyToLaunch()) try {
@@ -42,7 +47,7 @@ final class ShellRestart {
                         .setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
                     launched = true;
-                } catch (RuntimeException unavailable) { /* Keep recovery screen available. */ }
+                } catch (Exception unavailable) { /* Keep recovery screen available. */ }
                 result.accept(launched);
             });
         }, "paravoid-explicit-restart").start();

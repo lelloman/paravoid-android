@@ -71,7 +71,7 @@ class CandidateTests(unittest.TestCase):
         self.fixture()
         result = audit(decisions(), self.repo)
         self.assertEqual([], result['failures'])
-        self.assertEqual(23, len(result['artifacts']))
+        self.assertEqual(26, len(result['artifacts']))
         self.assertTrue(all(len(a['sha256']) == 64 for a in result['artifacts']))
 
     def test_missing_metadata_and_artifacts(self):

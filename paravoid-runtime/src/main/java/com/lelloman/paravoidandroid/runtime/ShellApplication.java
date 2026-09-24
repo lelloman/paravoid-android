@@ -14,6 +14,7 @@ public final class ShellApplication extends Application {
     private Throwable failure;
     private android.os.Bundle metadata;
     private CompleteRuntime complete;
+    private CrashRecovery crashRecovery;
     private AppComponentFactory componentFactory = new AppComponentFactory();
 
     static ShellApplication requireInstance() {
@@ -28,8 +29,11 @@ public final class ShellApplication extends Application {
             metadata = getPackageManager().getApplicationInfo(getPackageName(), android.content.pm.PackageManager.GET_META_DATA).metaData;
             if (metadata == null) metadata = new android.os.Bundle();
             if (metadata.getBoolean("paravoid.complete", false)) {
+                if (metadata.getBoolean("paravoid.crashRecovery", false))
+                    crashRecovery = new CrashRecovery(this, metadata.getString("paravoid.recoveryProvider", ""));
                 if (Build.VERSION.SDK_INT < 30) throw new IllegalStateException("Complete packaging requires API 30");
                 complete = new CompleteRuntime(this);
+                if (crashRecovery != null) crashRecovery.runtime = complete;
                 if (complete.shellOnly) return;
                 payloadLoader = complete.load(super.getClassLoader());
             } else {
@@ -54,7 +58,10 @@ public final class ShellApplication extends Application {
                     .getConstructor().newInstance();
             }
         } catch (Exception | LinkageError error) {
-            if (complete != null) complete.failed();
+            if (!(error instanceof CrashRecovery.Required)) {
+                if (crashRecovery != null) crashRecovery.capture(Thread.currentThread(), error);
+                if (complete != null) complete.failed();
+            }
             failure = error;
             android.util.Log.e("ParavoidAndroid", "Payload initialization failed", error);
         }
@@ -65,8 +72,10 @@ public final class ShellApplication extends Application {
         if (failure == null) {
             try {
                 if (application != null) application.onCreate();
-                if (complete != null) complete.applicationCreated();
+                if (complete != null && !complete.shellOnly) complete.applicationCreated();
+                if (crashRecovery != null) crashRecovery.install();
             } catch (Exception | LinkageError error) {
+                if (crashRecovery != null) crashRecovery.capture(Thread.currentThread(), error);
                 if (complete != null) complete.failed();
                 failure = error;
                 android.util.Log.e("ParavoidAndroid", "Payload onCreate failed", error);

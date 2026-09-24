@@ -14,7 +14,7 @@ runtime, lifecycle and delivery host suites plus Android delivery compilation.
 It accepts the Gradle/cache/offline variables below and deliberately does not
 select a connected device. Installed/physical and real-app gates remain separate.
 
-`bash release-tests/local-publication.sh` publishes all six projects to a fresh
+`bash release-tests/local-publication.sh` publishes all seven projects to a fresh
 local Maven directory and builds a standalone consumer against those artifacts.
 The consumer has no included build, source dependency or project substitution.
 It resolves the main/Hilt/Work plugin markers; only the main plugin is applied.

@@ -190,3 +190,13 @@ requirements, and broader app integrations. See
 proposals and boundaries. Emulator results do not satisfy physical ARM64,
 signed-release app acceptance, or independent security review. Track C is **not
 complete** while those gates remain open.
+
+## Optional crash recovery
+
+`recovery-check.py --serial emulator-5584 --avd Medium_Phone_API_36.1` builds and
+checks both default and custom recovery updaters. Add `--minify` to repeat with
+R8 payload minification. The test requires a disposable named emulator and never
+accepts a physical device. It exercises startup, repeated, post-frame main/worker
+and secondary-process crashes, provider process death, Activity recreation,
+explicit repair download/restart and saved-data preservation in the same shell.
+See [crash recovery integration](../../docs/crash-recovery.md).

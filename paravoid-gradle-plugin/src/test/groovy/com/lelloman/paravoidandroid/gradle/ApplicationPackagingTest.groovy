@@ -824,9 +824,9 @@ class ApplicationPackagingTest {
             pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
             dependencyResolutionManagement { repositories { google(); mavenCentral() } }
             rootProject.name = 'application-fixture'
-            include ':app', ':paravoid-api', ':paravoid-runtime', ':paravoid-contract', ':logic'
+            include ':app', ':paravoid-api', ':paravoid-runtime', ':paravoid-contract', ':paravoid-recovery-api', ':logic'
         """)
-        ['paravoid-api', 'paravoid-runtime', 'paravoid-contract'].each { module ->
+        ['paravoid-api', 'paravoid-runtime', 'paravoid-contract', 'paravoid-recovery-api'].each { module ->
             write(root, "${module}/build.gradle", new File(repo, "${module}/build.gradle").text)
             File source = new File(repo, "${module}/src/main")
             source.eachFileRecurse { file ->

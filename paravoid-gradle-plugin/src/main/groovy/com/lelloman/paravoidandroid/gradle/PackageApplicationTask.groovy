@@ -27,13 +27,15 @@ abstract class PackageApplicationTask extends DefaultTask {
     @Input abstract Property<Integer> getMinSdk()
     @Input abstract Property<Boolean> getMinifyPayload()
     @InputFiles @PathSensitive(PathSensitivity.RELATIVE) abstract ConfigurableFileCollection getPayloadProguardFiles()
+    @Classpath abstract ConfigurableFileCollection getRecoveryJars()
+    @Input abstract Property<String> getRecoveryProvider()
     @Nested abstract ListProperty<PayloadTransformer> getPayloadTransformers()
     @OutputFile abstract RegularFileProperty getShellClasses()
     @OutputFile abstract RegularFileProperty getBundleFile()
     @Optional @OutputFile abstract RegularFileProperty getMappingFile()
     @Inject abstract ExecOperations getExecOperations()
 
-    PackageApplicationTask() { payloadTransformers.convention([]); minifyPayload.convention(false) }
+    PackageApplicationTask() { payloadTransformers.convention([]); minifyPayload.convention(false); recoveryProvider.convention('') }
 
     @TaskAction void pack() {
         Properties info = new Properties()
@@ -55,6 +57,7 @@ abstract class PackageApplicationTask extends DefaultTask {
                 }
             }
         }
+        Set<String> recoveryNames = RecoveryPackaging.collect(recoveryJars.files, classes)
         String app = info.getProperty('application')
         if (app) {
             String parent = app.replace('.', '/')
@@ -72,6 +75,8 @@ abstract class PackageApplicationTask extends DefaultTask {
             throw new GradleException('The manifest Activity is missing from the application classes.')
         }
         payloadTransformers.get().each { it.transform(classes) }
+        if (!recoveryNames.empty || recoveryProvider.get())
+            RecoveryPackaging.validate(recoveryNames, classes, androidJar.get().asFile, recoveryProvider.get())
         Set<String> preparedCallbacks = new HashSet<>()
         Set<String> protectedCallbacks = new HashSet<>()
         info.getProperty('activities', info.getProperty('activity')).tokenize(';').each { activity ->
@@ -100,8 +105,7 @@ abstract class PackageApplicationTask extends DefaultTask {
             }
             new ZipOutputStream(new FileOutputStream(payload)).withCloseable { module ->
                 classes.each { name, bytes ->
-                    if (name.startsWith('com/lelloman/paravoidandroid/runtime/') || name.startsWith('com/lelloman/paravoidandroid/api/') ||
-                        name.startsWith('com/lelloman/paravoidandroid/contract/') || name.startsWith('com/lelloman/paravoidandroid/delivery/')) {
+                    if (RecoveryPackaging.shell(name) || recoveryNames.contains(name.substring(0, name.length() - 6))) {
                         PackageApplicationTask.write(host, name, bytes)
                     } else {
                         ClassWriter writer = new ClassWriter(0)

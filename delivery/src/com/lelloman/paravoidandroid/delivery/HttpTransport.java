@@ -26,15 +26,21 @@ final class HttpTransport {
         }
     }
 
-    static final class Cancellation {
+    static final class Cancellation implements com.lelloman.paravoidandroid.recovery.Cancellation {
+        private final java.util.Set<Runnable> disconnects = new java.util.HashSet<>();
         private boolean cancelled;
         private HttpURLConnection active;
         synchronized void cancel() {
             cancelled = true;
             if (active != null) active.disconnect();
+            for (Runnable action : new java.util.ArrayList<>(disconnects)) try { action.run(); } catch (RuntimeException ignored) { }
         }
-        synchronized void check() throws Failure {
+        public synchronized void check() throws Failure {
             if (cancelled || Thread.currentThread().isInterrupted()) throw new Failure("cancelled");
+        }
+        @Override public synchronized AutoCloseable onCancel(Runnable disconnect) {
+            if (cancelled) disconnect.run(); else disconnects.add(disconnect);
+            return () -> { synchronized (this) { disconnects.remove(disconnect); } };
         }
         synchronized void attach(HttpURLConnection connection) throws Failure {
             check(); active = connection;
@@ -138,6 +144,9 @@ final class HttpTransport {
     }
 
     Path download(URI uri, Path partial, long size, String sha256, Cancellation cancel) throws IOException {
+        return download(uri, partial, size, sha256, cancel, ignored -> {});
+    }
+    Path download(URI uri, Path partial, long size, String sha256, Cancellation cancel, java.util.function.LongConsumer progress) throws IOException {
         validateArchive(size, sha256);
         String etag = quoted(sha256);
         boolean retried416 = false;
@@ -174,7 +183,12 @@ final class HttpTransport {
                 try (InputStream in = responseStream(c, cancel); OutputStream out = Files.newOutputStream(partial,
                         StandardOpenOption.CREATE, StandardOpenOption.WRITE,
                         start == 0 ? StandardOpenOption.TRUNCATE_EXISTING : StandardOpenOption.APPEND)) {
-                    long copied = copy(in, out, size - start, cancel);
+                    OutputStream measured = new FilterOutputStream(out) {
+                        long written=start;
+                        @Override public void write(byte[] b, int off, int len) throws IOException { out.write(b,off,len); written+=len; progress.accept(written); }
+                        @Override public void write(int b) throws IOException { out.write(b); progress.accept(++written); }
+                    };
+                    long copied = copy(in, measured, size - start, cancel);
                     if (copied != size - start) throw new Failure("truncated-archive");
                 } catch (Failure failure) {
                     if (failure.code.equals("body-too-large")) Files.deleteIfExists(partial);
@@ -271,7 +285,7 @@ final class HttpTransport {
     }
     private static String quoted(String value) { return "\"" + value + "\""; }
     static String hash(byte[] bytes) { return hex(digest().digest(bytes)); }
-    private static String hash(Path file, Cancellation cancel) throws IOException {
+    static String hash(Path file, Cancellation cancel) throws IOException {
         MessageDigest digest = digest(); byte[] bytes = new byte[32 * 1024];
         try (InputStream in = Files.newInputStream(file)) {
             int n; while ((n = in.read(bytes)) != -1) { cancel.check(); digest.update(bytes, 0, n); }

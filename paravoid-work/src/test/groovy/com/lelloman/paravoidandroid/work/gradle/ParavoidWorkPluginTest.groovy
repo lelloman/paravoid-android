@@ -60,9 +60,9 @@ class ParavoidWorkPluginTest {
             pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
             dependencyResolutionManagement { repositories { google(); mavenCentral() } }
             rootProject.name = 'storage-compatibility'
-            include ':paravoid-api', ':paravoid-runtime', ':paravoid-contract'
+            include ':paravoid-api', ':paravoid-runtime', ':paravoid-contract', ':paravoid-recovery-api'
         """)
-        ['paravoid-api', 'paravoid-runtime', 'paravoid-contract'].each { module ->
+        ['paravoid-api', 'paravoid-runtime', 'paravoid-contract', 'paravoid-recovery-api'].each { module ->
             write(root, "${module}/build.gradle", new File(repo, "${module}/build.gradle").text)
             copy(new File(repo, "${module}/src/main"), new File(root, "${module}/src/main"))
         }

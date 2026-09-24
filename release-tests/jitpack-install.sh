@@ -24,6 +24,7 @@ if [[ -n "${PARAVOID_MAVEN_LOCAL:-}" ]]; then common+=("-Dmaven.repo.local=$PARA
 if [[ -n "${PARAVOID_LICENSE_NAME:-}" ]]; then common+=("-PparavoidLicenseName=$PARAVOID_LICENSE_NAME"); fi
 if [[ -n "${PARAVOID_LICENSE_URL:-}" ]]; then common+=("-PparavoidLicenseUrl=$PARAVOID_LICENSE_URL"); fi
 "$paravoid_gradle" "${common[@]}" \
+    :paravoid-recovery-api:publishToMavenLocal \
     :paravoid-api:publishToMavenLocal :paravoid-contract:publishToMavenLocal \
     :paravoid-runtime:publishToMavenLocal :paravoid-gradle-plugin:publishToMavenLocal \
     :paravoid-hilt:publishToMavenLocal :paravoid-work:publishToMavenLocal

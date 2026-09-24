@@ -13,3 +13,6 @@ project(':paravoid-api').projectDir = file('../../paravoid-api')
 include ':paravoid-contract'
 project(':paravoid-contract').projectDir = file('../../paravoid-contract')
 project(':paravoid-runtime').projectDir = file('../../paravoid-runtime')
+
+include ':paravoid-recovery-api'
+project(':paravoid-recovery-api').projectDir = file('../../paravoid-recovery-api')

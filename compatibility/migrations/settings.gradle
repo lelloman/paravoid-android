@@ -13,3 +13,6 @@ include ':paravoid-contract'
 project(':paravoid-contract').projectDir = file('../../paravoid-contract')
 // Only this experiment substitutes the bundle-selection hook; production is untouched.
 project(':paravoid-runtime').projectDir = file('fixture-runtime')
+
+include ':paravoid-recovery-api'
+project(':paravoid-recovery-api').projectDir = file('../../paravoid-recovery-api')

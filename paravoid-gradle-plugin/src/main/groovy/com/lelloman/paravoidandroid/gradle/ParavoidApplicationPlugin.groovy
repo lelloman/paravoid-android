@@ -21,6 +21,14 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             dimension = 'paravoidPackaging'
             applicationIdSuffix = '.paravoid'
         }
+        def recoveryLibraries = project.configurations.create('paravoidRecoveryImplementation') {
+            canBeConsumed = false; canBeResolved = true
+            attributes {
+                attribute(org.gradle.api.attributes.Usage.USAGE_ATTRIBUTE, project.objects.named(org.gradle.api.attributes.Usage, org.gradle.api.attributes.Usage.JAVA_RUNTIME))
+                attribute(org.gradle.api.attributes.Category.CATEGORY_ATTRIBUTE, project.objects.named(org.gradle.api.attributes.Category, org.gradle.api.attributes.Category.LIBRARY))
+                attribute(org.gradle.api.attributes.LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(org.gradle.api.attributes.LibraryElements, org.gradle.api.attributes.LibraryElements.JAR))
+            }
+        }
         def components = project.extensions.getByName('androidComponents')
         components.onVariants(components.selector().withFlavor('paravoidPackaging', 'paravoidAndroid')) { variant ->
             if (variant.minSdk.apiLevel < 28) throw new GradleException('ParavoidAndroid application packaging requires minSdk >= 28 for AppComponentFactory.')
@@ -30,6 +38,14 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             String packaging = extension.packaging.get()
             if (!(packaging in ['dexOnly', 'complete'])) throw new GradleException('paravoid.packaging must be dexOnly or complete.')
             boolean complete = packaging == 'complete'
+            if (extension.crashRecovery.enabled.get() && !complete)
+                throw new GradleException('Crash recovery requires complete packaging.')
+            if (!(extension.crashRecovery.updater.get() in ['default', 'custom']))
+                throw new GradleException('crashRecovery.updater must be default or custom.')
+            if (extension.crashRecovery.enabled.get() && extension.crashRecovery.updater.get() == 'custom' && !extension.crashRecovery.providerClass.get())
+                throw new GradleException('Custom crash recovery requires providerClass and paravoidRecoveryImplementation.')
+            if (extension.crashRecovery.updater.get() == 'default' && extension.crashRecovery.providerClass.get())
+                throw new GradleException('providerClass requires the custom recovery updater.')
             if (complete && variant.minSdk.apiLevel < 30) throw new GradleException('Complete packaging requires minSdk >= 30 on the paravoidAndroid flavor.')
             def apkInputs = variant.artifacts.get(SingleArtifact.APK.INSTANCE)
             if (complete) {
@@ -111,6 +127,8 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             def manifest = project.tasks.register("prepare${cap}ParavoidManifest", ApplicationManifestTask) {
                 it.complete.set(complete)
                 controlsLauncher.set(extension.controlsLauncher)
+                crashRecoveryEnabled.set(extension.crashRecovery.enabled)
+                recoveryProvider.set(extension.crashRecovery.providerClass)
                 debugHttpAllowed.set(complete ? extension.updates.debugHttpAllowed : project.providers.provider { false })
                 outputManifest.set(project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/AndroidManifest.xml"))
                 payloadMetadata.set(project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/payload.properties"))
@@ -124,6 +142,8 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 minSdk.set(variant.minSdk.apiLevel)
                 minifyPayload.set(extension.minifyPayload)
                 payloadProguardFiles.from(extension.payloadProguardFiles)
+                if (extension.crashRecovery.enabled.get() && extension.crashRecovery.updater.get() == 'custom') recoveryJars.from(recoveryLibraries)
+                recoveryProvider.set(extension.crashRecovery.enabled.get() ? extension.crashRecovery.providerClass : project.providers.provider { '' })
                 d8Jar.set(components.sdkComponents.sdkDirectory.map { it.file("build-tools/${android.buildToolsVersion}/lib/d8.jar") })
                 androidJar.set(components.sdkComponents.sdkDirectory.map { it.file("platforms/android-${android.compileSdk}/android.jar") })
                 shellClasses.set(project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/shell.jar"))

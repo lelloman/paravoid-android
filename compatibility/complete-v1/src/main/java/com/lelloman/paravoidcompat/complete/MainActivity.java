@@ -43,6 +43,10 @@ public final class MainActivity extends Activity {
             Button controls = new Button(this); controls.setText("Update controls");
             controls.setOnClickListener(clicked -> ParavoidUpdates.get().openControls(this));
             layout.addView(controls);
+            Button crash=new Button(this); crash.setText("Crash main thread");
+            crash.setOnClickListener(v -> { throw new IllegalStateException("Recovery main fixture"); }); layout.addView(crash);
+            Button worker=new Button(this); worker.setText("Crash worker thread");
+            worker.setOnClickListener(v -> new Thread(() -> { throw new IllegalStateException("Recovery worker fixture"); },"fixture-worker").start()); layout.addView(worker);
             setContentView(layout);
         } catch (Exception error) { throw new IllegalStateException(error); }
     }

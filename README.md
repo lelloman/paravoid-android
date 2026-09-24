@@ -40,10 +40,14 @@ on a device.
 are available; remote publication, release metadata and security acceptance are
 not implied by a successful local build.
 
+Optional [crash recovery](docs/crash-recovery.md) keeps a shell-owned update screen
+available after managed crashes. It supports the default updater or a downstream
+code-only provider and requires a new shell APK to enable.
+
 ## Paravoid release changes
 
 [CHANGELOG.md](CHANGELOG.md) is the downstream upgrade record for the plugin,
-runtime and optional integrations. The six modules use one coordinated version.
+runtime and optional integrations. The seven modules use one coordinated version.
 Each tagged release gets a dated entry with migration guidance. An app moving
 across several versions can read all intervening entries with:
 

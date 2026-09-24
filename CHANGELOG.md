@@ -2,7 +2,7 @@
 
 This file records changes that downstream Android apps may need to act on when
 updating their Paravoid plugin and runtime. Released versions are listed newest
-first. The six published modules share one version. Entries under **Unreleased**
+first. The seven published modules share one version. Entries under **Unreleased**
 are development changes and are not an available Maven release.
 Add a concise Unreleased entry for every downstream-visible change. Before a
 version tag, move those entries into a dated `## [VERSION] - YYYY-MM-DD` section;
@@ -14,6 +14,11 @@ these entries into a dated version section and document its exact upgrade path.
 ## [Unreleased]
 
 ### Added
+
+- Opt-in complete-profile crash recovery in a separate shell process, durable
+  next-launch routing, crash details and explicit repair download/restart. Choose
+  the default updater or a shell-packaged code-only provider through the new
+  `paravoid-recovery-api` module. See [integration guidance](docs/crash-recovery.md).
 
 - Normal APK/AAB packaging and complete shell APK plus signed VPK packaging for
   one downstream Android app project. Complete shells verify updates, stage them
@@ -32,6 +37,9 @@ these entries into a dated version section and document its exact upgrade path.
   `paravoid { controlsLauncher = true }` to keep that separate entry.
 
 ### Migration
+
+- Crash recovery is disabled by default. Enabling it or changing a custom provider
+  requires a new shell APK; compatible app repairs can then ship as VPKs.
 
 - First-time adopters should follow the complete-profile integration and
   compatibility requirements in the README and V1 contract. Complete packaging

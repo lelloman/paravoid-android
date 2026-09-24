@@ -20,7 +20,9 @@ abstract class ApplicationManifestTask extends DefaultTask {
     @Input abstract Property<Boolean> getComplete()
     @Input abstract Property<Boolean> getDebugHttpAllowed()
     @Input abstract Property<Boolean> getControlsLauncher()
-    ApplicationManifestTask() { complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false) }
+    @Input abstract Property<Boolean> getCrashRecoveryEnabled()
+    @Input abstract Property<String> getRecoveryProvider()
+    ApplicationManifestTask() { complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false); crashRecoveryEnabled.convention(false); recoveryProvider.convention('') }
 
     @TaskAction void rewrite() {
         def factory = DocumentBuilderFactory.newInstance()
@@ -41,7 +43,8 @@ abstract class ApplicationManifestTask extends DefaultTask {
             def reservedNames = [
                 'com.lelloman.paravoidandroid.runtime.LauncherActivity',
                 'com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity',
-                'com.lelloman.paravoidandroid.runtime.UpdatesLauncher'
+                'com.lelloman.paravoidandroid.runtime.UpdatesLauncher',
+                'com.lelloman.paravoidandroid.runtime.CrashRecoveryActivity'
             ] as Set
             ['activity', 'service', 'receiver', 'provider'].each { kind ->
                 def nodes = app.getElementsByTagName(kind)
@@ -118,6 +121,19 @@ abstract class ApplicationManifestTask extends DefaultTask {
             recovery.setAttributeNS(ANDROID, 'android:exported', 'false')
             recovery.setAttributeNS(ANDROID, 'android:theme', '@android:style/Theme.Material.Light.NoActionBar')
             app.appendChild(recovery)
+            if (crashRecoveryEnabled.get()) {
+                def crash = document.createElement('activity')
+                crash.setAttributeNS(ANDROID, 'android:name', 'com.lelloman.paravoidandroid.runtime.CrashRecoveryActivity')
+                crash.setAttributeNS(ANDROID, 'android:process', ':paravoid_recovery')
+                crash.setAttributeNS(ANDROID, 'android:exported', 'false')
+                crash.setAttributeNS(ANDROID, 'android:theme', '@android:style/Theme.Material.Light.NoActionBar')
+                app.appendChild(crash)
+                ['paravoid.crashRecovery': 'true', 'paravoid.recoveryProvider': recoveryProvider.get()].each { key, value ->
+                    def meta = document.createElement('meta-data')
+                    meta.setAttributeNS(ANDROID, 'android:name', key); meta.setAttributeNS(ANDROID, 'android:value', value)
+                    app.appendChild(meta)
+                }
+            }
             if (controlsLauncher.get()) {
                 // Only this shell-owned alias is exported. The target stays private and
                 // executes in the payload-free recovery process, even on a cold launch.

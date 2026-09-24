@@ -15,6 +15,7 @@ if [[ -n "${PARAVOID_VERSION:-}" ]]; then common+=("-PparavoidVersion=$PARAVOID_
 if [[ -n "${PARAVOID_LICENSE_NAME:-}" ]]; then common+=("-PparavoidLicenseName=$PARAVOID_LICENSE_NAME"); fi
 if [[ -n "${PARAVOID_LICENSE_URL:-}" ]]; then common+=("-PparavoidLicenseUrl=$PARAVOID_LICENSE_URL"); fi
 "$paravoid_gradle" "${common[@]}" \
+    :paravoid-recovery-api:publishAllPublicationsToLocalStagingRepository \
     :paravoid-api:publishAllPublicationsToLocalStagingRepository \
     :paravoid-contract:publishAllPublicationsToLocalStagingRepository \
     :paravoid-runtime:publishAllPublicationsToLocalStagingRepository \

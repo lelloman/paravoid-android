@@ -7,6 +7,7 @@ import java.net.URI;
 import java.nio.file.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import com.lelloman.paravoidandroid.recovery.*;
 
 /** Blocking worker-thread delivery orchestration; never selects or executes a payload. */
 public final class DeliveryClient {
@@ -24,8 +25,9 @@ public final class DeliveryClient {
         final CredentialScope credential;
         final HttpTransport transport;
         final String partition;
-        Session(CredentialScope credential, HttpTransport transport, String partition) {
-            this.credential = credential; this.transport = transport; this.partition = partition;
+        final String bearer;
+        Session(CredentialScope credential, HttpTransport transport, String partition, String bearer) {
+            this.credential = credential; this.transport = transport; this.partition = partition; this.bearer = bearer;
         }
     }
     private static final class Cache {
@@ -53,6 +55,28 @@ public final class DeliveryClient {
     private Cache cache;
     private HttpTransport.Cancellation active;
     private boolean authSuppressed;
+    private RecoveryUpdateProvider recoveryProvider;
+    private Progress progress = (phase, bytes, total) -> {};
+    public interface Progress { void changed(String phase, long bytes, long total); }
+    /** Recovery only, before starting any operation. Never changes verification/admission. */
+    public synchronized void recoveryProvider(RecoveryUpdateProvider provider) {
+        if (active != null) throw new IllegalStateException("Update in progress");
+        recoveryProvider = provider;
+    }
+    public synchronized void progress(Progress listener) { progress = Objects.requireNonNull(listener); }
+    /** Download only this already presented offer; fresh discovery may require a new confirmation. */
+    public Result downloadOffered(RequestScope scope, ExpectedArchive offered) throws ContractException, IOException {
+        return check(scope, true, true, () -> {}, () -> true, offered);
+    }
+    /** Recovery cancellation is checked after client registration and before irreversible staging. */
+    public Result recoveryCheck(RequestScope scope, ExpectedArchive offered, boolean explicitRetry,
+            java.util.function.BooleanSupplier cancelled) throws ContractException, IOException {
+        return check(scope, offered != null, explicitRetry, () -> {
+            if (cancelled.getAsBoolean()) throw new InterruptedIOException("Recovery cancelled");
+        }, () -> true, offered);
+    }
+
+
 
     public DeliveryClient(ShellPolicy policy, MetadataVerifier verifier, Lifecycle lifecycle, Clock clock, File noBackupDirectory) {
         this(policy, verifier, lifecycle, clock, noBackupDirectory.toPath(),
@@ -93,7 +117,7 @@ public final class DeliveryClient {
             }
             lifecycle.setCredentialScope(credential);
             authSuppressed = partition.equals(readMarker("auth-denied"));
-            session = new Session(credential, transport, partition);
+            session = new Session(credential, transport, partition, bearer);
         } catch (IOException | ContractException | RuntimeException failed) {
             denyCredential();
             throw failed;
@@ -150,6 +174,10 @@ public final class DeliveryClient {
     }
     Result check(RequestScope scope, boolean download, boolean explicitRetry, Checkpoint checkpoint,
             DownloadPermission permission) throws ContractException, IOException {
+        return check(scope, download, explicitRetry, checkpoint, permission, null);
+    }
+    private Result check(RequestScope scope, boolean download, boolean explicitRetry, Checkpoint checkpoint,
+            DownloadPermission permission, ExpectedArchive offered) throws ContractException, IOException {
         final Session captured;
         final HttpTransport.Cancellation cancel = new HttpTransport.Cancellation();
         final Cache cached;
@@ -183,7 +211,15 @@ public final class DeliveryClient {
                 throw new ContractException(ContractException.Code.CREDENTIAL_UNAVAILABLE, "Update access unavailable");
             HttpTransport transport = captured.transport;
             URI headUri = transport.headUri(scope.applicationId, scope.shellContractId, scope.channel, scope.sdk, scope.abis, scope.runtimeAbi);
-            HttpTransport.HeadBytes response = transport.head(headUri, cached == null ? null : "\"" + cached.head.envelopeSha256 + "\"", cancel);
+            RecoveryRequest recoveryRequest = new RecoveryRequest(scope.applicationId, scope.shellContractId, scope.channel,
+                    policy.baseUrl, scope.sdk, scope.runtimeAbi, scope.abis, directory.resolve("provider").toFile(), captured.bearer);
+            HttpTransport.HeadBytes response;
+            if (recoveryProvider == null) response = transport.head(headUri, cached == null ? null : "\"" + cached.head.envelopeSha256 + "\"", cancel);
+            else {
+                Files.createDirectories(recoveryRequest.privateDirectory.toPath());
+                try { response = new HttpTransport.HeadBytes(false, recoveryProvider.check(recoveryRequest, cancel), null); }
+                catch (Exception failure) { cancel.check(); throw providerFailure("provider-check-failed",failure); }
+            }
             VerifiedHead head;
             if (response.notModified) {
                 if (cached == null || !cached.fresh(clock)) throw new ContractException(ContractException.Code.EXPIRED, "Cached discovery expired");
@@ -199,7 +235,8 @@ public final class DeliveryClient {
             // Controller cancellation takes its operation lock before the client
             // monitor. Never invoke its checkpoint while holding this monitor.
             checkpoint.check();
-            if (!download || admission.status != HeadStatus.AVAILABLE || !permission.allowed())
+            if (!download || admission.status != HeadStatus.AVAILABLE || !permission.allowed()
+                    || offered != null && !offered.equals(admission.release))
                 return new Result(admission.status, admission.release, null);
             ExpectedArchive expected = admission.release;
             validCredential(captured.credential);
@@ -214,10 +251,37 @@ public final class DeliveryClient {
                 storage.reserve(directory, expected.archiveSize); // Additional host-test fault seam only.
                 downloading = true;
                 current(captured, cancel); checkpoint.check();
-                transport.download(archiveUri, partial, expected.archiveSize, expected.archiveSha256, cancel);
+                progress.changed("DOWNLOADING", 0, expected.archiveSize);
+                if (recoveryProvider == null) transport.download(archiveUri, partial, expected.archiveSize, expected.archiveSha256, cancel,
+                    bytes -> progress.changed("DOWNLOADING", bytes, expected.archiveSize));
+                else {
+                    if (Files.isSymbolicLink(partial)) throw new HttpTransport.Failure("unsafe-partial");
+                    try (OutputStream output = Files.newOutputStream(partial, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                        final long[] count = {0};
+                        OutputStream bounded = new OutputStream() {
+                            @Override public void write(int value) throws IOException { write(new byte[]{(byte)value},0,1); }
+                            @Override public void write(byte[] bytes, int offset, int length) throws IOException {
+                                cancel.check();
+                                if (length < 0 || count[0] > expected.archiveSize - length) throw new HttpTransport.Failure("body-too-large");
+                                output.write(bytes,offset,length); count[0]+=length;
+                                progress.changed("DOWNLOADING",count[0],expected.archiveSize);
+                            }
+                            @Override public void close() { /* Shell owns the destination. */ }
+                        };
+                        try { recoveryProvider.download(recoveryRequest, new RecoveryUpdate(expected.releaseId, expected.payloadVersion,
+                            expected.manifestSha256, expected.archiveSha256, expected.archiveSize), bounded, cancel); }
+                        catch (Exception failure) { cancel.check(); throw providerFailure("provider-download-failed",failure); }
+                        if (count[0] != expected.archiveSize) throw new HttpTransport.Failure("truncated-archive");
+                    }
+                    if (!expected.archiveSha256.equals(HttpTransport.hash(partial,cancel))) {
+                        Files.deleteIfExists(partial);
+                        throw new HttpTransport.Failure("archive-hash-mismatch");
+                    }
+                }
                 current(captured, cancel); checkpoint.check();
                 downloading = false; // Successful checkpoint is the non-cancellable staging boundary.
                 handedOff = true;
+                progress.changed("STAGING",expected.archiveSize,expected.archiveSize);
                 StageResult staged = reservation.stage(partial.toFile());
                 return new Result(admission.status, admission.release, staged);
             }
@@ -241,6 +305,10 @@ public final class DeliveryClient {
                 }
             }
         }
+    }
+
+    private static HttpTransport.Failure providerFailure(String code, Exception error) {
+        return new HttpTransport.Failure(code,error instanceof RecoveryUpdateException ? ((RecoveryUpdateException)error).status : 0,-1);
     }
 
     /** Opaque cache partition for scheduling only; never a bearer credential. */

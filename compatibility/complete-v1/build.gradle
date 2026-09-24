@@ -31,6 +31,11 @@ android {
 }
 paravoid {
     packaging = 'complete'
+    crashRecovery {
+        enabled = providers.gradleProperty('crashRecovery').map { it.toBoolean() }.orElse(false)
+        updater = providers.gradleProperty('recoveryUpdater').getOrElse('default')
+        if (updater.get() == 'custom') providerClass = 'com.lelloman.paravoidcompat.recovery.FixtureRecoveryProvider'
+    }
     controlsLauncher = true // Exercise the optional recovery launcher in the fixture.
     minifyPayload = providers.gradleProperty('minifyPayload').map { it.toBoolean() }.orElse(false)
     payloadProguardFiles.from(layout.projectDirectory.file('payload-rules.pro'))
@@ -49,4 +54,5 @@ paravoid {
 dependencies {
     implementation project(':paravoid-runtime')
     implementation project(':native-probe')
+    paravoidRecoveryImplementation project(':recovery-provider')
 }
