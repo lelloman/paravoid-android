@@ -341,43 +341,6 @@ The API library (including `ParavoidAndroidApplication`, whose class name is
 unchanged) supports minSdk 24. Only shell variants need the runtime dependency;
 this avoids imposing its minimum SDK on normal builds. Set a higher minSdk on
 the generated `paravoidAndroid` flavor when the normal app supports older devices.
-
-### App-owned update UI for complete packaging
-
-The complete runtime exposes a process-local `ParavoidUpdates` singleton to the
-app. Subscribe while a screen is visible and render the state with your own UI:
-
-```java
-private ParavoidUpdates.Subscription updatesSubscription;
-
-@Override protected void onStart() {
-    super.onStart();
-    updatesSubscription = ParavoidUpdates.get().observe(state -> {
-        updateBadge.setVisibility(state.updateAvailable() ? View.VISIBLE : View.GONE);
-        updateStatus.setText(state.phase.name());
-    });
-}
-
-@Override protected void onStop() {
-    updatesSubscription.close();
-    super.onStop();
-}
-```
-
-Use `ParavoidUpdates.get().checkNow()` for a user-triggered check and download,
-or `openControls(activity)` to show the shell recovery screen for restart and
-advanced controls. The state also exposes current, available and pending releases,
-an error code, and automatic-update preferences. `current()` reads the latest
-state without subscribing. The singleton is active in the main app process of a
-complete shell with updates enabled; in other processes it reports `UNAVAILABLE`.
-The [complete compatibility app](compatibility/complete-v1/src/main/java/com/lelloman/paravoidcompat/complete/MainActivity.java)
-shows an app-owned status and update buttons.
-
-The additional **App updates** launcher icon now defaults to off. Set
-`paravoid { controlsLauncher = true }` if a separate recovery entry is useful.
-The ordinary app launcher still reaches shell bootstrap and recovery when the
-payload cannot start.
-
 Declare the Application and Activity in the ordinary manifest; no entry-point
 configuration is needed. With no custom Application, user initialization is skipped.
 By default, `paravoidAndroid` adds `.paravoid` to the application ID; normal
