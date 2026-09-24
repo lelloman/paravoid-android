@@ -39,3 +39,7 @@ parceling, provider calls, and the payload class loader working at runtime.
 Keep rules in `payload-rules.pro` cover the names read by reflection and the
 `META-INF/services` descriptor. The plugin generates rules for manifest
 components and the payload Application.
+
+See [runtime validation](runtime-validation.md) for dependency keep rules and
+upgrade tests with saved preferences. The fixture above does not cover these
+application dependency paths.
