@@ -13,7 +13,7 @@ final class ShellContract {
 
     static Map document(Map descriptor) {
         validate(descriptor)
-        [version: 1, contractId: sha(CanonicalJson.encode(descriptor).getBytes('UTF-8')), descriptor: descriptor]
+        [version: descriptor.distribution?.updates instanceof Map ? 2 : 1, contractId: sha(CanonicalJson.encode(descriptor).getBytes('UTF-8')), descriptor: descriptor]
     }
 
     static Map reservations(ResourceLedger ledger, Map accepted) {
@@ -33,20 +33,20 @@ final class ShellContract {
         def value
         try { value = new JsonSlurper().parseText(text) }
         catch (Exception error) { throw new GradleException('Invalid shell contract JSON', error) }
-        if (!(value instanceof Map) || value.keySet() != ['version', 'contractId', 'descriptor'] as Set || value.version != 1 || !(value.descriptor instanceof Map))
+        if (!(value instanceof Map) || value.keySet() != ['version', 'contractId', 'descriptor'] as Set || !(value.version in [1,2]) || !(value.descriptor instanceof Map))
             throw new GradleException('Invalid shell contract fields/version')
         // Generated snapshots are canonical. This also rejects duplicate keys, lossy
         // Unicode decoding and noncanonical number spellings without trusting JsonSlurper.
         byte[] canonical = (CanonicalJson.encode(value) + '\n').getBytes('UTF-8')
         if (!Arrays.equals(bytes, canonical)) throw new GradleException('Shell contract must be canonical generated JSON (including final newline)')
         Map checked = document(value.descriptor)
-        if (checked.contractId != value.contractId) throw new GradleException('Shell contract ID does not match descriptor')
+        if (checked.version != value.version || checked.contractId != value.contractId) throw new GradleException('Shell contract ID does not match descriptor')
         checked
     }
 
     static void validate(Map descriptor) {
         if (descriptor.profile == 'complete-apk-v1') {
-            def document = [version: 1, contractId: sha(CanonicalJson.encode(descriptor).getBytes('UTF-8')), descriptor: descriptor]
+            def document = [version: descriptor.distribution?.updates instanceof Map ? 2 : 1, contractId: sha(CanonicalJson.encode(descriptor).getBytes('UTF-8')), descriptor: descriptor]
             com.lelloman.paravoidandroid.contract.InstalledPolicyCodec.read(CanonicalJson.encode(document).getBytes('UTF-8'), true)
             return
         }

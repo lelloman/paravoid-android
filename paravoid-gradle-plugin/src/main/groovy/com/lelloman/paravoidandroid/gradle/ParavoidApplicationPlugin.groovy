@@ -29,6 +29,14 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 attribute(org.gradle.api.attributes.LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(org.gradle.api.attributes.LibraryElements, org.gradle.api.attributes.LibraryElements.JAR))
             }
         }
+        def updateLibraries = project.configurations.create('paravoidUpdateImplementation') {
+            canBeConsumed=false; canBeResolved=true
+            attributes {
+                attribute(org.gradle.api.attributes.Usage.USAGE_ATTRIBUTE, project.objects.named(org.gradle.api.attributes.Usage, org.gradle.api.attributes.Usage.JAVA_RUNTIME))
+                attribute(org.gradle.api.attributes.Category.CATEGORY_ATTRIBUTE, project.objects.named(org.gradle.api.attributes.Category, org.gradle.api.attributes.Category.LIBRARY))
+                attribute(org.gradle.api.attributes.LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(org.gradle.api.attributes.LibraryElements, org.gradle.api.attributes.LibraryElements.JAR))
+            }
+        }
         def components = project.extensions.getByName('androidComponents')
         components.onVariants(components.selector().withFlavor('paravoidPackaging', 'paravoidAndroid')) { variant ->
             if (variant.minSdk.apiLevel < 28) throw new GradleException('ParavoidAndroid application packaging requires minSdk >= 28 for AppComponentFactory.')
@@ -47,6 +55,10 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             if (extension.crashRecovery.updater.get() == 'default' && extension.crashRecovery.providerClass.get())
                 throw new GradleException('providerClass requires the custom recovery updater.')
             if (complete && variant.minSdk.apiLevel < 30) throw new GradleException('Complete packaging requires minSdk >= 30 on the paravoidAndroid flavor.')
+            if(extension.updates.push.enabled.get() && (!complete || !extension.updates.enabled.get()))
+                throw new GradleException('Push requires complete packaging and updates.enabled = true.')
+            if (extension.crashRecovery.providerClass.get() && (extension.updates.checkerClass.get() || extension.updates.updaterClass.get()))
+                throw new GradleException('Choose either the legacy recovery provider or update checker/updater classes.')
             def apkInputs = variant.artifacts.get(SingleArtifact.APK.INSTANCE)
             if (complete) {
                 def snapshot = project.tasks.register("snapshot${cap}ParavoidInput", SnapshotApkTask) {
@@ -126,6 +138,9 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             }
             def manifest = project.tasks.register("prepare${cap}ParavoidManifest", ApplicationManifestTask) {
                 it.complete.set(complete)
+                updatesEnabled.set(complete && extension.updates.enabled.get())
+                pushComponents.set(extension.updates.push.enabled.get() ? extension.updates.push.componentClasses.get() : [])
+                pushEnabled.set(complete && extension.updates.enabled.get() && extension.updates.push.enabled.get())
                 controlsLauncher.set(extension.controlsLauncher)
                 crashRecoveryEnabled.set(extension.crashRecovery.enabled)
                 recoveryProvider.set(extension.crashRecovery.providerClass)
@@ -137,6 +152,9 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 .toTransform(SingleArtifact.MERGED_MANIFEST.INSTANCE)
             def pack = project.tasks.register("package${cap}ParavoidApplication", PackageApplicationTask) {
                 dependsOn(nativeValidation)
+                if (complete && extension.updates.enabled.get()) updateJars.from(updateLibraries)
+                pushComponents.set(extension.updates.push.enabled.get() ? extension.updates.push.componentClasses.get() : [])
+                updateProviders.set([UpdateChecker: extension.updates.checkerClass.get(), UpdateUpdater: extension.updates.updaterClass.get(), UpdatePolicy: extension.updates.policyClass.get(), PushTransport: extension.updates.push.enabled.get() ? extension.updates.push.transportClass.get() : "", PushAuthentication: extension.updates.push.enabled.get() ? extension.updates.push.authenticationClass.get() : ""])
                 metadata.set(manifest.flatMap { it.payloadMetadata })
                 manifestFile.set(manifest.flatMap { it.outputManifest })
                 minSdk.set(variant.minSdk.apiLevel)
@@ -190,6 +208,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 trustPolicyFile.set(extension.updates.trustPolicyFile)
                 bootstrap.set(extension.bootstrap)
                 updatesEnabled.set(extension.updates.enabled)
+                updateConfiguration.set(extension.updates.configuration())
                 baseUrl.set(extension.updates.baseUrl)
                 channel.set(extension.updates.channel)
                 authentication.set(extension.updates.authentication)

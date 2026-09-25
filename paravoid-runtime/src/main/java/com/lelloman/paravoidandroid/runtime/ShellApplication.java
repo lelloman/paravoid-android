@@ -17,6 +17,17 @@ public final class ShellApplication extends Application {
     private CrashRecovery crashRecovery;
     private AppComponentFactory componentFactory = new AppComponentFactory();
 
+    void suspendUpdates() { if(complete!=null) complete.suspendUpdates(); }
+    void resumeUpdates() { if(complete!=null) complete.resumeUpdates(); }
+    boolean pendingUpdateMatches(com.lelloman.paravoidandroid.contract.Protocol.ExpectedArchive offer) {
+        if(complete==null) return false;
+        try { return offer.equals(complete.lifecycle.snapshot().pending); }
+        catch(com.lelloman.paravoidandroid.contract.ContractException unavailable) { return false; }
+    }
+    boolean isPushComponent(String name) {
+        if(metadata==null) return false;
+        return java.util.Arrays.asList(metadata.getString("paravoid.pushComponents","").split(";")).contains(name);
+    }
     static ShellApplication requireInstance() {
         if (instance == null) throw new IllegalStateException("Shell Application is not attached.");
         return instance;
@@ -29,6 +40,7 @@ public final class ShellApplication extends Application {
             metadata = getPackageManager().getApplicationInfo(getPackageName(), android.content.pm.PackageManager.GET_META_DATA).metaData;
             if (metadata == null) metadata = new android.os.Bundle();
             if (metadata.getBoolean("paravoid.complete", false)) {
+                if (Application.getProcessName().equals(getPackageName() + UpdateRuntime.SUFFIX)) return;
                 if (metadata.getBoolean("paravoid.crashRecovery", false))
                     crashRecovery = new CrashRecovery(this, metadata.getString("paravoid.recoveryProvider", ""));
                 if (Build.VERSION.SDK_INT < 30) throw new IllegalStateException("Complete packaging requires API 30");

@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 import xml.etree.ElementTree as ET
 import zipfile
 
-MODULES = ('paravoid-recovery-api', 'paravoid-api', 'paravoid-contract', 'paravoid-runtime',
+MODULES = ('paravoid-update-api', 'paravoid-recovery-api', 'paravoid-api', 'paravoid-contract', 'paravoid-runtime',
            'paravoid-gradle-plugin', 'paravoid-hilt', 'paravoid-work')
 MARKERS = ('com.lelloman.paravoid', 'com.lelloman.paravoid.module',
            'com.lelloman.paravoid.shell', 'com.lelloman.paravoid.hilt',

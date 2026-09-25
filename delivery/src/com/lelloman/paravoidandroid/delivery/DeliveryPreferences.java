@@ -23,8 +23,8 @@ public final class DeliveryPreferences {
         automaticChecks = checks; automaticDownloads = downloads; unmeteredOnly = unmetered;
         lastAutomaticCheckSeconds = lastCheck;
     }
-    static DeliveryPreferences read(Path path) throws IOException {
-        if (!Files.exists(path)) return new DeliveryPreferences(true, true, false);
+    public static DeliveryPreferences read(Path path) throws IOException {
+        if (!Files.exists(path)) return new DeliveryPreferences(true, true, true);
         if (Files.size(path) > 4096) throw new IOException("Invalid update preferences");
         Properties properties = new Properties();
         try (InputStream input = Files.newInputStream(path)) { properties.load(input); }

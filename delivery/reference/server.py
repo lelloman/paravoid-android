@@ -71,6 +71,7 @@ class Catalog:
             raise ValueError("invalid deployment prefix")
         self.mode, self.prefix = mode, prefix
         self.heads, self.archives = {}, {}
+        self.publishers = {}
         self._grants = {}
         self._lock = threading.Lock()
 
@@ -165,6 +166,21 @@ class Handler(BaseHTTPRequestHandler):
             return self.fail(400)
         route = url.path[len(catalog.prefix):]
         head = re.fullmatch(r"v1/apps/(" + APP + r")/head", route)
+        feed = re.fullmatch(r"v1/apps/(" + APP + r")/feeds/([0-9a-f]{64})/(" + IDENTIFIER + r")\.json", route)
+        if feed:
+            if url.query:
+                return self.fail(400)
+            auth = catalog.authorize(self.headers.get("Authorization"), feed[1], channel=feed[3])
+            if auth != 200:
+                return self.fail(auth)
+            publisher = catalog.publishers.get((feed[1], feed[2], feed[3]))
+            if publisher is None:
+                return self.fail(404)
+            try:
+                body = publisher.announcement()
+            except Exception:
+                return self.fail(503)
+            return self.discovery(Head(body, '\"' + hashlib.sha256(body).hexdigest() + '\"'))
         archive = re.fullmatch(r"v1/apps/(" + APP + r")/releases/(" + IDENTIFIER + r")/payload\.vpk", route)
         if head:
             try:
@@ -181,19 +197,20 @@ class Handler(BaseHTTPRequestHandler):
             auth = catalog.authorize(self.headers.get("Authorization"), head[1], channel=query["channel"])
             if auth != 200:
                 return self.fail(auth)
-            entry = catalog.heads.get((head[1], selected_scope))
+            publisher = catalog.publishers.get((head[1], query["contract"], query["channel"]))
+            if publisher is not None:
+                if int(query["runtime"]) != publisher.runtime:
+                    return self.fail(404)
+                try:
+                    body = publisher.announcement(query)
+                    entry = Head(body, '"' + hashlib.sha256(body).hexdigest() + '"')
+                except Exception:
+                    return self.fail(503)
+            else:
+                entry = catalog.heads.get((head[1], selected_scope))
             if entry is None:
-                return self.fail(404)  # Never fabricate an unsigned no-compatible-release response.
-            if self.headers.get("If-None-Match") == entry.etag:
-                self.send_response(304)
-                self.send_header("ETag", entry.etag)
-                self.send_header("Cache-Control", "private, no-cache")
-                self.send_header("Vary", "Authorization")
-                self.end_headers()
-                return
-            self.headers_for(200, "application/json", len(entry.body), entry.etag)
-            self.end_headers()
-            self.wfile.write(entry.body)
+                return self.fail(404)
+            return self.discovery(entry)
         elif archive:
             if url.query:
                 return self.fail(400)
@@ -246,6 +263,20 @@ class Handler(BaseHTTPRequestHandler):
             self.fail(404)
 
 
+    def discovery(self, entry):
+        # Dynamic publishers renew before the validator comparison, including for stale client ETags.
+        if self.headers.get("If-None-Match") == entry.etag:
+            self.send_response(304)
+            self.send_header("ETag", entry.etag)
+            self.send_header("Cache-Control", "private, no-cache")
+            self.send_header("Vary", "Authorization")
+            self.end_headers()
+            return
+        self.headers_for(200, "application/json", len(entry.body), entry.etag)
+        self.end_headers()
+        self.wfile.write(entry.body)
+
+
 def load_catalog(path):
     config = json.loads(path.read_text())
     catalog = Catalog(config["authentication"], config.get("prefix", "/"))
@@ -258,6 +289,18 @@ def load_catalog(path):
         catalog.add_archive(entry["applicationId"], entry["releaseId"], root / entry["file"])
     for entry in config.get("grants", []):
         catalog.grant(entry["key"], entry["applicationId"], entry["channels"], entry["releases"])
+    if config.get("publishers"):
+        from signing import Publisher
+        state = root / config["stateDirectory"]
+        for item in config["publishers"]:
+            publisher = Publisher(item, root, state)
+            key = (publisher.app, publisher.contract, publisher.channel)
+            if key in catalog.publishers:
+                raise ValueError("duplicate publisher")
+            catalog.publishers[key] = publisher
+            for release, archive in publisher.archives:
+                if (publisher.app, release) not in catalog.archives:
+                    catalog.add_archive(publisher.app, release, archive)
     return catalog
 
 
@@ -265,7 +308,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("catalog", type=Path, help="Private operator config; never put credentials in argv")
     parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--export", type=Path, help="Renew and export signed portable feeds instead of serving HTTP")
     args = parser.parse_args()
+    if args.export is not None:
+        catalog = load_catalog(args.catalog)
+        for publisher in catalog.publishers.values():
+            destination = args.export / publisher.app / publisher.contract / (publisher.channel + ".json")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary = destination.with_suffix(".tmp")
+            temporary.write_bytes(publisher.announcement())
+            temporary.replace(destination)
+        raise SystemExit(0)
     server = Server(("127.0.0.1", args.port), load_catalog(args.catalog))
     print("Paravoid transport reference listening on loopback", flush=True)
     try:

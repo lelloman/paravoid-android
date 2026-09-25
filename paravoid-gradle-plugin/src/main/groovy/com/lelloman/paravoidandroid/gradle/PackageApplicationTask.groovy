@@ -29,13 +29,16 @@ abstract class PackageApplicationTask extends DefaultTask {
     @InputFiles @PathSensitive(PathSensitivity.RELATIVE) abstract ConfigurableFileCollection getPayloadProguardFiles()
     @Classpath abstract ConfigurableFileCollection getRecoveryJars()
     @Input abstract Property<String> getRecoveryProvider()
+    @Classpath abstract ConfigurableFileCollection getUpdateJars()
+    @Input abstract org.gradle.api.provider.ListProperty<String> getPushComponents()
+    @Input abstract org.gradle.api.provider.MapProperty<String,String> getUpdateProviders()
     @Nested abstract ListProperty<PayloadTransformer> getPayloadTransformers()
     @OutputFile abstract RegularFileProperty getShellClasses()
     @OutputFile abstract RegularFileProperty getBundleFile()
     @Optional @OutputFile abstract RegularFileProperty getMappingFile()
     @Inject abstract ExecOperations getExecOperations()
 
-    PackageApplicationTask() { payloadTransformers.convention([]); minifyPayload.convention(false); recoveryProvider.convention('') }
+    PackageApplicationTask() { payloadTransformers.convention([]); minifyPayload.convention(false); recoveryProvider.convention(''); pushComponents.convention([]); updateProviders.convention([:]) }
 
     @TaskAction void pack() {
         Properties info = new Properties()
@@ -58,6 +61,7 @@ abstract class PackageApplicationTask extends DefaultTask {
             }
         }
         Set<String> recoveryNames = RecoveryPackaging.collect(recoveryJars.files, classes)
+        Set<String> updateNames = RecoveryPackaging.collect(updateJars.files, classes)
         String app = info.getProperty('application')
         if (app) {
             String parent = app.replace('.', '/')
@@ -77,6 +81,14 @@ abstract class PackageApplicationTask extends DefaultTask {
         payloadTransformers.get().each { it.transform(classes) }
         if (!recoveryNames.empty || recoveryProvider.get())
             RecoveryPackaging.validate(recoveryNames, classes, androidJar.get().asFile, recoveryProvider.get())
+        pushComponents.get().each { name ->
+            if(!updateNames.contains(name.replace('.','/'))) throw new GradleException('Push component must be packaged in paravoidUpdateImplementation: '+name)
+        }
+        updateProviders.get().each { api, name ->
+            if(name) RecoveryPackaging.validate(updateNames, classes, androidJar.get().asFile, name, 'com/lelloman/paravoidandroid/updates/' + api)
+        }
+        if(!updateNames.empty) RecoveryPackaging.validate(updateNames, classes, androidJar.get().asFile, '')
+        recoveryNames.addAll(updateNames)
         Set<String> preparedCallbacks = new HashSet<>()
         Set<String> protectedCallbacks = new HashSet<>()
         info.getProperty('activities', info.getProperty('activity')).tokenize(';').each { activity ->
@@ -93,7 +105,7 @@ abstract class PackageApplicationTask extends DefaultTask {
         info.getProperty('services', '').tokenize(';').each { service ->
             String name = service.replace('.', '/')
             // Platform-owned services have no payload class to adapt.
-            if (classes.containsKey(name + '.class')) PayloadComponentLoader.adapt(classes, name)
+            if (!updateNames.contains(name) && classes.containsKey(name + '.class')) PayloadComponentLoader.adapt(classes, name)
         }
         File shell = shellClasses.get().asFile
         shell.parentFile.mkdirs()

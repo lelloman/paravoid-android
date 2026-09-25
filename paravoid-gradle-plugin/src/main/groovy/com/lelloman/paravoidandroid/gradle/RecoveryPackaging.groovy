@@ -30,6 +30,9 @@ final class RecoveryPackaging {
         names
     }
     static void validate(Set<String> names, Map<String, byte[]> classes, File androidJar, String provider) {
+        validate(names,classes,androidJar,provider,'com/lelloman/paravoidandroid/recovery/RecoveryUpdateProvider')
+    }
+    static void validate(Set<String> names, Map<String, byte[]> classes, File androidJar, String provider, String api) {
         if (provider && !names.contains(provider.replace('.', '/')))
             throw new GradleException('Recovery provider must be supplied by paravoidRecoveryImplementation: ' + provider)
         Set<String> allowed = new HashSet<>(names)
@@ -56,13 +59,13 @@ final class RecoveryPackaging {
                 Set<String> visited = new HashSet<>()
                 def inspect
                 inspect = { String type ->
-                    if (type == 'com/lelloman/paravoidandroid/recovery/RecoveryUpdateProvider') { implementsApi = true; return }
+                    if (type == api) { implementsApi = true; return }
                     if (!visited.add(type) || !classes.containsKey(type + '.class')) return
                     def c = new ClassReader(classes.get(type + '.class'))
                     c.interfaces.each { inspect(it) }; if (c.superName) inspect(c.superName)
                 }
                 inspect(parent)
-                if (!implementsApi) throw new GradleException('Recovery provider must implement RecoveryUpdateProvider.')
+                if (!implementsApi) throw new GradleException('Recovery/update provider must implement ' + api.substring(api.lastIndexOf('/')+1) + '.')
             }
             reader.accept(new ClassRemapper(new ClassWriter(0), new Remapper() {
                 @Override String map(String type) {
@@ -73,6 +76,6 @@ final class RecoveryPackaging {
         }
     }
     static boolean shell(String name) {
-        ['runtime/', 'api/', 'contract/', 'delivery/', 'recovery/'].any { name.startsWith('com/lelloman/paravoidandroid/' + it) }
+        ['runtime/', 'api/', 'contract/', 'delivery/', 'recovery/', 'updates/'].any { name.startsWith('com/lelloman/paravoidandroid/' + it) }
     }
 }

@@ -5,6 +5,7 @@ output=$(mktemp -d /tmp/paravoid-full-vpk.XXXXXX)
 trap 'chmod -R u+w "$output"; rm -rf "$output"' EXIT
 javac --release 11 -d "$output/classes" \
   paravoid-recovery-api/src/main/java/com/lelloman/paravoidandroid/recovery/*.java \
+  paravoid-update-api/src/main/java/com/lelloman/paravoidandroid/updates/*.java \
   paravoid-contract/src/main/java/com/lelloman/paravoidandroid/contract/*.java \
   paravoid-contract/src/test/java/com/lelloman/paravoidandroid/contract/MetadataTestSupport.java \
   paravoid-runtime/src/main/java/com/lelloman/paravoidandroid/runtime/lifecycle/*.java \

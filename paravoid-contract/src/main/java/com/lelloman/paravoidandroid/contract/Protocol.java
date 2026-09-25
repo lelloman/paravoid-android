@@ -55,11 +55,20 @@ public final class Protocol {
         public final boolean updatesEnabled, debugHttpAllowed;
         public final int runtimeAbi;
         public final Map<String, String> resourceReservations;
+        public final Map<String, String> updates;
         private final byte[] contractDescriptor;
         public ShellPolicy(String applicationId, String shellContractId, TrustPolicy trust,
                 String baseUrl, String channel, Authentication authentication, Bootstrap bootstrap,
                 boolean updatesEnabled, boolean debugHttpAllowed, int runtimeAbi,
                 Map<String,String> resourceReservations, byte[] contractDescriptor) {
+            this(applicationId, shellContractId, trust, baseUrl, channel, authentication, bootstrap,
+                updatesEnabled, debugHttpAllowed, runtimeAbi, resourceReservations, contractDescriptor, Collections.emptyMap());
+        }
+        public ShellPolicy(String applicationId, String shellContractId, TrustPolicy trust,
+                String baseUrl, String channel, Authentication authentication, Bootstrap bootstrap,
+                boolean updatesEnabled, boolean debugHttpAllowed, int runtimeAbi,
+                Map<String,String> resourceReservations, byte[] contractDescriptor, Map<String,String> updates) {
+            this.updates = map(updates);
             this.applicationId = required(applicationId); this.shellContractId = required(shellContractId);
             this.trust = Objects.requireNonNull(trust); this.baseUrl = required(baseUrl);
             this.channel = required(channel); this.authentication = Objects.requireNonNull(authentication);

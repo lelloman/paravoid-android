@@ -8,6 +8,7 @@ import java.nio.file.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import com.lelloman.paravoidandroid.recovery.*;
+import com.lelloman.paravoidandroid.updates.*;
 
 /** Blocking worker-thread delivery orchestration; never selects or executes a payload. */
 public final class DeliveryClient {
@@ -56,6 +57,12 @@ public final class DeliveryClient {
     private HttpTransport.Cancellation active;
     private boolean authSuppressed;
     private RecoveryUpdateProvider recoveryProvider;
+    private UpdateChecker checker;
+    private UpdateUpdater updater;
+    public synchronized void providers(UpdateChecker checker, UpdateUpdater updater) {
+        if(active!=null) throw new IllegalStateException("Update in progress");
+        this.checker=checker; this.updater=updater;
+    }
     private Progress progress = (phase, bytes, total) -> {};
     public interface Progress { void changed(String phase, long bytes, long total); }
     /** Recovery only, before starting any operation. Never changes verification/admission. */
@@ -176,7 +183,7 @@ public final class DeliveryClient {
             DownloadPermission permission) throws ContractException, IOException {
         return check(scope, download, explicitRetry, checkpoint, permission, null);
     }
-    private Result check(RequestScope scope, boolean download, boolean explicitRetry, Checkpoint checkpoint,
+    Result check(RequestScope scope, boolean download, boolean explicitRetry, Checkpoint checkpoint,
             DownloadPermission permission, ExpectedArchive offered) throws ContractException, IOException {
         final Session captured;
         final HttpTransport.Cancellation cancel = new HttpTransport.Cancellation();
@@ -210,14 +217,19 @@ public final class DeliveryClient {
             if (!explicitRetry && captured.partition.equals(readMarker("auth-denied")))
                 throw new ContractException(ContractException.Code.CREDENTIAL_UNAVAILABLE, "Update access unavailable");
             HttpTransport transport = captured.transport;
-            URI headUri = transport.headUri(scope.applicationId, scope.shellContractId, scope.channel, scope.sdk, scope.abis, scope.runtimeAbi);
+            boolean feed="feed".equals(policy.updates.get("mode"));
+            URI headUri = feed ? URI.create(policy.updates.get("metadataUrl")) : transport.headUri(scope.applicationId, scope.shellContractId, scope.channel, scope.sdk, scope.abis, scope.runtimeAbi);
+            HttpTransport headTransport=feed ? endpointTransport(headUri,captured) : transport;
+            UpdateRequest request=new UpdateRequest(scope.applicationId,scope.shellContractId,scope.channel,policy.baseUrl,
+                policy.updates.getOrDefault("metadataUrl",""),policy.updates.getOrDefault("payloadUrlTemplate",""),
+                scope.sdk,scope.runtimeAbi,scope.abis,directory.resolve("provider").toFile(),captured.bearer==null ? null : "Bearer "+captured.bearer);
             RecoveryRequest recoveryRequest = new RecoveryRequest(scope.applicationId, scope.shellContractId, scope.channel,
                     policy.baseUrl, scope.sdk, scope.runtimeAbi, scope.abis, directory.resolve("provider").toFile(), captured.bearer);
             HttpTransport.HeadBytes response;
-            if (recoveryProvider == null) response = transport.head(headUri, cached == null ? null : "\"" + cached.head.envelopeSha256 + "\"", cancel);
+            if (checker == null && recoveryProvider == null) response = headTransport.head(headUri, cached == null ? null : "\"" + cached.head.envelopeSha256 + "\"", cancel);
             else {
                 Files.createDirectories(recoveryRequest.privateDirectory.toPath());
-                try { response = new HttpTransport.HeadBytes(false, recoveryProvider.check(recoveryRequest, cancel), null); }
+                try { response = new HttpTransport.HeadBytes(false, checker != null ? checker.check(request, cancel) : recoveryProvider.check(recoveryRequest, cancel), null); }
                 catch (Exception failure) { cancel.check(); throw providerFailure("provider-check-failed",failure); }
             }
             VerifiedHead head;
@@ -240,7 +252,8 @@ public final class DeliveryClient {
                 return new Result(admission.status, admission.release, null);
             ExpectedArchive expected = admission.release;
             validCredential(captured.credential);
-            URI archiveUri = transport.archiveUri(scope.applicationId, expected.releaseId);
+            URI archiveUri = feed ? URI.create(policy.updates.get("payloadUrlTemplate").replace("{releaseId}", expected.releaseId)) : transport.archiveUri(scope.applicationId, expected.releaseId);
+            HttpTransport archiveTransport=feed ? endpointTransport(archiveUri,captured) : transport;
             String partialScope = policy.shellContractId + ":" + captured.credential.id + ":" + expected.manifestSha256;
             partial = transport.partial(directory, partialScope, archiveUri, expected.archiveSize, expected.archiveSha256);
             // At most one resumable candidate. This directory never contains C-owned archives.
@@ -252,7 +265,7 @@ public final class DeliveryClient {
                 downloading = true;
                 current(captured, cancel); checkpoint.check();
                 progress.changed("DOWNLOADING", 0, expected.archiveSize);
-                if (recoveryProvider == null) transport.download(archiveUri, partial, expected.archiveSize, expected.archiveSha256, cancel,
+                if (updater == null && recoveryProvider == null) archiveTransport.download(archiveUri, partial, expected.archiveSize, expected.archiveSha256, cancel,
                     bytes -> progress.changed("DOWNLOADING", bytes, expected.archiveSize));
                 else {
                     if (Files.isSymbolicLink(partial)) throw new HttpTransport.Failure("unsafe-partial");
@@ -268,8 +281,13 @@ public final class DeliveryClient {
                             }
                             @Override public void close() { /* Shell owns the destination. */ }
                         };
-                        try { recoveryProvider.download(recoveryRequest, new RecoveryUpdate(expected.releaseId, expected.payloadVersion,
-                            expected.manifestSha256, expected.archiveSha256, expected.archiveSize), bounded, cancel); }
+                        try {
+                            Files.createDirectories(request.privateDirectory.toPath());
+                            if(updater!=null) updater.download(request,new UpdateOffer(expected.releaseId,expected.payloadVersion,
+                                expected.manifestSha256,expected.archiveSha256,expected.archiveSize),bounded,cancel);
+                            else recoveryProvider.download(recoveryRequest, new RecoveryUpdate(expected.releaseId, expected.payloadVersion,
+                                expected.manifestSha256, expected.archiveSha256, expected.archiveSize), bounded, cancel);
+                        }
                         catch (Exception failure) { cancel.check(); throw providerFailure("provider-download-failed",failure); }
                         if (count[0] != expected.archiveSize) throw new HttpTransport.Failure("truncated-archive");
                     }
@@ -307,7 +325,26 @@ public final class DeliveryClient {
         }
     }
 
+    /** Default WebSocket authentication is confined to the installed delivery audience. */
+    public synchronized Map<String,String> pushHeaders(String endpoint) {
+        if(session==null || session.bearer==null || endpoint.isEmpty()) return Collections.emptyMap();
+        URI ws=URI.create(endpoint), audience=URI.create(policy.baseUrl);
+        String scheme="wss".equals(ws.getScheme()) ? "https" : "http";
+        if(scheme.equals(audience.getScheme()) && Objects.equals(ws.getAuthority(),audience.getAuthority())
+                && ws.getRawPath().startsWith(audience.getRawPath())) return Collections.singletonMap("Authorization","Bearer "+session.bearer);
+        return Collections.emptyMap();
+    }
+    private HttpTransport endpointTransport(URI endpoint, Session captured) {
+        URI audience=URI.create(policy.baseUrl);
+        boolean scoped=Objects.equals(audience.getScheme(),endpoint.getScheme()) && Objects.equals(audience.getAuthority(),endpoint.getAuthority())
+            && endpoint.getRawPath().startsWith(audience.getRawPath());
+        return new HttpTransport(endpoint.resolve("."),policy.debugHttpAllowed,scoped ? captured.bearer : null,connections,true);
+    }
     private static HttpTransport.Failure providerFailure(String code, Exception error) {
+        if(error instanceof UpdateException) {
+            UpdateException failure=(UpdateException)error;
+            return new HttpTransport.Failure(failure.status==0 ? "network-io" : "http-status",failure.status,failure.retryAfterSeconds);
+        }
         return new HttpTransport.Failure(code,error instanceof RecoveryUpdateException ? ((RecoveryUpdateException)error).status : 0,-1);
     }
 

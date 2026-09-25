@@ -24,10 +24,17 @@ final class CompleteRuntime {
     final RuntimeLifecycle lifecycle;
     final boolean shellOnly;
     private final boolean mainProcess;
-    private final DeliveryController controller;
+    private final UpdateControl controller;
     private GenerationLease lease;
     private boolean uiHealthy;
     private boolean applicationReady;
+    private int visibleActivities;
+    private Activity resumedActivity;
+    private ExpectedArchive promptedOffer;
+    private ExpectedArchive handledRestart;
+
+    void suspendUpdates() { ((RemoteUpdates)controller).suspend(); }
+    void resumeUpdates() { ((RemoteUpdates)controller).resume(); }
 
     CompleteRuntime(Application app) throws Exception {
         this.app = app;
@@ -43,35 +50,42 @@ final class CompleteRuntime {
         lifecycle.openOrInitialize();
         try { LegacyDeliveryCleanup.reclaim(app.getNoBackupFilesDir(), app.getPackageName()); }
         catch (IOException ignored) { /* Old partials are disposable; retry cleanup on next start. */ }
-        // Delivery's OS transfer lock serializes shared partials; credential and
-        // authentication suppression must be visible in every app process.
-        DeliveryClient client = new DeliveryClient(policy, new SignedMetadataVerifier(), lifecycle, environment,
-            new File(app.getNoBackupFilesDir(), "paravoid-delivery/shared-v1"));
-        Handler main = new Handler(Looper.getMainLooper());
-        controller = new DeliveryController(client, lifecycle, scope, environment,
-            new File(app.getNoBackupFilesDir(), "paravoid-update-preferences"),
-            () -> {
-                ConnectivityManager network = (ConnectivityManager) app.getSystemService(Context.CONNECTIVITY_SERVICE);
-                return network == null || network.isActiveNetworkMetered();
-            }, Executors.newSingleThreadScheduledExecutor(), main::post);
-        if (policy.updatesEnabled && !(shellOnly && CrashRecovery.instance != null))
-            controller.refreshInstalledApk(environment.currentBaseApk());
+        controller = new RemoteUpdates(app);
+        if(policy.updatesEnabled && (mainProcess || shellOnly)) controller.listen(snapshot-> {
+            if(mainProcess && resumedActivity!=null && !(resumedActivity instanceof LauncherActivity) && snapshot.lifecycle!=null) {
+                ExpectedArchive pending=snapshot.lifecycle.pending;
+                String behavior=policy.updates.getOrDefault("restartBehavior","manual");
+                String previous=app.getSharedPreferences(RestartActivity.PREFERENCES,0).getString("handled","");
+                if(RestartPolicy.shouldOffer(behavior,pending,handledRestart,previous)) {
+                    handledRestart=pending;
+                    resumedActivity.startActivity(new android.content.Intent(resumedActivity,RestartActivity.class)
+                        .putExtra("offer",UpdateWire.offer(pending)).putExtra("confirmation",behavior.equals("prompt"))
+                        .putExtra("policy",true));
+                    return;
+                }
+            }
+            if(resumedActivity!=null && snapshot.promptRequired && !snapshot.available.equals(promptedOffer)) {
+                promptedOffer=snapshot.available;
+                resumedActivity.startActivity(new android.content.Intent(resumedActivity,UpdatePromptActivity.class)
+                    .putExtra("offer",UpdateWire.offer(snapshot.available)));
+            }
+        });
+        if (policy.updatesEnabled && (mainProcess || shellOnly)) ParavoidUpdates.install(controller);
         if (shellOnly) {
             ShellUpdatesActivity.installController(controller);
             if (CrashRecovery.instance != null) {
-                CrashRecovery.instance.coordinator = new RecoveryCoordinator(app, client, lifecycle, scope, policy,
-                    environment, CrashRecovery.instance.records, CrashRecovery.instance.providerClass);
+                CrashRecovery.instance.coordinator = new RecoveryCoordinator(controller, CrashRecovery.instance.records);
             }
             ShellUpdatesActivity.installRestartAction(result -> ShellRestart.restart(app, result));
         }
-        if (mainProcess && !shellOnly && policy.updatesEnabled) ParavoidUpdates.install(controller);
         if (mainProcess || shellOnly) ShellControlShortcut.install(app);
         app.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
             public void onActivityCreated(Activity activity, Bundle state) {}
-            public void onActivityStarted(Activity activity) {}
+            public void onActivityStarted(Activity activity) { if(policy.updatesEnabled && (mainProcess || shellOnly)) if(++visibleActivities==1) ((RemoteUpdates)controller).visible(true); }
             public void onActivityResumed(Activity activity) {
-                if (policy.updatesEnabled && (mainProcess || shellOnly) &&
-                        !(shellOnly && CrashRecovery.instance != null)) controller.foreground();
+                resumedActivity=activity;
+                if(!ShellRestart.inProgress()) resumeUpdates();
+                if (policy.updatesEnabled && (mainProcess || shellOnly)) controller.foreground();
                 if (mainProcess && !shellOnly) controller.refreshSnapshot();
                 if (!mainProcess || shellOnly || lease == null || uiHealthy || activity instanceof LauncherActivity) return;
                 View view = activity.getWindow().getDecorView();
@@ -90,8 +104,8 @@ final class CompleteRuntime {
                 view.getViewTreeObserver().addOnDrawListener(listener);
                 view.invalidate();
             }
-            public void onActivityPaused(Activity activity) {}
-            public void onActivityStopped(Activity activity) {}
+            public void onActivityPaused(Activity activity) { if(resumedActivity==activity) resumedActivity=null; }
+            public void onActivityStopped(Activity activity) { if(policy.updatesEnabled && (mainProcess || shellOnly)) if(--visibleActivities==0) ((RemoteUpdates)controller).visible(false); }
             public void onActivitySaveInstanceState(Activity activity, Bundle state) {}
             public void onActivityDestroyed(Activity activity) {}
         });

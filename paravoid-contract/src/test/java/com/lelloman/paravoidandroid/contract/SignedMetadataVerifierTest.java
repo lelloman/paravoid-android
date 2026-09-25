@@ -75,6 +75,22 @@ public class SignedMetadataVerifierTest {
             parsed.headKeys, parsed.grantKeys, 1, 1);
         assertCode(INCOMPATIBLE, () -> verifier.verifyHead(fixture.head(fixture.headBody(1)), MetadataTestSupport.policy(weak), fixture.scope));
     }
+    @Test public void portableFeedSelectsCompatibleReleaseAndSeparatesSignatureDomain() throws Exception {
+        ShellPolicy original=fixture.policy;
+        Map<String,String> config=new LinkedHashMap<>(); config.put("mode","feed");
+        config.put("metadataUrl",original.baseUrl+"feed.json"); config.put("payloadUrlTemplate",original.baseUrl+"{releaseId}.vpk");
+        ShellPolicy policy=new ShellPolicy(original.applicationId,original.shellContractId,original.trust,original.baseUrl,original.channel,
+            original.authentication,original.bootstrap,true,original.debugHttpAllowed,original.runtimeAbi,original.resourceReservations,original.contractDescriptor(),config);
+        Map<String,Object> body=fixture.headBody(1); Object release=body.remove("release"); body.remove("sdk"); body.remove("abis");
+        Map<String,Object> entry=new LinkedHashMap<>(); entry.put("minSdk",30); entry.put("maxSdk",0); entry.put("abis",Collections.emptyList()); entry.put("release",release);
+        body.put("releases",Collections.singletonList(entry));
+        byte[] signed=MetadataTestSupport.signed("feed","head",fixture.head.getPrivate(),StrictJson.canonical(body));
+        assertEquals(1,verifier.verifyHead(signed,policy,fixture.scope).release.payloadVersion);
+        assertCode(INVALID_SIGNATURE,()->verifier.verifyHead(MetadataTestSupport.signed("head","head",fixture.head.getPrivate(),StrictJson.canonical(body)),policy,fixture.scope));
+        entry.put("minSdk",99);
+        byte[] incompatible=MetadataTestSupport.signed("feed","head",fixture.head.getPrivate(),StrictJson.canonical(body));
+        assertNull(verifier.verifyHead(incompatible,policy,fixture.scope).release);
+    }
     interface Checked { void run() throws Exception; }
     static void assertCode(ContractException.Code code, Checked action) throws Exception {
         try { action.run(); fail("Expected " + code); }

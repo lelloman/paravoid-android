@@ -18,6 +18,7 @@ public final class DeliveryControllerTest {
         Control(boolean apkKey, Path persistedPreferences) throws Exception {
             setup = new DeliveryClientTest.Setup(apkKey);
             preferences = persistedPreferences == null ? setup.f.dir.resolve("preferences") : persistedPreferences;
+            if(!Files.exists(preferences)) DeliveryPreferences.update(preferences, ignored->new DeliveryPreferences(true,true,false));
             worker.setRemoveOnCancelPolicy(true); create();
             await(DeliveryController.Activity.IDLE);
         }
@@ -113,18 +114,18 @@ public final class DeliveryControllerTest {
         try (Control c = new Control()) {
             c.setup.head();
             c.meteredHook = c.controller::cancelDownload; // Before client registers its HTTP cancellation object.
-            c.controller.checkNow(); c.await(DeliveryController.Activity.CANCELLED); c.barrier();
+            c.controller.foreground(true); c.await(DeliveryController.Activity.CANCELLED); c.barrier();
             check(c.setup.f.requests == 0 && c.setup.life.stages == 0);
         }
         try (Control c = new Control()) {
             c.setup.head(); c.setup.f.responses.add(new Fake(200, ARCHIVE));
             c.setup.life.duringStage = c.controller::cancelDownload;
-            c.controller.checkNow(); c.await(DeliveryController.Activity.CANCELLED); c.barrier();
+            c.controller.updateNow(); c.await(DeliveryController.Activity.CANCELLED); c.barrier();
             check(c.setup.life.stages == 1 && !c.setup.life.reserved); // Handoff already occurred; staging finishes.
         }
         try (Control c = new Control(true)) {
             c.setup.f.responses.add(new Fake(429, new byte[0]).put("Retry-After", "3600"));
-            c.controller.checkNow(); c.await(DeliveryController.Activity.WAITING_TO_RETRY);
+            c.controller.updateNow(); c.await(DeliveryController.Activity.WAITING_TO_RETRY);
             Path replacement = c.setup.f.dir.resolve("replacement.apk");
             Files.write(replacement, ApkGrantReaderTest.apk(new byte[] {2}, false, true));
             c.controller.refreshInstalledApk(replacement.toFile()); c.await(DeliveryController.Activity.IDLE);
@@ -149,7 +150,7 @@ public final class DeliveryControllerTest {
                     throw new java.io.IOException("disconnected");
                 }
             };
-            c.setup.f.responses.add(archive); c.controller.checkNow();
+            c.setup.f.responses.add(archive); c.controller.updateNow();
             check(reading.await(5, TimeUnit.SECONDS)); cancelFromProcess(c.preferences);
             c.await(DeliveryController.Activity.CANCELLED); c.barrier();
             check(archive.disconnected && c.setup.life.stages == 0 && c.setup.f.requests == 2);
@@ -157,7 +158,7 @@ public final class DeliveryControllerTest {
         }
         try (Control c = new Control()) {
             c.setup.f.responses.add(new Fake(429, new byte[0]).put("Retry-After", "3600"));
-            c.controller.checkNow(); c.await(DeliveryController.Activity.WAITING_TO_RETRY);
+            c.controller.updateNow(); c.await(DeliveryController.Activity.WAITING_TO_RETRY);
             cancelFromProcess(c.preferences);
             c.await(DeliveryController.Activity.CANCELLED); c.barrier();
             check(c.setup.f.requests == 1);
@@ -173,7 +174,7 @@ public final class DeliveryControllerTest {
             c.controller.foreground(true); c.await(DeliveryController.Activity.CANCELLED); c.barrier();
             check(c.setup.f.requests == 0 && !Files.exists(retry));
             c.setup.head(); c.setup.f.responses.add(new Fake(200, ARCHIVE));
-            c.controller.checkNow(); c.await(DeliveryController.Activity.READY);
+            c.controller.updateNow(); c.await(DeliveryController.Activity.READY);
             check(c.setup.f.requests == 2); // New explicit work is not permanently suppressed.
         }
         try (Control c = new Control()) {
@@ -186,7 +187,7 @@ public final class DeliveryControllerTest {
         }
         try (Control c = new Control()) {
             c.setup.head(); c.setup.f.responses.add(new Fake(200, ARCHIVE));
-            c.controller.checkNow();
+            c.controller.updateNow();
             DeliveryController.Snapshot result = c.await(DeliveryController.Activity.READY);
             check(result.lifecycle.pending != null); check(c.setup.life.stages == 1);
             check(c.setup.f.requests == 2);
@@ -199,16 +200,16 @@ public final class DeliveryControllerTest {
             c.create(); c.barrier(); // restart controller: persisted interval still prevents automatic check
             c.controller.foreground(false); c.barrier(); check(c.setup.f.requests == 1);
             c.setup.cached(); c.setup.f.responses.add(new Fake(200, ARCHIVE));
-            c.controller.checkNow(); c.await(DeliveryController.Activity.READY);
+            c.controller.updateNow(); c.await(DeliveryController.Activity.READY);
             check(c.setup.life.stages == 1); // Explicit action overrides automatic metered preference.
         }
         try (Control c = new Control()) {
             c.setup.f.responses.add(new Fake(429, new byte[0]).put("Retry-After", "3600"));
-            c.controller.checkNow(); c.await(DeliveryController.Activity.WAITING_TO_RETRY);
+            c.controller.updateNow(); c.await(DeliveryController.Activity.WAITING_TO_RETRY);
             check(c.setup.f.requests == 1); check(c.worker.getQueue().size() == 1);
             DeliveryController peer = new DeliveryController(c.setup.client, c.setup.life, c.setup.scope, c.setup.clock,
                 c.preferences.toFile(), () -> true, c.worker, Runnable::run);
-            peer.checkNow(); c.barrier();
+            peer.updateNow(); c.barrier();
             DeliveryLocksTest.probe(c.preferences.resolveSibling("preferences.attempt"), "BUSY");
             check(c.setup.f.requests == 1); // Busy same-VM controller must not admit another process.
             c.controller.cancelDownload(); c.await(DeliveryController.Activity.CANCELLED); c.barrier();
@@ -252,14 +253,14 @@ public final class DeliveryControllerTest {
         }
         try (Control c = new Control()) {
             c.setup.f.responses.add(new Fake(429, new byte[0]).put("Retry-After", "3600"));
-            c.controller.checkNow(); c.await(DeliveryController.Activity.WAITING_TO_RETRY);
+            c.controller.updateNow(); c.await(DeliveryController.Activity.WAITING_TO_RETRY);
             DeliveryController first = c.controller;
             c.create(); c.barrier();
-            c.controller.checkNow(); c.barrier();
+            c.controller.updateNow(); c.barrier();
             check(c.setup.f.requests == 1); // Retry delay holds the shared attempt lock.
             first.cancelDownload(); c.barrier();
             c.setup.head(); c.setup.f.responses.add(new Fake(200, ARCHIVE));
-            c.controller.checkNow(); c.await(DeliveryController.Activity.READY);
+            c.controller.updateNow(); c.await(DeliveryController.Activity.READY);
             check(c.setup.f.requests == 3); // Cancellation releases it for another controller.
         }
         try (Control c = new Control()) {

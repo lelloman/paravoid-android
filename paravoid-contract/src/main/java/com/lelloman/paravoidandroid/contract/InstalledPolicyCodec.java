@@ -16,6 +16,12 @@ public final class InstalledPolicyCodec {
     /** Adapt a reviewed installed-boundary snapshot; never carry its old embedded-only distribution identity forward. */
     public static byte[] create(byte[] embeddedContract, byte[] trustPolicy, Bootstrap bootstrap, boolean enabled,
             String baseUrl, String channel, Authentication authentication, boolean debugHttpAllowed, boolean debuggable) throws ContractException {
+        return create(embeddedContract, trustPolicy, bootstrap, enabled, baseUrl, channel, authentication,
+            debugHttpAllowed, debuggable, Collections.emptyMap());
+    }
+    public static byte[] create(byte[] embeddedContract, byte[] trustPolicy, Bootstrap bootstrap, boolean enabled,
+            String baseUrl, String channel, Authentication authentication, boolean debugHttpAllowed, boolean debuggable,
+            Map<String,String> updates) throws ContractException {
         Map<String,Object> original = object(StrictJson.parse(embeddedContract, MAX_BYTES));
         fields(original, "version contractId descriptor"); version(original, "version");
         Map<String,Object> installed = new LinkedHashMap<>(object(original.get("descriptor")));
@@ -29,7 +35,8 @@ public final class InstalledPolicyCodec {
         distribution.put("enabled", enabled); distribution.put("baseUrl", baseUrl); distribution.put("channel", channel);
         distribution.put("authentication", authentication == Authentication.PUBLIC ? "public" : "apkKey");
         distribution.put("debugHttpAllowed", debugHttpAllowed); descriptor.put("distribution", distribution);
-        Map<String,Object> result = new LinkedHashMap<>(); result.put("version", 1); result.put("descriptor", descriptor);
+        if (!updates.isEmpty()) distribution.put("updates", new LinkedHashMap<>(updates));
+        Map<String,Object> result = new LinkedHashMap<>(); result.put("version", updates.isEmpty() ? 1 : 2); result.put("descriptor", descriptor);
         result.put("contractId", Digests.sha256(StrictJson.canonical(descriptor)));
         byte[] encoded = StrictJson.canonical(result);
         read(encoded, debuggable); // Same implementation as runtime; release never accepts debug HTTP policy.
@@ -40,7 +47,9 @@ public final class InstalledPolicyCodec {
     public static ShellPolicy read(byte[] encoded, boolean debuggable) throws ContractException {
         Map<String,Object> wrapper = object(StrictJson.parse(encoded, MAX_BYTES));
         ordinaryStrings(wrapper);
-        fields(wrapper, "version contractId descriptor"); version(wrapper, "version");
+        fields(wrapper, "version contractId descriptor");
+        long policyVersion = number(wrapper, "version", 1);
+        if (policyVersion > 2) throw fail(INCOMPATIBLE, "Unsupported installed policy version");
         Map<String,Object> descriptor = object(wrapper.get("descriptor"));
         fields(descriptor, "profile installed runtimeAbi distribution trustPolicy");
         byte[] descriptorBytes = StrictJson.canonical(descriptor);
@@ -64,7 +73,13 @@ public final class InstalledPolicyCodec {
         for (Object signer : (List<?>)signers) if (!(signer instanceof String) || !((String)signer).matches("[0-9a-f]{64}")) throw fail(MALFORMED, "Invalid installed signer identity");
         TrustPolicy trust = new SignedMetadataVerifier().readTrustPolicy(StrictJson.canonical(descriptor.get("trustPolicy")));
         Map<String,Object> distribution = object(descriptor.get("distribution"));
-        fields(distribution, "bootstrap enabled baseUrl channel authentication debugHttpAllowed");
+        fields(distribution, "bootstrap enabled baseUrl channel authentication debugHttpAllowed" + (policyVersion == 2 ? " updates" : ""));
+        Map<String,String> updates = new LinkedHashMap<>();
+        if (policyVersion == 2) {
+            Map<String,Object> values = object(distribution.get("updates")); strings(values, false);
+            for (Map.Entry<String,Object> value : values.entrySet()) updates.put(value.getKey(), (String)value.getValue());
+            UpdateConfiguration.validate(updates);
+        }
         String mode = string(distribution, "bootstrap"), auth = string(distribution, "authentication");
         if (!mode.equals("embedded") && !mode.equals("empty")) throw fail(MALFORMED, "Invalid bootstrap mode");
         if (!auth.equals("public") && !auth.equals("apkKey")) throw fail(MALFORMED, "Invalid authentication mode");
@@ -72,7 +87,7 @@ public final class InstalledPolicyCodec {
         if (debugHttp && !debuggable) throw fail(INCOMPATIBLE, "Debug HTTP policy in non-debuggable shell");
         ShellPolicy policy = new ShellPolicy(string(installed, "applicationId"), contract, trust,
             string(distribution, "baseUrl"), string(distribution, "channel"), auth.equals("public") ? Authentication.PUBLIC : Authentication.APK_KEY,
-            mode.equals("embedded") ? Bootstrap.EMBEDDED : Bootstrap.EMPTY, enabled, debugHttp, Protocol.RUNTIME_ABI, reservations, descriptorBytes);
+            mode.equals("embedded") ? Bootstrap.EMBEDDED : Bootstrap.EMPTY, enabled, debugHttp, Protocol.RUNTIME_ABI, reservations, descriptorBytes, updates);
         validatePolicy(policy);
         return policy;
     }

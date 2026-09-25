@@ -17,12 +17,15 @@ abstract class ApplicationManifestTask extends DefaultTask {
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getInputManifest()
     @OutputFile abstract RegularFileProperty getOutputManifest()
     @OutputFile abstract RegularFileProperty getPayloadMetadata()
+    @Input abstract Property<Boolean> getUpdatesEnabled()
+    @Input abstract Property<Boolean> getPushEnabled()
+    @Input abstract org.gradle.api.provider.ListProperty<String> getPushComponents()
     @Input abstract Property<Boolean> getComplete()
     @Input abstract Property<Boolean> getDebugHttpAllowed()
     @Input abstract Property<Boolean> getControlsLauncher()
     @Input abstract Property<Boolean> getCrashRecoveryEnabled()
     @Input abstract Property<String> getRecoveryProvider()
-    ApplicationManifestTask() { complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false); crashRecoveryEnabled.convention(false); recoveryProvider.convention('') }
+    ApplicationManifestTask() { pushComponents.convention([]); pushEnabled.convention(false); updatesEnabled.convention(false); complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false); crashRecoveryEnabled.convention(false); recoveryProvider.convention('') }
 
     @TaskAction void rewrite() {
         def factory = DocumentBuilderFactory.newInstance()
@@ -44,7 +47,12 @@ abstract class ApplicationManifestTask extends DefaultTask {
                 'com.lelloman.paravoidandroid.runtime.LauncherActivity',
                 'com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity',
                 'com.lelloman.paravoidandroid.runtime.UpdatesLauncher',
-                'com.lelloman.paravoidandroid.runtime.CrashRecoveryActivity'
+                'com.lelloman.paravoidandroid.runtime.CrashRecoveryActivity',
+                'com.lelloman.paravoidandroid.runtime.UpdatePromptActivity',
+                'com.lelloman.paravoidandroid.runtime.RestartActivity',
+                'com.lelloman.paravoidandroid.runtime.UpdateService',
+                'com.lelloman.paravoidandroid.runtime.UpdateJobService',
+                'com.lelloman.paravoidandroid.runtime.UpdateReceiver'
             ] as Set
             ['activity', 'service', 'receiver', 'provider'].each { kind ->
                 def nodes = app.getElementsByTagName(kind)
@@ -69,8 +77,8 @@ abstract class ApplicationManifestTask extends DefaultTask {
             (0..<allNodes.length).each { index ->
                 def node = allNodes.item(index)
                 String process = node.getAttributeNS(ANDROID, 'process')
-                if (process in [':paravoid_recovery', pkg + ':paravoid_recovery'])
-                    throw new GradleException('The :paravoid_recovery process is reserved for shell-only controls.')
+                if (process in [':paravoid_recovery', pkg + ':paravoid_recovery', ':paravoid_updates', pkg + ':paravoid_updates'])
+                    throw new GradleException('The :paravoid_recovery and :paravoid_updates processes are reserved for the shell.')
             }
             ['android.permission.INTERNET', 'android.permission.ACCESS_NETWORK_STATE'].each { permission ->
                 def permissions = document.getElementsByTagName('uses-permission')
@@ -114,6 +122,58 @@ abstract class ApplicationManifestTask extends DefaultTask {
         String activityName = ((Element) launcherFilters[0].parentNode).getAttributeNS(ANDROID, 'name')
         launcherFilters.each { launcher.appendChild(it) }
         app.appendChild(launcher)
+        if (complete.get() && pushEnabled.get()) {
+            Set<String> remaining=new HashSet<>(pushComponents.get())
+            ['service','receiver'].each { kind ->
+                def nodes=app.getElementsByTagName(kind)
+                (0..<nodes.length).each { index ->
+                    def node=nodes.item(index)
+                    String name=ApplicationManifestTask.qualify(pkg,node.getAttributeNS(ANDROID,'name'))
+                    if(remaining.remove(name)) node.setAttributeNS(ANDROID,'android:process',':paravoid_updates')
+                }
+            }
+            if(!remaining.empty) throw new GradleException('Push components must be declared services or receivers: '+remaining)
+            def routing=document.createElement('meta-data')
+            routing.setAttributeNS(ANDROID,'android:name','paravoid.pushComponents')
+            routing.setAttributeNS(ANDROID,'android:value',pushComponents.get().join(';')); app.appendChild(routing)
+            def permission=document.createElement('uses-permission')
+            permission.setAttributeNS(ANDROID,'android:name','android.permission.POST_NOTIFICATIONS'); document.documentElement.insertBefore(permission,app)
+            def prompt=document.createElement('activity')
+            prompt.setAttributeNS(ANDROID,'android:name','com.lelloman.paravoidandroid.runtime.UpdatePromptActivity')
+            prompt.setAttributeNS(ANDROID,'android:process',':paravoid_updates'); prompt.setAttributeNS(ANDROID,'android:exported','false')
+            prompt.setAttributeNS(ANDROID,'android:theme','@android:style/Theme.Material.Light.Dialog.Alert'); app.appendChild(prompt)
+        }
+        if (complete.get() && updatesEnabled.get()) {
+            def restart=document.createElement('activity')
+            restart.setAttributeNS(ANDROID,'android:name','com.lelloman.paravoidandroid.runtime.RestartActivity')
+            restart.setAttributeNS(ANDROID,'android:process',':paravoid_recovery')
+            restart.setAttributeNS(ANDROID,'android:exported','false')
+            restart.setAttributeNS(ANDROID,'android:theme','@android:style/Theme.Material.Light.Dialog.Alert')
+            app.appendChild(restart)
+            ['android.permission.INTERNET','android.permission.ACCESS_NETWORK_STATE','android.permission.RECEIVE_BOOT_COMPLETED'].each { permission ->
+                def nodes=document.getElementsByTagName('uses-permission')
+                if (!(0..<nodes.length).any { nodes.item(it).getAttributeNS(ANDROID,'name') == permission }) {
+                    def node=document.createElement('uses-permission'); node.setAttributeNS(ANDROID,'android:name',permission)
+                    document.documentElement.insertBefore(node,app)
+                }
+            }
+            ['UpdateService','UpdateJobService'].each { name ->
+                def node=document.createElement('service')
+                node.setAttributeNS(ANDROID,'android:name','com.lelloman.paravoidandroid.runtime.'+name)
+                node.setAttributeNS(ANDROID,'android:process',':paravoid_updates')
+                node.setAttributeNS(ANDROID,'android:exported',name=='UpdateJobService' ? 'true' : 'false')
+                if(name=='UpdateJobService') node.setAttributeNS(ANDROID,'android:permission','android.permission.BIND_JOB_SERVICE')
+                app.appendChild(node)
+            }
+            def receiver=document.createElement('receiver')
+            receiver.setAttributeNS(ANDROID,'android:name','com.lelloman.paravoidandroid.runtime.UpdateReceiver')
+            receiver.setAttributeNS(ANDROID,'android:process',':paravoid_updates'); receiver.setAttributeNS(ANDROID,'android:exported','false')
+            def filter=document.createElement('intent-filter')
+            ['android.intent.action.BOOT_COMPLETED','android.intent.action.MY_PACKAGE_REPLACED','android.intent.action.USER_UNLOCKED'].each { name ->
+                def action=document.createElement('action'); action.setAttributeNS(ANDROID,'android:name',name); filter.appendChild(action)
+            }
+            receiver.appendChild(filter); app.appendChild(receiver)
+        }
         if (complete.get()) {
             def recovery = document.createElement('activity')
             recovery.setAttributeNS(ANDROID, 'android:name', 'com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity')
@@ -123,7 +183,12 @@ abstract class ApplicationManifestTask extends DefaultTask {
             app.appendChild(recovery)
             if (crashRecoveryEnabled.get()) {
                 def crash = document.createElement('activity')
-                crash.setAttributeNS(ANDROID, 'android:name', 'com.lelloman.paravoidandroid.runtime.CrashRecoveryActivity')
+                crash.setAttributeNS(ANDROID, 'android:name', 'com.lelloman.paravoidandroid.runtime.CrashRecoveryActivity',
+                'com.lelloman.paravoidandroid.runtime.UpdatePromptActivity',
+                'com.lelloman.paravoidandroid.runtime.RestartActivity',
+                'com.lelloman.paravoidandroid.runtime.UpdateService',
+                'com.lelloman.paravoidandroid.runtime.UpdateJobService',
+                'com.lelloman.paravoidandroid.runtime.UpdateReceiver')
                 crash.setAttributeNS(ANDROID, 'android:process', ':paravoid_recovery')
                 crash.setAttributeNS(ANDROID, 'android:exported', 'false')
                 crash.setAttributeNS(ANDROID, 'android:theme', '@android:style/Theme.Material.Light.NoActionBar')

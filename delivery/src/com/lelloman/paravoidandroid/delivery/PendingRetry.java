@@ -46,7 +46,7 @@ final class PendingRetry {
     }
     // Serialize same-VM and cross-process writers before reusing a bounded slot.
     // The permanent lock file must never be unlinked, including on recovery.
-    private static synchronized void writeRecord(Path path, Properties p) throws IOException {
+    static synchronized void writeRecord(Path path, Properties p) throws IOException {
         try (FileChannel channel = FileChannel.open(path.resolveSibling(path.getFileName() + ".write-lock"),
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE); FileLock lock = channel.lock()) {
             if (!lock.isValid()) throw new IOException("Retry writer lock unavailable");

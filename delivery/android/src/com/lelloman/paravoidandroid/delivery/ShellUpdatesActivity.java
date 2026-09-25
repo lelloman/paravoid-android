@@ -11,8 +11,8 @@ import com.lelloman.paravoidandroid.contract.Protocol.*;
 public final class ShellUpdatesActivity extends Activity {
     public interface RestartAction { void restart(java.util.function.Consumer<Boolean> result); }
     private static volatile RestartAction installedRestart;
-    private static volatile DeliveryController installedController;
-    private DeliveryController controller;
+    private static volatile UpdateControl installedController;
+    private UpdateControl controller;
     private LinearLayout content;
     private TextView status;
     private CheckBox checks, downloads, unmetered;
@@ -23,7 +23,7 @@ public final class ShellUpdatesActivity extends Activity {
     private final DeliveryController.Listener listener = snapshot -> runOnUiThread(() -> render(snapshot));
 
     /** Shell bootstrap calls this in the recovery process; never obtain it from payload code. */
-    public static void installController(DeliveryController controller) { installedController = controller; }
+    public static void installController(UpdateControl controller) { installedController = controller; }
     public static void installRestartAction(RestartAction action) { installedRestart = action; }
 
     @Override public void onCreate(Bundle state) {
@@ -41,6 +41,7 @@ public final class ShellUpdatesActivity extends Activity {
             return;
         }
         button("Check now", view -> controller.checkNow());
+        button("Update now", view -> controller.updateNow());
         button("Retry update access", view -> controller.retry());
         button("Cancel download", view -> controller.cancelDownload());
         if (installedRestart != null) button("Restart app…", view ->

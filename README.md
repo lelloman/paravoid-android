@@ -386,14 +386,18 @@ private ParavoidUpdates.Subscription updatesSubscription;
 }
 ```
 
-Use `ParavoidUpdates.get().checkNow()` for a user-triggered check and download,
-or `openControls(activity)` to show the shell recovery screen for restart and
+Use `ParavoidUpdates.get().checkNow()` to discover updates without downloading.
+Use `updateNow()` to check and stage the latest release, or `updateNow(state.available)`
+to install only the offer shown to the user. Use `openControls(activity)` to show the shell recovery screen for restart and
 advanced controls. The state also exposes current, available and pending releases,
 an error code, and automatic-update preferences. `current()` reads the latest
 state without subscribing. The singleton is active in the main app process of a
 complete shell with updates enabled; in other processes it reports `UNAVAILABLE`.
 The [complete compatibility app](compatibility/complete-v1/src/main/java/com/lelloman/paravoidcompat/complete/MainActivity.java)
 shows an app-owned status and update buttons.
+
+See [shell update configuration and push integration](delivery/UPDATES.md) for
+JobScheduler policies, URL-based delivery, custom providers, and opt-in push.
 
 The additional **App updates** launcher icon now defaults to off. Set
 `paravoid { controlsLauncher = true }` if a separate recovery entry is useful.

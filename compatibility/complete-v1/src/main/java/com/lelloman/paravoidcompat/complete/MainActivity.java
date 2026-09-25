@@ -40,6 +40,8 @@ public final class MainActivity extends Activity {
             Button check = new Button(this); check.setText("Check for updates");
             check.setOnClickListener(clicked -> ParavoidUpdates.get().checkNow());
             layout.addView(check);
+            Button update = new Button(this); update.setText("Download update");
+            update.setOnClickListener(clicked -> ParavoidUpdates.get().updateNow()); layout.addView(update);
             Button controls = new Button(this); controls.setText("Update controls");
             controls.setOnClickListener(clicked -> ParavoidUpdates.get().openControls(this));
             layout.addView(controls);

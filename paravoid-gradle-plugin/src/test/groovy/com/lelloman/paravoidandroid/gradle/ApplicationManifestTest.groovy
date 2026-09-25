@@ -10,6 +10,20 @@ import static org.junit.Assert.*
 class ApplicationManifestTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder()
 
+    @Test void pushIsOptInAndRoutesAdapterWithoutPayloadStartup() {
+        def disabled=fixture(''); disabled.complete.set(true); disabled.updatesEnabled.set(true); disabled.rewrite()
+        assertFalse(disabled.outputManifest.get().asFile.text.contains('UpdatePromptActivity'))
+        assertTrue(disabled.outputManifest.get().asFile.text.contains('RestartActivity'))
+        def task=fixture('<service android:name="example.PushService" android:exported="false" />')
+        task.complete.set(true); task.updatesEnabled.set(true); task.pushEnabled.set(true)
+        task.pushComponents.set(['example.PushService']); task.rewrite()
+        def factory=javax.xml.parsers.DocumentBuilderFactory.newInstance(); factory.namespaceAware=true
+        def document=factory.newDocumentBuilder().parse(task.outputManifest.get().asFile)
+        def service=document.getElementsByTagName('service').find { it.getAttributeNS(ApplicationManifestTask.ANDROID,'name')=='example.PushService' }
+        assertEquals(':paravoid_updates',service.getAttributeNS(ApplicationManifestTask.ANDROID,'process'))
+        assertTrue(task.outputManifest.get().asFile.text.contains('UpdatePromptActivity'))
+        assertTrue(task.outputManifest.get().asFile.text.contains('POST_NOTIFICATIONS'))
+    }
     @Test void completeProfileAddsPrivateRecoveryProcessWithoutChangingPayloadDeclarations() {
         def task = fixture('<service android:name="example.Work" android:process=":worker" />')
         task.complete.set(true)

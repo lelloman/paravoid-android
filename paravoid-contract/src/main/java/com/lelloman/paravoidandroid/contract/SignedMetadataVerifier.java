@@ -12,6 +12,7 @@ import static com.lelloman.paravoidandroid.contract.ContractException.Code.*;
 /** Stateless exact-byte verification. Does not replace lifecycle time/replay admission. */
 public final class SignedMetadataVerifier implements MetadataVerifier {
     @Override public VerifiedHead verifyHead(byte[] bytes, ShellPolicy policy, RequestScope scope) throws ContractException {
+        if ("feed".equals(policy.updates.get("mode"))) return verifyFeed(bytes, policy, scope);
         bytes = boundedCopy(bytes, Protocol.MAX_HEAD_BYTES);
         validatePolicy(policy);
         if (!policy.updatesEnabled) throw fail(INCOMPATIBLE, "Updates disabled");
@@ -45,6 +46,43 @@ public final class SignedMetadataVerifier implements MetadataVerifier {
         }
         if (parsed != HeadStatus.AVAILABLE && b.get("release") != null) throw fail(MALFORMED, "Unexpected release offer");
         return new VerifiedHead(scope, revision, issued, expires, parsed, release, envelope.keyId, envelope.bodyBytes, bytes);
+    }
+
+    /** Portable signed discovery. Device filtering happens only after authenticating the entire feed. */
+    public VerifiedHead verifyFeed(byte[] bytes, ShellPolicy policy, RequestScope scope) throws ContractException {
+        bytes=boundedCopy(bytes, Protocol.MAX_HEAD_BYTES); validatePolicy(policy); scope(policy,scope);
+        if(!policy.updatesEnabled) throw fail(INCOMPATIBLE,"Updates disabled");
+        Envelope envelope=authenticate(bytes,"feed",policy.trust.headKeys,Protocol.MAX_HEAD_BYTES);
+        Map<String,Object> b=envelope.body;
+        fields(b,"version applicationId shellContractId channel runtimeAbi formatVersion headRevision issuedAt expiresAt status releases");
+        version(b,"version"); version(b,"formatVersion");
+        if(!scope.applicationId.equals(string(b,"applicationId")) || !scope.shellContractId.equals(hash(b,"shellContractId"))
+                || !scope.channel.equals(identifier(b,"channel")) || scope.runtimeAbi!=number(b,"runtimeAbi",1))
+            throw fail(INCOMPATIBLE,"Feed request scope mismatch");
+        long revision=number(b,"headRevision",1), issued=number(b,"issuedAt",0), expires=number(b,"expiresAt",0);
+        if(expires<=issued || expires-issued>86400) throw fail(MALFORMED,"Feed validity interval");
+        String status=string(b,"status");
+        if(!Arrays.asList("available","no-compatible-release","shell-update-required").contains(status)) throw fail(MALFORMED,"Unknown feed status");
+        if(!(b.get("releases") instanceof List)) throw fail(MALFORMED,"Invalid feed releases");
+        List<?> entries=(List<?>)b.get("releases");
+        if(entries.size()>128 || !status.equals("available") && !entries.isEmpty()) throw fail(MALFORMED,"Invalid feed releases");
+        ExpectedArchive selected=null;
+        for(Object entry:entries) {
+            Map<String,Object> item=object(entry); fields(item,"minSdk maxSdk abis release");
+            long min=number(item,"minSdk",30), max=number(item,"maxSdk",0);
+            if(min>Integer.MAX_VALUE || max>Integer.MAX_VALUE || max!=0 && max<min) throw fail(MALFORMED,"Invalid SDK range");
+            List<String> supported=abis(item.get("abis"));
+            Map<String,Object> r=object(item.get("release"));
+            fields(r,"releaseId payloadVersion manifestSha256 archiveSha256 archiveSize");
+            long size=number(r,"archiveSize",1);
+            if(size>Protocol.MAX_ARCHIVE_BYTES) throw fail(LIMIT_EXCEEDED,"Archive byte limit");
+            ExpectedArchive candidate=new ExpectedArchive(identifier(r,"releaseId"),number(r,"payloadVersion",1),hash(r,"manifestSha256"),hash(r,"archiveSha256"),size);
+            if(scope.sdk<min || max!=0 && scope.sdk>max || !supported.isEmpty() && Collections.disjoint(scope.abis,supported)) continue;
+            if(selected!=null && selected.payloadVersion==candidate.payloadVersion && !selected.equals(candidate)) throw fail(IDENTITY_CONFLICT,"Ambiguous feed release");
+            if(selected==null || candidate.payloadVersion>selected.payloadVersion) selected=candidate;
+        }
+        HeadStatus parsed=selected!=null ? HeadStatus.AVAILABLE : status.equals("shell-update-required") ? HeadStatus.SHELL_UPDATE_REQUIRED : HeadStatus.NO_COMPATIBLE_RELEASE;
+        return new VerifiedHead(scope,revision,issued,expires,parsed,selected,envelope.keyId,envelope.bodyBytes,bytes);
     }
 
     @Override public VerifiedGrant verifyGrant(byte[] bytes, ShellPolicy policy) throws ContractException {
@@ -112,6 +150,13 @@ public final class SignedMetadataVerifier implements MetadataVerifier {
     }
     static void validatePolicy(ShellPolicy policy) throws ContractException {
         validateTrust(policy.trust);
+        UpdateConfiguration.validate(policy.updates);
+        if(policy.updates.getOrDefault("pushWebSocketUrl", "").startsWith("ws://") && !policy.debugHttpAllowed)
+            throw fail(INCOMPATIBLE,"Insecure push endpoint in release policy");
+        for(String key: Arrays.asList("metadataUrl","payloadUrlTemplate")) {
+            String url=policy.updates.getOrDefault(key, "");
+            if(!url.isEmpty() && !url.startsWith("https://") && !policy.debugHttpAllowed) throw fail(INCOMPATIBLE,"HTTP update endpoint in release policy");
+        }
         if (!policy.applicationId.equals(policy.trust.applicationId) || !policy.shellContractId.matches("[0-9a-f]{64}")
                 || policy.runtimeAbi != Protocol.RUNTIME_ABI || !policy.channel.matches("[A-Za-z0-9_-]{1,64}"))
             throw fail(INCOMPATIBLE, "Invalid installed policy");

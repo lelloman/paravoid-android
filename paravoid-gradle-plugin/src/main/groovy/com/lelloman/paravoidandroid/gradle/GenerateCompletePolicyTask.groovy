@@ -6,6 +6,7 @@ import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
+import org.gradle.api.provider.MapProperty
 import org.gradle.api.tasks.*
 
 @CacheableTask
@@ -20,6 +21,8 @@ abstract class GenerateCompletePolicyTask extends DefaultTask {
     @Input abstract Property<Boolean> getDebugHttpAllowed()
     @Input abstract Property<Boolean> getDebuggable()
     @Input abstract Property<Boolean> getReleaseBuild()
+    @Input abstract MapProperty<String,String> getUpdateConfiguration()
+    GenerateCompletePolicyTask() { updateConfiguration.convention([:]) }
     @OutputFile abstract RegularFileProperty getPolicyFile()
 
     @TaskAction void generate() {
@@ -27,6 +30,9 @@ abstract class GenerateCompletePolicyTask extends DefaultTask {
             throw new GradleException('Complete policy requires bootstrap embedded/empty and authentication public/apkKey.')
         if (releaseBuild.get() && debugHttpAllowed.get()) throw new GradleException('Release output forbids debug HTTP.')
         String endpoint = baseUrl.get()
+        if (!endpoint && updateConfiguration.get().get('mode') == 'feed') {
+            endpoint = new URI(updateConfiguration.get().get('metadataUrl')).resolve('.').toString()
+        }
         if (endpoint) {
             try {
                 URI uri = new URI(endpoint)
@@ -41,7 +47,7 @@ abstract class GenerateCompletePolicyTask extends DefaultTask {
             bootstrap.get() == 'embedded' ? Protocol.Bootstrap.EMBEDDED : Protocol.Bootstrap.EMPTY,
             updatesEnabled.get(), endpoint, channel.get(),
             authentication.get() == 'public' ? Protocol.Authentication.PUBLIC : Protocol.Authentication.APK_KEY,
-            debugHttpAllowed.get(), debuggable.get())
+            debugHttpAllowed.get(), debuggable.get(), updateConfiguration.get())
         File output = policyFile.get().asFile; output.parentFile.mkdirs()
         output.setText(new String(encoded, 'UTF-8') + '\n', 'UTF-8')
     }

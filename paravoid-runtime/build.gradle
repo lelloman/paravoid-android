@@ -16,6 +16,7 @@ android {
 }
 dependencies {
     api project(':paravoid-api')
+    api project(':paravoid-update-api')
     api project(':paravoid-recovery-api')
     implementation project(':paravoid-contract')
     testImplementation 'junit:junit:4.13.2'

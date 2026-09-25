@@ -15,3 +15,6 @@ project(':paravoid-runtime').projectDir = file('fixture-runtime')
 
 include ':paravoid-recovery-api'
 project(':paravoid-recovery-api').projectDir = file('../../paravoid-recovery-api')
+
+include ':paravoid-update-api'
+project(':paravoid-update-api').projectDir = file('../../paravoid-update-api')

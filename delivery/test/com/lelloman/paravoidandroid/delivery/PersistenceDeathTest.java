@@ -216,7 +216,7 @@ public final class PersistenceDeathTest {
             check(!Files.exists(control.preferences.resolveSibling("preferences.retry")), "Stale retry not cleared");
             control.setup.head();
             control.setup.f.responses.add(new TransportTest.Fake(200, TransportTest.ARCHIVE));
-            control.controller.checkNow();
+            control.controller.updateNow();
             control.await(DeliveryController.Activity.READY);
             check(control.setup.f.requests == 2, "Explicit new attempt did not recover");
         }

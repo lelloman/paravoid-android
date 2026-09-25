@@ -11,19 +11,35 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 /** Shell-owned asynchronous controls; no background service or payload loading required. */
-public final class DeliveryController {
+public final class DeliveryController implements UpdateControl {
     private static final ScheduledExecutorService SIGNALS = Executors.newSingleThreadScheduledExecutor(task -> {
         Thread thread = new Thread(task, "paravoid-cancellation"); thread.setDaemon(true); return thread;
     });
-    public enum Activity { IDLE, CHECKING, WAITING_TO_RETRY, AVAILABLE, READY, CANCELLED, ERROR }
+    public enum Activity { IDLE, CHECKING, DOWNLOADING, STAGING, WAITING_TO_RETRY, AVAILABLE, READY, CANCELLED, ERROR }
     public static final class Snapshot {
+        public final boolean promptRequired;
         public final LifecycleSnapshot lifecycle;
         public final DeliveryPreferences preferences;
         public final Activity activity;
         public final ExpectedArchive available;
         public final String errorCode; // fixed locally-generated code only, never exception/server text
-        Snapshot(LifecycleSnapshot lifecycle, DeliveryPreferences preferences, Activity activity,
+        public final com.lelloman.paravoidandroid.updates.UpdateSchedule schedule;
+        public final long bytes, totalBytes, lastCheckSeconds, nextDueSeconds;
+        public Snapshot(LifecycleSnapshot lifecycle, DeliveryPreferences preferences, Activity activity,
                 ExpectedArchive available, String error) {
+            this(lifecycle,preferences,activity,available,error,com.lelloman.paravoidandroid.updates.UpdateSchedule.defaults()
+                .preferences(preferences.automaticChecks,preferences.automaticDownloads,preferences.unmeteredOnly),0,0,0,0);
+        }
+        public Snapshot(LifecycleSnapshot lifecycle, DeliveryPreferences preferences, Activity activity,
+                ExpectedArchive available,String error,com.lelloman.paravoidandroid.updates.UpdateSchedule schedule,
+                long bytes,long total,long lastCheck,long nextDue) {
+            this(lifecycle,preferences,activity,available,error,schedule,bytes,total,lastCheck,nextDue,false);
+        }
+        public Snapshot(LifecycleSnapshot lifecycle, DeliveryPreferences preferences, Activity activity,
+                ExpectedArchive available,String error,com.lelloman.paravoidandroid.updates.UpdateSchedule schedule,
+                long bytes,long total,long lastCheck,long nextDue,boolean promptRequired) {
+            this.promptRequired=promptRequired;
+            this.schedule=schedule; this.bytes=bytes; totalBytes=total; lastCheckSeconds=lastCheck; nextDueSeconds=nextDue;
             this.lifecycle = lifecycle; this.preferences = preferences; this.activity = activity;
             this.available = available; errorCode = error;
         }
@@ -105,7 +121,14 @@ public final class DeliveryController {
     public void foreground(boolean emptyBootstrap) {
         submit(emptyBootstrap ? AttemptPolicy.Trigger.EMPTY_BOOTSTRAP : AttemptPolicy.Trigger.FOREGROUND);
     }
-    public void checkNow() { submit(AttemptPolicy.Trigger.CHECK_NOW); }
+    private boolean downloadCommand=true;
+    private ExpectedArchive offeredCommand;
+    public void checkNow() { worker.execute(() -> { downloadCommand=false; offeredCommand=null; submit(AttemptPolicy.Trigger.CHECK_NOW); }); }
+    public void updateNow() { updateNow(null); }
+    public void updateNow(ExpectedArchive offer) { worker.execute(() -> { downloadCommand=true; offeredCommand=offer; submit(AttemptPolicy.Trigger.CHECK_NOW); }); }
+    public void schedule(com.lelloman.paravoidandroid.updates.UpdateSchedule value) {
+        preferences(new DeliveryPreferences(value.checks,value.downloads,value.downloadUnmetered));
+    }
     public void retry() { submit(AttemptPolicy.Trigger.RETRY); }
     /** Invoke on APK replacement with a freshly obtained ApplicationInfo.sourceDir. */
     public void refreshInstalledApk(File baseApk) {
@@ -260,13 +283,13 @@ public final class DeliveryController {
             if (!explicit && !preferences.automaticChecks) {
                 activity = Activity.CANCELLED; attempts.finish(token); clearRetry(); releaseAttempt(); publish(); return;
             }
-            DeliveryClient.Result result = client.check(scope, attempts.downloadAllowed(explicit, metered.getAsBoolean()), explicit, () -> {
+            DeliveryClient.Result result = client.check(scope, (explicit ? downloadCommand : attempts.downloadAllowed(false, metered.getAsBoolean())), explicit, () -> {
                 // The watcher disconnects blocked IO, but cannot be the only gate:
                 // cancel can precede client registration or race the final handoff.
                 if (!attempts.current(token) || !cancellationEpoch.equals(cancellation.read())
                         || client.isDownloading() && !transferAllowed(explicit))
                     throw new HttpTransport.Failure("cancelled");
-            }, () -> transferAllowed(explicit));
+            }, () -> transferAllowed(explicit), offeredCommand);
             available = result.available;
             activity = result.stage != null ? Activity.READY :
                 result.available != null ? Activity.AVAILABLE : Activity.IDLE;

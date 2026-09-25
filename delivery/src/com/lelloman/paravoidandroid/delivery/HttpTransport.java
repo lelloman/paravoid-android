@@ -26,7 +26,7 @@ final class HttpTransport {
         }
     }
 
-    static final class Cancellation implements com.lelloman.paravoidandroid.recovery.Cancellation {
+    static final class Cancellation implements com.lelloman.paravoidandroid.recovery.Cancellation, com.lelloman.paravoidandroid.updates.Cancellation {
         private final java.util.Set<Runnable> disconnects = new java.util.HashSet<>();
         private boolean cancelled;
         private HttpURLConnection active;
@@ -64,7 +64,12 @@ final class HttpTransport {
     private final String bearer;
 
     // Debug HTTP is an explicit internal test/development option. Release wiring must forbid it.
+    private final boolean staticFiles;
     HttpTransport(URI base, boolean debugHttp, String bearer, Connections connections) {
+        this(base, debugHttp, bearer, connections, false);
+    }
+    HttpTransport(URI base, boolean debugHttp, String bearer, Connections connections, boolean staticFiles) {
+        this.staticFiles=staticFiles;
         String scheme = base.getScheme();
         if (!("https".equals(scheme) || (debugHttp && "http".equals(scheme)))
                 || base.getHost() == null || base.getUserInfo() != null
@@ -128,7 +133,7 @@ final class HttpTransport {
             }
             if (length >= 0 && length != body.length) throw new Failure("truncated-head");
             String etag = quoted(hash(body));
-            if (!etag.equals(header(c, "ETag"))) throw new Failure("invalid-etag");
+            if (!staticFiles && !etag.equals(header(c, "ETag"))) throw new Failure("invalid-etag");
             return new HeadBytes(false, body, etag);
         } finally { cancel.detach(c); c.disconnect(); }
     }
@@ -161,7 +166,7 @@ final class HttpTransport {
                 c.setRequestProperty("Accept", "application/vnd.paravoid.vpk");
                 if (offset > 0) {
                     c.setRequestProperty("Range", "bytes=" + offset + "-");
-                    c.setRequestProperty("If-Range", etag);
+                    if (!staticFiles) c.setRequestProperty("If-Range", etag);
                 }
                 int status = responseCode(c, cancel);
                 cancel.check(); encoding(c);
@@ -172,8 +177,8 @@ final class HttpTransport {
                     continue;
                 }
                 if (status != 200 && status != 206) throw status(c, status);
-                mime(c, "application/vnd.paravoid.vpk");
-                if (!etag.equals(header(c, "ETag"))) throw new Failure("invalid-etag");
+                if (!staticFiles || !"application/octet-stream".equals(header(c,"Content-Type"))) mime(c, "application/vnd.paravoid.vpk");
+                if (!staticFiles && !etag.equals(header(c, "ETag"))) throw new Failure("invalid-etag");
                 long start = status == 200 ? 0 : offset;
                 if (status == 206 && (offset == 0 || !Objects.equals(header(c, "Content-Range"),
                         "bytes " + offset + "-" + (size - 1) + "/" + size)))

@@ -11,12 +11,17 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.function.Consumer;
 
-/** Only called after explicit destructive-restart confirmation in shell controls. */
+/** Invoked by shell controls, downstream commands, or the installed restart policy. */
 final class ShellRestart {
+    private static final java.util.concurrent.atomic.AtomicBoolean running=new java.util.concurrent.atomic.AtomicBoolean();
+    static boolean inProgress() { return running.get(); }
     interface BeforeLaunch { void run() throws Exception; }
     static void restart(Application app, Consumer<Boolean> result) { restart(app, () -> {}, result); }
     static void restart(Application app, BeforeLaunch beforeLaunch, Consumer<Boolean> result) {
         Handler main = new Handler(Looper.getMainLooper());
+        if(Looper.myLooper()!=Looper.getMainLooper()) { main.post(()->restart(app,beforeLaunch,result)); return; }
+        if(!running.compareAndSet(false,true)) { result.accept(false); return; }
+        ShellApplication.requireInstance().suspendUpdates();
         RestartProcessGate gate = new RestartProcessGate(new RestartProcessGate.Platform() {
             public boolean exclusiveUid() {
                 String[] packages = app.getPackageManager().getPackagesForUid(Process.myUid());
@@ -26,6 +31,11 @@ final class ShellRestart {
                 ActivityManager manager = app.getSystemService(ActivityManager.class);
                 List<ActivityManager.RunningAppProcessInfo> processes = manager.getRunningAppProcesses();
                 if (processes == null) return null;
+                // Stop clients before their update service, avoiding binding-driven respawn.
+                processes=new ArrayList<>(processes);
+                processes.sort(java.util.Comparator.comparingInt(process ->
+                    process.processName.equals(app.getPackageName()+UpdateRuntime.SUFFIX) ? 2 :
+                    process.processName.equals(app.getPackageName()) ? 0 : 1));
                 List<RestartProcessGate.Entry> entries = new ArrayList<>();
                 for (ActivityManager.RunningAppProcessInfo process : processes)
                     entries.add(new RestartProcessGate.Entry(process.pid, process.uid, process.pkgList));
@@ -48,6 +58,8 @@ final class ShellRestart {
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
                     launched = true;
                 } catch (Exception unavailable) { /* Keep recovery screen available. */ }
+                running.set(false);
+                if(!launched) ShellApplication.requireInstance().resumeUpdates();
                 result.accept(launched);
             });
         }, "paravoid-explicit-restart").start();
