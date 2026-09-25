@@ -17,8 +17,6 @@ public final class ParavoidComponentFactory extends AppComponentFactory {
 
     @Override public Activity instantiateActivity(ClassLoader loader, String name, Intent intent)
             throws InstantiationException, IllegalAccessException, ClassNotFoundException {
-        if (name.equals("com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity") && CrashRecovery.instance != null)
-            return new CrashRecoveryActivity();
         if (name.equals(RestartActivity.class.getName()) || name.equals(UpdatePromptActivity.class.getName()) || name.equals(CrashRecoveryActivity.class.getName()) || name.equals(LauncherActivity.class.getName()) || name.equals("com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity"))
             return super.instantiateActivity(loader, name, intent);
         if (ShellApplication.requireInstance().completeUnavailable()) return new UnavailableComponents.Screen();
