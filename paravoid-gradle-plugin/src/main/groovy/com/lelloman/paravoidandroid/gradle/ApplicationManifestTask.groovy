@@ -183,12 +183,7 @@ abstract class ApplicationManifestTask extends DefaultTask {
             app.appendChild(recovery)
             if (crashRecoveryEnabled.get()) {
                 def crash = document.createElement('activity')
-                crash.setAttributeNS(ANDROID, 'android:name', 'com.lelloman.paravoidandroid.runtime.CrashRecoveryActivity',
-                'com.lelloman.paravoidandroid.runtime.UpdatePromptActivity',
-                'com.lelloman.paravoidandroid.runtime.RestartActivity',
-                'com.lelloman.paravoidandroid.runtime.UpdateService',
-                'com.lelloman.paravoidandroid.runtime.UpdateJobService',
-                'com.lelloman.paravoidandroid.runtime.UpdateReceiver')
+                crash.setAttributeNS(ANDROID, 'android:name', 'com.lelloman.paravoidandroid.runtime.CrashRecoveryActivity')
                 crash.setAttributeNS(ANDROID, 'android:process', ':paravoid_recovery')
                 crash.setAttributeNS(ANDROID, 'android:exported', 'false')
                 crash.setAttributeNS(ANDROID, 'android:theme', '@android:style/Theme.Material.Light.NoActionBar')

@@ -23,7 +23,7 @@ final class RemoteUpdates implements UpdateControl {
         }
         return true;
     }));
-    RemoteUpdates(Context context) { this.context=context.getApplicationContext(); }
+    RemoteUpdates(Context context) { Context app=context.getApplicationContext(); this.context=app!=null ? app : context; }
     private final ServiceConnection connection=new ServiceConnection() {
         public void onServiceConnected(ComponentName name,IBinder binder) {
             if(suspended) return;
