@@ -65,6 +65,12 @@ and explicit downloads:
 - `automatic`: once staged and an app Activity is visible, restart without confirmation.
   This stops ongoing app work and can discard unsaved changes.
 
+The shell's **App updates** controls include an **Auto restart app** toggle. It defaults
+to on when `restartBehavior` is `automatic` and off otherwise. Turning it on selects
+automatic restart for this installation; turning it off restores `manual` or `prompt`
+behavior, except that an installed `automatic` default becomes `manual`. The choice is
+stored in shell-owned app data and survives app restarts and payload updates.
+
 Background completion waits for a visible app Activity; the shell does not attempt a
 background Activity launch. A normal cold start can activate the pending update directly.
 Policy-driven prompts/attempts are remembered per archive to avoid repeated prompts or

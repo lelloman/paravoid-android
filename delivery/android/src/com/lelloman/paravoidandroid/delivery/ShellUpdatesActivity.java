@@ -14,17 +14,19 @@ import android.util.TypedValue;
 import android.view.View;
 import android.widget.*;
 import com.lelloman.paravoidandroid.contract.Protocol.*;
+import com.lelloman.paravoidandroid.runtime.AutoRestartPreference;
 
 /** Framework-only update controls, usable without loading the downstream payload. */
 public final class ShellUpdatesActivity extends Activity {
     public interface RestartAction { void restart(java.util.function.Consumer<Boolean> result); }
     private static volatile RestartAction installedRestart;
+    private static volatile boolean autoRestartDefault;
     private static volatile UpdateControl installedController;
     private UpdateControl controller;
     private LinearLayout content, details;
     private TextView status, description, versions, timing, progressLabel, diagnostics;
     private ProgressBar progress;
-    private Switch checks, downloads, unmetered;
+    private Switch checks, downloads, unmetered, autoRestart;
     private Spinner retention;
     private Button primary, checkNow, cancel, restart, retryGeneration, detailsToggle;
     private boolean rendering, restarting, expanded;
@@ -35,6 +37,7 @@ public final class ShellUpdatesActivity extends Activity {
     /** Shell bootstrap installs these controls in the recovery process. */
     public static void installController(UpdateControl controller) { installedController = controller; }
     public static void installRestartAction(RestartAction action) { installedRestart = action; }
+    public static void installAutoRestartDefault(boolean enabled) { autoRestartDefault = enabled; }
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -99,7 +102,22 @@ public final class ShellUpdatesActivity extends Activity {
         checks=toggle(preferences,"Check for updates automatically");
         downloads=toggle(preferences,"Allow automatic downloads");
         unmetered=toggle(preferences,"Download only on unmetered networks");
-        text(preferences,"Unmetered networks usually include Wi-Fi. Installation and restart prompts follow this app’s configuration.",13,false);
+        text(preferences,"Unmetered networks usually include Wi-Fi.",13,false);
+        autoRestart=new Switch(this); autoRestart.setText("Auto restart app"); autoRestart.setTextSize(15);
+        autoRestart.setTextColor(foreground); autoRestart.setMinimumHeight(dp(56));
+        autoRestart.setPadding(0,dp(8),0,dp(8)); autoRestart.setSwitchPadding(dp(16));
+        preferences.addView(autoRestart,new LinearLayout.LayoutParams(-1,-2));
+        autoRestart.setChecked(AutoRestartPreference.read(this,autoRestartDefault));
+        autoRestart.setOnCheckedChangeListener((view,checked)-> {
+            if(rendering) return;
+            if(!AutoRestartPreference.write(this,checked)) {
+                rendering=true;
+                autoRestart.setChecked(!checked);
+                rendering=false;
+                Toast.makeText(this,"Could not save auto restart setting",Toast.LENGTH_SHORT).show();
+            }
+        });
+        text(preferences,"When enabled, a downloaded update restarts the app while it is open. Ongoing work may stop and unsaved changes may be lost.",13,false);
         checks.setEnabled(false); downloads.setEnabled(false); unmetered.setEnabled(false);
 
         detailsToggle=button(content,"Show advanced details",view->setExpanded(!expanded));
@@ -248,6 +266,7 @@ public final class ShellUpdatesActivity extends Activity {
             checks.setChecked(snapshot.preferences.automaticChecks); checks.setEnabled(!restarting);
             downloads.setChecked(snapshot.preferences.automaticDownloads); downloads.setEnabled(checks.isChecked() && !restarting);
             unmetered.setChecked(snapshot.preferences.unmeteredOnly); unmetered.setEnabled(checks.isChecked() && downloads.isChecked() && !restarting);
+            autoRestart.setChecked(AutoRestartPreference.read(this,autoRestartDefault)); autoRestart.setEnabled(!restarting);
             downloads.setAlpha(downloads.isEnabled() ? 1f : 0.5f); unmetered.setAlpha(unmetered.isEnabled() ? 1f : 0.5f);
             restart.setEnabled(!busy && !restarting);
             retention.setEnabled(lastLifecycle!=null && !busy && !restarting);
@@ -280,7 +299,7 @@ public final class ShellUpdatesActivity extends Activity {
             .setMessage("This stops ongoing app work, including playback and jobs. Unsaved changes may be lost. A downloaded update will be applied when the app opens again.")
             .setNegativeButton("Not now",null).setPositiveButton("Restart",(dialog,which)-> {
                 restarting=true; primary.setEnabled(false); restart.setEnabled(false); checkNow.setEnabled(false);
-                checks.setEnabled(false); downloads.setEnabled(false); unmetered.setEnabled(false);
+                checks.setEnabled(false); downloads.setEnabled(false); unmetered.setEnabled(false); autoRestart.setEnabled(false);
                 cancel.setEnabled(false); retention.setEnabled(false); retryGeneration.setEnabled(false);
                 status.setText("Restarting app…"); description.setText("Stopping app work and opening the app again.");
                 installedRestart.restart(success->runOnUiThread(()-> {

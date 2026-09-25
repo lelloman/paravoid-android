@@ -54,7 +54,9 @@ final class CompleteRuntime {
         if(policy.updatesEnabled && (mainProcess || shellOnly)) controller.listen(snapshot-> {
             if(mainProcess && resumedActivity!=null && !(resumedActivity instanceof LauncherActivity) && snapshot.lifecycle!=null) {
                 ExpectedArchive pending=snapshot.lifecycle.pending;
-                String behavior=policy.updates.getOrDefault("restartBehavior","manual");
+                String configured=policy.updates.getOrDefault("restartBehavior","manual");
+                String behavior=RestartPolicy.effectiveBehavior(configured,
+                    AutoRestartPreference.read(app,configured.equals("automatic")));
                 String previous=app.getSharedPreferences(RestartActivity.PREFERENCES,0).getString("handled","");
                 if(RestartPolicy.shouldOffer(behavior,pending,handledRestart,previous)) {
                     handledRestart=pending;
@@ -77,6 +79,7 @@ final class CompleteRuntime {
                 CrashRecovery.instance.coordinator = new RecoveryCoordinator(controller, CrashRecovery.instance.records);
             }
             ShellUpdatesActivity.installRestartAction(result -> ShellRestart.restart(app, result));
+            ShellUpdatesActivity.installAutoRestartDefault("automatic".equals(policy.updates.get("restartBehavior")));
         }
         if (mainProcess || shellOnly) ShellControlShortcut.install(app);
         app.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
