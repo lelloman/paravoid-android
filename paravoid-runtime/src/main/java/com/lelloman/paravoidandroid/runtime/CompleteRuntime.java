@@ -87,6 +87,7 @@ final class CompleteRuntime {
             public void onActivityStarted(Activity activity) { if(policy.updatesEnabled && (mainProcess || shellOnly)) if(++visibleActivities==1) ((RemoteUpdates)controller).visible(true); }
             public void onActivityResumed(Activity activity) {
                 resumedActivity=activity;
+                if(policy.updatesEnabled && (mainProcess || shellOnly) && !ShellRestart.inProgress()) PushForegroundService.startConfigured(activity);
                 if(!ShellRestart.inProgress()) resumeUpdates();
                 if (policy.updatesEnabled && (mainProcess || shellOnly)) controller.foreground();
                 if (mainProcess && !shellOnly) controller.refreshSnapshot();

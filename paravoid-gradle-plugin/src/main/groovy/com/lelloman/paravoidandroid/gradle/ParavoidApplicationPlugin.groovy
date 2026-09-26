@@ -141,6 +141,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 updatesEnabled.set(complete && extension.updates.enabled.get())
                 pushComponents.set(extension.updates.push.enabled.get() ? extension.updates.push.componentClasses.get() : [])
                 pushEnabled.set(complete && extension.updates.enabled.get() && extension.updates.push.enabled.get())
+                pushBackgroundConnection.set(extension.updates.push.backgroundConnection)
                 controlsLauncher.set(extension.controlsLauncher)
                 crashRecoveryEnabled.set(extension.crashRecovery.enabled)
                 recoveryProvider.set(extension.crashRecovery.providerClass)

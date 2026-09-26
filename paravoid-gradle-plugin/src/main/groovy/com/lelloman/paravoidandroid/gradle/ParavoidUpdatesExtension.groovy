@@ -23,7 +23,7 @@ abstract class ParavoidUpdatesExtension {
         Map<String,String> values=[:]
         ['mode','metadataUrl','payloadUrlTemplate','checkerClass','updaterClass','policyClass','jobIdBase','restartBehavior'].each { values[it]=this."$it".get().toString() }
         ['intervalSeconds','flexSeconds','checks','downloads','checkUnmetered','downloadUnmetered','charging','batteryNotLow','deviceIdle','retrySeconds','maxRetrySeconds','maxRetries'].each { values[it]=schedule."$it".get().toString() }
-        values.putAll([pushEnabled:push.enabled.get().toString(), pushWebSocketUrl:push.webSocketUrl.get(),
+        values.putAll([pushEnabled:push.enabled.get().toString(), pushBackgroundConnection:push.backgroundConnection.get().toString(), pushWebSocketUrl:push.webSocketUrl.get(),
             pushTransportClass:push.transportClass.get(),pushAuthenticationClass:push.authenticationClass.get(),
             pushComponentClasses:push.componentClasses.get().join(';'),updateBehavior:push.enabled.get() ? push.behavior.get() : 'automatic'])
         values

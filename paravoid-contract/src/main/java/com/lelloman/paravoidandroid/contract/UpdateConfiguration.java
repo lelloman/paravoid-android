@@ -10,7 +10,7 @@ public final class UpdateConfiguration {
         Set<String> keys = new HashSet<>(Arrays.asList("mode", "metadataUrl", "payloadUrlTemplate",
             "checkerClass", "updaterClass", "policyClass", "intervalSeconds", "flexSeconds", "jobIdBase",
             "checks", "downloads", "checkUnmetered", "downloadUnmetered", "charging", "batteryNotLow",
-            "deviceIdle", "retrySeconds", "maxRetrySeconds", "maxRetries", "pushEnabled", "pushWebSocketUrl", "pushTransportClass", "pushAuthenticationClass", "updateBehavior", "pushComponentClasses", "restartBehavior"));
+            "deviceIdle", "retrySeconds", "maxRetrySeconds", "maxRetries", "pushEnabled", "pushBackgroundConnection", "pushWebSocketUrl", "pushTransportClass", "pushAuthenticationClass", "updateBehavior", "pushComponentClasses", "restartBehavior"));
         try {
             if (!keys.containsAll(values.keySet())) throw new IllegalArgumentException();
             String mode=values.getOrDefault("mode","api");
@@ -24,6 +24,7 @@ public final class UpdateConfiguration {
             String behavior=values.getOrDefault("updateBehavior","automatic");
             if(!behavior.equals("automatic") && !behavior.equals("prompt")) throw new IllegalArgumentException();
             String ws=values.getOrDefault("pushWebSocketUrl","");
+            if("true".equals(values.get("pushBackgroundConnection")) && (!"true".equals(values.get("pushEnabled")) || ws.isEmpty())) throw new IllegalArgumentException();
             if(!ws.isEmpty()) {
                 URI uri=URI.create(ws);
                 if(!Arrays.asList("wss","ws").contains(uri.getScheme()) || uri.getHost()==null || uri.getUserInfo()!=null || uri.getFragment()!=null
@@ -45,7 +46,7 @@ public final class UpdateConfiguration {
             integer(values,"maxRetrySeconds",3600,retry,3600);
             integer(values,"maxRetries",3,0,10);
             integer(values,"jobIdBase",0x50560000,1,Integer.MAX_VALUE-4);
-            for(String key: Arrays.asList("checks","downloads","checkUnmetered","downloadUnmetered","charging","batteryNotLow","deviceIdle","pushEnabled"))
+            for(String key: Arrays.asList("checks","downloads","checkUnmetered","downloadUnmetered","charging","batteryNotLow","deviceIdle","pushEnabled","pushBackgroundConnection"))
                 if(values.containsKey(key) && !values.get(key).equals("true") && !values.get(key).equals("false")) throw new IllegalArgumentException();
         } catch (RuntimeException invalid) {
             throw new ContractException(ContractException.Code.MALFORMED,"Invalid installed update configuration");

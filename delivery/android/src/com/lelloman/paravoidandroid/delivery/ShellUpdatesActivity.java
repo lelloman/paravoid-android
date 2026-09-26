@@ -15,6 +15,7 @@ import android.view.View;
 import android.widget.*;
 import com.lelloman.paravoidandroid.contract.Protocol.*;
 import com.lelloman.paravoidandroid.runtime.AutoRestartPreference;
+import com.lelloman.paravoidandroid.runtime.ParavoidPush;
 
 /** Framework-only update controls, usable without loading the downstream payload. */
 public final class ShellUpdatesActivity extends Activity {
@@ -26,7 +27,7 @@ public final class ShellUpdatesActivity extends Activity {
     private LinearLayout content, details;
     private TextView status, description, versions, timing, progressLabel, diagnostics;
     private ProgressBar progress;
-    private Switch checks, downloads, unmetered, autoRestart;
+    private Switch checks, downloads, unmetered, autoRestart, backgroundPush;
     private Spinner retention;
     private Button primary, checkNow, cancel, restart, retryGeneration, detailsToggle;
     private boolean rendering, restarting, expanded;
@@ -103,6 +104,21 @@ public final class ShellUpdatesActivity extends Activity {
         downloads=toggle(preferences,"Allow automatic downloads");
         unmetered=toggle(preferences,"Download only on unmetered networks");
         text(preferences,"Unmetered networks usually include Wi-Fi.",13,false);
+        if(ParavoidPush.backgroundAvailable(this)) {
+            backgroundPush=new Switch(this); backgroundPush.setText("Keep update connection in background"); backgroundPush.setTextSize(15);
+            backgroundPush.setTextColor(foreground); backgroundPush.setMinimumHeight(dp(56));
+            backgroundPush.setPadding(0,dp(8),0,dp(8)); backgroundPush.setSwitchPadding(dp(16));
+            preferences.addView(backgroundPush,new LinearLayout.LayoutParams(-1,-2));
+            backgroundPush.setChecked(ParavoidPush.backgroundEnabled(this));
+            backgroundPush.setOnCheckedChangeListener((view,checked)-> {
+                if(rendering) return;
+                if(!ParavoidPush.backgroundEnabled(this,checked)) {
+                    refreshBackgroundPush();
+                    Toast.makeText(this,"Could not change background update connection",Toast.LENGTH_SHORT).show();
+                }
+            });
+            text(preferences,"Keep listening for updates when the app is not open. Shows an ongoing notification. Off by default.",13,false);
+        }
         autoRestart=new Switch(this); autoRestart.setText("Auto restart app"); autoRestart.setTextSize(15);
         autoRestart.setTextColor(foreground); autoRestart.setMinimumHeight(dp(56));
         autoRestart.setPadding(0,dp(8),0,dp(8)); autoRestart.setSwitchPadding(dp(16));
@@ -144,6 +160,7 @@ public final class ShellUpdatesActivity extends Activity {
         setExpanded(state!=null && state.getBoolean("detailsExpanded"));
     }
     @Override protected void onStart() { super.onStart(); if(controller!=null) controller.listen(listener); }
+    @Override protected void onResume() { super.onResume(); refreshBackgroundPush(); }
     @Override protected void onStop() { if(controller!=null) controller.unlisten(listener); super.onStop(); }
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putBoolean("detailsExpanded",expanded); super.onSaveInstanceState(state);
@@ -151,6 +168,13 @@ public final class ShellUpdatesActivity extends Activity {
     private void setExpanded(boolean value) {
         expanded=value; details.setVisibility(value ? View.VISIBLE : View.GONE);
         detailsToggle.setText(value ? "Hide advanced details" : "Show advanced details");
+    }
+    private void refreshBackgroundPush() {
+        if(backgroundPush==null) return;
+        boolean previous=rendering; rendering=true;
+        backgroundPush.setChecked(ParavoidPush.backgroundEnabled(this));
+        backgroundPush.setEnabled(!restarting);
+        rendering=previous;
     }
     private int dp(int value) { return Math.round(value*getResources().getDisplayMetrics().density); }
     private int color(int attribute) {
@@ -267,6 +291,7 @@ public final class ShellUpdatesActivity extends Activity {
             downloads.setChecked(snapshot.preferences.automaticDownloads); downloads.setEnabled(checks.isChecked() && !restarting);
             unmetered.setChecked(snapshot.preferences.unmeteredOnly); unmetered.setEnabled(checks.isChecked() && downloads.isChecked() && !restarting);
             autoRestart.setChecked(AutoRestartPreference.read(this,autoRestartDefault)); autoRestart.setEnabled(!restarting);
+            refreshBackgroundPush();
             downloads.setAlpha(downloads.isEnabled() ? 1f : 0.5f); unmetered.setAlpha(unmetered.isEnabled() ? 1f : 0.5f);
             restart.setEnabled(!busy && !restarting);
             retention.setEnabled(lastLifecycle!=null && !busy && !restarting);
@@ -300,6 +325,7 @@ public final class ShellUpdatesActivity extends Activity {
             .setNegativeButton("Not now",null).setPositiveButton("Restart",(dialog,which)-> {
                 restarting=true; primary.setEnabled(false); restart.setEnabled(false); checkNow.setEnabled(false);
                 checks.setEnabled(false); downloads.setEnabled(false); unmetered.setEnabled(false); autoRestart.setEnabled(false);
+                if(backgroundPush!=null) backgroundPush.setEnabled(false);
                 cancel.setEnabled(false); retention.setEnabled(false); retryGeneration.setEnabled(false);
                 status.setText("Restarting app…"); description.setText("Stopping app work and opening the app again.");
                 installedRestart.restart(success->runOnUiThread(()-> {

@@ -48,6 +48,15 @@ paravoid {
         debugHttpAllowed = !providers.gradleProperty('httpsAcceptance').present
         authentication = providers.gradleProperty('authentication').getOrElse('public')
         trustPolicyFile = layout.projectDirectory.file('build/keys/trust.json')
+        if (providers.gradleProperty('backgroundPush').present) {
+            restartBehavior = 'automatic'
+            push {
+                enabled = true
+                backgroundConnection = true
+                webSocketUrl = 'ws://127.0.0.1:18765/v1/events'
+                behavior = 'automatic'
+            }
+        }
     }
     signing { keyId = 'release'; privateKeyFile = layout.projectDirectory.file('build/keys/release.der') }
 }

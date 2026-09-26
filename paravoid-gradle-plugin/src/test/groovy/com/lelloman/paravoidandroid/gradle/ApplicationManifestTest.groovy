@@ -10,6 +10,25 @@ import static org.junit.Assert.*
 class ApplicationManifestTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder()
 
+    @Test void backgroundPushAddsPrivateTypedServiceOnlyWhenEnabled() {
+        def disabled=fixture(''); disabled.complete.set(true); disabled.updatesEnabled.set(true); disabled.pushEnabled.set(true); disabled.rewrite()
+        assertFalse(disabled.outputManifest.get().asFile.text.contains('PushForegroundService'))
+        assertFalse(disabled.outputManifest.get().asFile.text.contains('FOREGROUND_SERVICE_SPECIAL_USE'))
+        def task=fixture(''); task.complete.set(true); task.updatesEnabled.set(true); task.pushEnabled.set(true)
+        task.pushBackgroundConnection.set(true); task.rewrite()
+        def factory=javax.xml.parsers.DocumentBuilderFactory.newInstance(); factory.namespaceAware=true
+        def document=factory.newDocumentBuilder().parse(task.outputManifest.get().asFile)
+        def service=document.getElementsByTagName('service').find { it.getAttributeNS(ApplicationManifestTask.ANDROID,'name').endsWith('PushForegroundService') }
+        assertNotNull(service)
+        assertEquals(':paravoid_updates',service.getAttributeNS(ApplicationManifestTask.ANDROID,'process'))
+        assertEquals('false',service.getAttributeNS(ApplicationManifestTask.ANDROID,'exported'))
+        assertEquals('specialUse',service.getAttributeNS(ApplicationManifestTask.ANDROID,'foregroundServiceType'))
+        assertEquals('android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE',service.getElementsByTagName('property').item(0).getAttributeNS(ApplicationManifestTask.ANDROID,'name'))
+        assertTrue(task.outputManifest.get().asFile.text.contains('FOREGROUND_SERVICE_SPECIAL_USE'))
+        assertTrue(task.outputManifest.get().asFile.text.contains('paravoid.backgroundPush'))
+        assertFalse(ProjectBuilder.builder().withProjectDir(temporary.newFolder()).build().objects.newInstance(ParavoidApplicationExtension).updates.push.backgroundConnection.get())
+    }
+
     @Test void pushIsOptInAndRoutesAdapterWithoutPayloadStartup() {
         def disabled=fixture(''); disabled.complete.set(true); disabled.updatesEnabled.set(true); disabled.rewrite()
         assertFalse(disabled.outputManifest.get().asFile.text.contains('UpdatePromptActivity'))
@@ -97,6 +116,7 @@ class ApplicationManifestTest {
     @Test void completeProfileRejectsReservedShellComponents() {
         ['com.lelloman.paravoidandroid.runtime.LauncherActivity',
          'com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity',
+         'com.lelloman.paravoidandroid.runtime.PushForegroundService',
          'com.lelloman.paravoidandroid.runtime.UpdatesLauncher'].each { name ->
             ['activity', 'service', 'receiver', 'provider'].each { kind ->
                 def task = fixture("<${kind} android:name=\"${name}\" />")

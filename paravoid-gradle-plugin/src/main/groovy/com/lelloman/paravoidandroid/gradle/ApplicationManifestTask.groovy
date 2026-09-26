@@ -19,13 +19,14 @@ abstract class ApplicationManifestTask extends DefaultTask {
     @OutputFile abstract RegularFileProperty getPayloadMetadata()
     @Input abstract Property<Boolean> getUpdatesEnabled()
     @Input abstract Property<Boolean> getPushEnabled()
+    @Input abstract Property<Boolean> getPushBackgroundConnection()
     @Input abstract org.gradle.api.provider.ListProperty<String> getPushComponents()
     @Input abstract Property<Boolean> getComplete()
     @Input abstract Property<Boolean> getDebugHttpAllowed()
     @Input abstract Property<Boolean> getControlsLauncher()
     @Input abstract Property<Boolean> getCrashRecoveryEnabled()
     @Input abstract Property<String> getRecoveryProvider()
-    ApplicationManifestTask() { pushComponents.convention([]); pushEnabled.convention(false); updatesEnabled.convention(false); complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false); crashRecoveryEnabled.convention(false); recoveryProvider.convention('') }
+    ApplicationManifestTask() { pushBackgroundConnection.convention(false); pushComponents.convention([]); pushEnabled.convention(false); updatesEnabled.convention(false); complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false); crashRecoveryEnabled.convention(false); recoveryProvider.convention('') }
 
     @TaskAction void rewrite() {
         def factory = DocumentBuilderFactory.newInstance()
@@ -51,6 +52,7 @@ abstract class ApplicationManifestTask extends DefaultTask {
                 'com.lelloman.paravoidandroid.runtime.UpdatePromptActivity',
                 'com.lelloman.paravoidandroid.runtime.RestartActivity',
                 'com.lelloman.paravoidandroid.runtime.UpdateService',
+                'com.lelloman.paravoidandroid.runtime.PushForegroundService',
                 'com.lelloman.paravoidandroid.runtime.UpdateJobService',
                 'com.lelloman.paravoidandroid.runtime.UpdateReceiver'
             ] as Set
@@ -123,6 +125,27 @@ abstract class ApplicationManifestTask extends DefaultTask {
         launcherFilters.each { launcher.appendChild(it) }
         app.appendChild(launcher)
         if (complete.get() && pushEnabled.get()) {
+            if (pushBackgroundConnection.get()) {
+                ['android.permission.FOREGROUND_SERVICE', 'android.permission.FOREGROUND_SERVICE_SPECIAL_USE'].each { permission ->
+                    def nodes=document.getElementsByTagName('uses-permission')
+                    if (!(0..<nodes.length).any { nodes.item(it).getAttributeNS(ANDROID,'name') == permission }) {
+                        def node=document.createElement('uses-permission'); node.setAttributeNS(ANDROID,'android:name',permission)
+                        document.documentElement.insertBefore(node,app)
+                    }
+                }
+                def service=document.createElement('service')
+                service.setAttributeNS(ANDROID,'android:name','com.lelloman.paravoidandroid.runtime.PushForegroundService')
+                service.setAttributeNS(ANDROID,'android:process',':paravoid_updates')
+                service.setAttributeNS(ANDROID,'android:exported','false')
+                service.setAttributeNS(ANDROID,'android:foregroundServiceType','specialUse')
+                def subtype=document.createElement('property')
+                subtype.setAttributeNS(ANDROID,'android:name','android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE')
+                subtype.setAttributeNS(ANDROID,'android:value','Maintain an ongoing app update event connection with a visible notification and user stop control')
+                service.appendChild(subtype); app.appendChild(service)
+                def background=document.createElement('meta-data')
+                background.setAttributeNS(ANDROID,'android:name','paravoid.backgroundPush')
+                background.setAttributeNS(ANDROID,'android:value','true'); app.appendChild(background)
+            }
             Set<String> remaining=new HashSet<>(pushComponents.get())
             ['service','receiver'].each { kind ->
                 def nodes=app.getElementsByTagName(kind)

@@ -200,3 +200,28 @@ accepts a physical device. It exercises startup, repeated, post-frame main/worke
 and secondary-process crashes, provider process death, Activity recreation,
 explicit repair download/restart and saved-data preservation in the same shell.
 See [crash recovery integration](../../docs/crash-recovery.md).
+
+## Background push connection
+
+```sh
+python3 compatibility/complete-v1/prepare.py
+./gradlew -p compatibility/complete-v1 assembleParavoidAndroidDebug \
+  -PbackgroundPush --offline --max-workers=2
+python3 compatibility/complete-v1/background-push-check.py \
+  --serial emulator-5580 --avd Medium_Phone_API_36.1
+```
+
+Use an explicitly selected disposable emulator. The test installs and clears only
+this fixture, then runs a local WebSocket server. It checks that the shell updates
+screen's background connection toggle defaults off, enables/stops/resumes the service,
+and reflects the persisted choice across processes. It checks a live ping/pong on the
+same connection after backgrounding, reconnect after forced socket failure,
+shell-only process mappings, persistent pause across app reopen, resume through the toggle,
+and coordinated restart with a stable new main process and working push. The
+service is confirmed to be foreground and private to `:paravoid_updates`.
+It force-stops the fixture and removes its port reverse on completion.
+
+Passed on 2026-09-26 on API 36.1/x86_64 with target SDK 36. This checks connection
+lifetime and restart, not publication/download of a new release, notification
+action tapping, or behavior under device sleep and vendor power management.
+See [configuration and development workflow](../../delivery/UPDATES.md#background-connection-for-development).

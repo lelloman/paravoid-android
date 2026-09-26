@@ -7,8 +7,10 @@ abstract class ParavoidUpdatePushExtension {
     ParavoidUpdatePushExtension() {
         enabled.convention(false); webSocketUrl.convention(''); transportClass.convention('')
         authenticationClass.convention(''); componentClasses.convention([]); behavior.convention('prompt')
+        backgroundConnection.convention(false)
     }
     abstract Property<Boolean> getEnabled()
+    abstract Property<Boolean> getBackgroundConnection()
     abstract Property<String> getWebSocketUrl()
     abstract Property<String> getTransportClass()
     abstract Property<String> getAuthenticationClass()

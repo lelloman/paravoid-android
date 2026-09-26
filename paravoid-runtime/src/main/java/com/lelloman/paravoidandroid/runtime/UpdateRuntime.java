@@ -20,12 +20,25 @@ final class UpdateRuntime {
     private static DeliveryClient delivery;
     private static PushConnection socket;
     private static boolean appVisible;
+    private static boolean backgroundConnection;
+    static synchronized boolean backgroundAllowed() {
+        return installedPolicy!=null && Boolean.parseBoolean(installedPolicy.updates.get("pushEnabled"))
+            && Boolean.parseBoolean(installedPolicy.updates.get("pushBackgroundConnection"))
+            && !installedPolicy.updates.getOrDefault("pushWebSocketUrl","").isEmpty();
+    }
     static synchronized void visible(Context context,boolean visible) {
         appVisible=visible;
-        if(!visible) { if(socket!=null) socket.stop(); socket=null; return; }
+        reconcilePush(context);
+    }
+    static synchronized void background(Context context,boolean running) {
+        backgroundConnection=running;
+        reconcilePush(context);
+    }
+    private static void reconcilePush(Context context) {
+        if(!appVisible && !backgroundConnection) { if(socket!=null) socket.stop(); socket=null; return; }
         engine(context).thenAccept(engine-> {
             synchronized(UpdateRuntime.class) {
-                if(!appVisible || socket!=null || installedPolicy==null || !Boolean.parseBoolean(installedPolicy.updates.get("pushEnabled"))) return;
+                if((!appVisible && !backgroundConnection) || socket!=null || installedPolicy==null || !Boolean.parseBoolean(installedPolicy.updates.get("pushEnabled"))) return;
                 String url=installedPolicy.updates.getOrDefault("pushWebSocketUrl","");
                 if(url.isEmpty()) return;
                 try { socket=connection(context,installedPolicy,engine,new WebSocketPushTransport(),url); socket.start(); }

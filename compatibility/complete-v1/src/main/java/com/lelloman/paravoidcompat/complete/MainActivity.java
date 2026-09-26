@@ -11,6 +11,15 @@ import java.nio.charset.StandardCharsets;
 public final class MainActivity extends Activity {
     private ParavoidUpdates.Subscription updateSubscription;
     private TextView updateStatus;
+    @Override public void onPostResume() {
+        super.onPostResume();
+        String command=getIntent().getStringExtra("backgroundPushCommand");
+        getIntent().removeExtra("backgroundPushCommand");
+        if("pause".equals(command)) com.lelloman.paravoidandroid.runtime.ParavoidPush.stopBackground(this);
+        if("resume".equals(command)) com.lelloman.paravoidandroid.runtime.ParavoidPush.startBackground(this);
+        if("restart".equals(command)) ParavoidUpdates.get().restart(this);
+        if("controls".equals(command)) ParavoidUpdates.get().openControls(this);
+    }
     public MainActivity() { StartupProbe.hit("activity-constructor"); }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);

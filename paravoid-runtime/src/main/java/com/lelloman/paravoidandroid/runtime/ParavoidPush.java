@@ -11,6 +11,20 @@ import java.nio.charset.StandardCharsets;
 /** Entry point for any downstream notification SDK. Payload startup is not required. */
 public final class ParavoidPush {
     private ParavoidPush() {}
+    /** Whether this shell includes the background WebSocket service. */
+    public static boolean backgroundAvailable(Context context) { return PushForegroundService.available(context); }
+    /** Persisted user choice; false on a new installation. */
+    public static boolean backgroundEnabled(Context context) { return BackgroundPushPreference.read(context); }
+    /** Toggle from a visible screen; true means the setting was saved and the start/stop requested. */
+    public static boolean backgroundEnabled(android.app.Activity activity,boolean enabled) {
+        return enabled ? startBackground(activity) : PushForegroundService.pause(activity);
+    }
+    /** Resume a configured background connection from a visible Activity. True means start requested. */
+    public static boolean startBackground(android.app.Activity activity) {
+        return PushForegroundService.start(activity,true);
+    }
+    /** Persistently pause background connection; ordinary visible-app push and polling remain available. */
+    public static void stopBackground(Context context) { PushForegroundService.pause(context); }
     public static boolean receive(Context context, byte[] event) {
         if(event==null || event.length>UpdateEventCodec.MAX_BYTES) return false;
         try {

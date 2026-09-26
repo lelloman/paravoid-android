@@ -37,10 +37,67 @@ paravoid {
 }
 ```
 
-The WebSocket stays connected while an app Activity is visible, reconnects with capped
-backoff, and closes when the app leaves the foreground. It does not require a foreground
-service. Background notification delivery uses a downstream adapter. Android controls
+By default the WebSocket stays connected while an app Activity is visible, reconnects
+with capped backoff, and closes when the app leaves the foreground. Opt-in background
+connections use the foreground service described below. Background notification delivery
+can also use a downstream adapter. Android controls
 when scheduled jobs run; intervals and push hints are not exact execution deadlines.
+
+## Background connection for development
+
+For a phone receiving pushed development builds, enable a shell-owned foreground service:
+
+```groovy
+updates {
+    // ... enabled, baseUrl and trust configuration ...
+    restartBehavior = 'automatic'
+    schedule {
+        checks = true
+        downloads = true
+        downloadUnmetered = false // allow development updates over mobile data too
+    }
+    push {
+        enabled = true
+        webSocketUrl = 'wss://updates.example/updates/v1/events'
+        backgroundConnection = true // default false; requires a WebSocket URL
+        behavior = 'automatic'
+    }
+}
+```
+
+`backgroundConnection = true` makes the feature available in the shell. The **App
+updates** screen includes **Keep update connection in background**, which defaults to
+**off** even in a shell configured with this capability. Turning it on starts the
+service in `:paravoid_updates`; later app launches resume it while the preference is on.
+The same authenticated
+WebSocket remains connected when Activities stop, with reconnect backoff and normal
+signed discovery/download verification. No payload Application is loaded in this process.
+The ongoing **App update connection active** notification opens the app and includes
+**Stop background connection**. Turning the screen toggle off or using the notification
+Stop action disables the same persisted preference across app launches and payload updates.
+Turn the screen toggle on to resume, or use `ParavoidPush.startBackground(activity)`
+from a visible Activity.
+`ParavoidPush.stopBackground(context)` provides the same pause control to app-owned UI.
+The start method returns whether a service start was requested, not connection success.
+Ordinary visible-app push and scheduled polling remain available while background push
+is paused. The app owns notification permission requests.
+
+Background updates can download and stage; automatic restart still waits for a resumed
+app Activity. Keep the app visible to get the full push/download/restart development loop.
+Push checks retain their one-minute rate limit and network/user preferences still apply.
+The server/store must send the event hints documented below after publishing.
+
+The generated service declares Android's `specialUse` foreground service type and its
+subtype explanation. A continuous event subscription has no finite data-sync task;
+`dataSync` services on Android 15 with target SDK 35+ have a six-hour daily timeout.
+Google Play reviews `specialUse` declarations; downstream distributors must evaluate
+this use case before enabling it in production. See
+[Android foreground service types](https://developer.android.com/develop/background-work/services/fgs/service-types).
+This is opt-in configuration, so enable it only in your development shell configuration
+if production does not need it. Android/user termination, force-stop and device power
+management can still interrupt connections. The service does not acquire a wake lock,
+start at boot, or automatically respawn after process death; reopening the app starts it
+again unless paused. This also lets coordinated app restart stop the update owner safely.
 
 Push and polling share the same scheduler and verification path. Automatic work respects
 check/download preferences, network constraints and custom policy. Push hints coalesce
