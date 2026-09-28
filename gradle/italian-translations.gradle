@@ -1,0 +1,47 @@
+// Check owned main resources, independent of Android lint and packaging mode.
+def translationResources = fileTree('src/main/res') {
+    include 'values/*.xml', 'values-it/*.xml'
+}
+def verifyItalianTranslations = tasks.register('verifyItalianTranslations') {
+    group = 'verification'
+    description = 'Fails when main text resources are missing Italian translations.'
+    inputs.files(translationResources)
+    doLast {
+        def readResources = { String directory ->
+            def entries = [:]
+            translationResources.files.findAll { it.parentFile.name == directory }.sort().each { file ->
+                new groovy.xml.XmlParser().parse(file).children().findAll {
+                    it.name() in ['string', 'plurals', 'string-array']
+                }.each { node -> entries["${node.name()}/${node.attribute('name')}".toString()] = node }
+            }
+            entries
+        }
+        def defaults = readResources('values')
+        def italian = readResources('values-it')
+        def missing = []
+        defaults.each { key, original ->
+            if (original.attribute('translatable') != 'false') {
+                def translated = italian[key]
+                if (translated == null) {
+                    missing.add(key)
+                } else if (original.name() == 'string-array' &&
+                        original.children().size() != translated.children().size()) {
+                    missing.add("${key} (item count differs)")
+                } else if (original.name() == 'plurals') {
+                    // Italian needs one and other; additional locale-specific forms are optional.
+                    def quantities = translated.children().collect { it.attribute('quantity') }
+                    ['one', 'other'].each { quantity ->
+                        if (!quantities.contains(quantity)) missing.add("${key}[${quantity}]")
+                    }
+                }
+            }
+        }
+        if (!missing.empty) {
+            throw new GradleException("Missing Italian translations in ${project.path} src/main/res/values-it:\n" +
+                    missing.sort().collect { "  - ${it}" }.join('\n'))
+        }
+    }
+}
+tasks.matching { it.name in ['preBuild', 'check'] }.configureEach {
+    dependsOn(verifyItalianTranslations)
+}

@@ -317,10 +317,20 @@ adb install -r sample-app/build/outputs/apk/normal/debug/sample-app-normal-debug
 adb install -r sample-app/build/outputs/apk/paravoidAndroid/debug/sample-app-paravoidAndroid-debug.apk
 ```
 
-Both launcher entries are labeled **Paravoid Resource Example**. Paravoid mode displays
+Both launcher entries are labeled **Paravoid Resource Example** (or **Paravoid: esempio di risorse**
+in Italian). Paravoid mode displays
 `InMemoryDexClassLoader`; normal mode displays its ordinary app class loader.
 Both show initialization count 1. The sample's `.normal` and `.paravoid` application
 ID suffixes allow coexistence, with separate data and counters.
+
+The sample app and Compose compatibility demo require Italian translations for all
+strings, plurals, and string arrays in `src/main/res/values/*.xml`. Their `preBuild`
+and `check` tasks run `verifyItalianTranslations`, so missing entries in
+`values-it/*.xml` fail builds in either packaging mode. Mark intentionally
+unlocalized resources with `translatable="false"`. This checks resource coverage,
+not translation quality; it does not scan hardcoded text or dependency resources.
+Run `./gradlew :sample-app:verifyItalianTranslations` for the standalone check,
+or `python3 gradle/test-italian-translations.py` for its regression tests.
 
 The payload is `sample-app/build/outputs/paravoid/paravoidAndroidDebug/module.zip`, also
 embedded at `assets/paravoid/module.zip` inside the shell APK.

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Paravoid Resource Example</string>
+    <string name="app_name">Paravoid: esempio di risorse</string>
     <string name="greeting">Ciao dalle risorse</string>
     <string name="counter_value">Conteggio: %1$d</string>
     <string name="increment">Incrementa</string>

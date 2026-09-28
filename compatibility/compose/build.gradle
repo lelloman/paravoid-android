@@ -6,6 +6,7 @@ plugins {
     id 'com.google.dagger.hilt.android' version '2.57.2'
     id 'com.lelloman.paravoid.hilt'
 }
+apply from: file('../../gradle/italian-translations.gradle')
 android {
     namespace 'com.lelloman.paravoidcompat.compose'
     compileSdk 36
