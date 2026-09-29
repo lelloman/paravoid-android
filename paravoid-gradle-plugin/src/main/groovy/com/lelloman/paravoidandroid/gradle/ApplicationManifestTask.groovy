@@ -17,6 +17,7 @@ abstract class ApplicationManifestTask extends DefaultTask {
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getInputManifest()
     @OutputFile abstract RegularFileProperty getOutputManifest()
     @OutputFile abstract RegularFileProperty getPayloadMetadata()
+    @Input abstract org.gradle.api.provider.ListProperty<String> getLocalTriggerPackages()
     @Input abstract Property<Boolean> getUpdatesEnabled()
     @Input abstract Property<Boolean> getPushEnabled()
     @Input abstract Property<Boolean> getPushBackgroundConnection()
@@ -26,7 +27,7 @@ abstract class ApplicationManifestTask extends DefaultTask {
     @Input abstract Property<Boolean> getControlsLauncher()
     @Input abstract Property<Boolean> getCrashRecoveryEnabled()
     @Input abstract Property<String> getRecoveryProvider()
-    ApplicationManifestTask() { pushBackgroundConnection.convention(false); pushComponents.convention([]); pushEnabled.convention(false); updatesEnabled.convention(false); complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false); crashRecoveryEnabled.convention(false); recoveryProvider.convention('') }
+    ApplicationManifestTask() { localTriggerPackages.convention([]); pushBackgroundConnection.convention(false); pushComponents.convention([]); pushEnabled.convention(false); updatesEnabled.convention(false); complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false); crashRecoveryEnabled.convention(false); recoveryProvider.convention('') }
 
     @TaskAction void rewrite() {
         def factory = DocumentBuilderFactory.newInstance()
@@ -165,6 +166,22 @@ abstract class ApplicationManifestTask extends DefaultTask {
             prompt.setAttributeNS(ANDROID,'android:name','com.lelloman.paravoidandroid.runtime.UpdatePromptActivity')
             prompt.setAttributeNS(ANDROID,'android:process',':paravoid_updates'); prompt.setAttributeNS(ANDROID,'android:exported','false')
             prompt.setAttributeNS(ANDROID,'android:theme','@android:style/Theme.Material.Light.Dialog.Alert'); app.appendChild(prompt)
+        }
+        if (complete.get() && updatesEnabled.get() && !localTriggerPackages.get().empty) {
+            def service=document.createElement('service')
+            service.setAttributeNS(ANDROID,'android:name','com.lelloman.paravoidandroid.runtime.UpdateTriggerService')
+            service.setAttributeNS(ANDROID,'android:process',':paravoid_updates')
+            service.setAttributeNS(ANDROID,'android:exported','true')
+            service.setAttributeNS(ANDROID,'android:permission','')
+            def filter=document.createElement('intent-filter')
+            def action=document.createElement('action')
+            action.setAttributeNS(ANDROID,'android:name','com.lelloman.paravoidandroid.action.UPDATE_TRIGGER_V1')
+            filter.appendChild(action); service.appendChild(filter); app.appendChild(service)
+            def queries=document.getElementsByTagName('queries').item(0)
+            if(queries==null) { queries=document.createElement('queries'); document.documentElement.insertBefore(queries,app) }
+            localTriggerPackages.get().each { name ->
+                def node=document.createElement('package'); node.setAttributeNS(ANDROID,'android:name',name); queries.appendChild(node)
+            }
         }
         if (complete.get() && updatesEnabled.get()) {
             def restart=document.createElement('activity')

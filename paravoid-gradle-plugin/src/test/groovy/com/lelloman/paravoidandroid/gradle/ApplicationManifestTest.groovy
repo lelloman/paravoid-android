@@ -10,6 +10,32 @@ import static org.junit.Assert.*
 class ApplicationManifestTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder()
 
+    @Test void localTriggersAreOptInAndShellOwnedWithoutNetworkPush() {
+        def disabled=fixture(''); disabled.complete.set(true); disabled.updatesEnabled.set(true); disabled.rewrite()
+        assertFalse(disabled.outputManifest.get().asFile.text.contains('UpdateTriggerService'))
+        def task=fixture('', 'android:permission="example.PRIVATE"')
+        task.complete.set(true); task.updatesEnabled.set(true); task.localTriggerPackages.set(['com.store']); task.rewrite()
+        def factory=javax.xml.parsers.DocumentBuilderFactory.newInstance(); factory.namespaceAware=true
+        def doc=factory.newDocumentBuilder().parse(task.outputManifest.get().asFile)
+        def service=doc.getElementsByTagName('service').find { it.getAttributeNS(ApplicationManifestTask.ANDROID,'name').endsWith('UpdateTriggerService') }
+        assertEquals(':paravoid_updates',service.getAttributeNS(ApplicationManifestTask.ANDROID,'process'))
+        assertEquals('true',service.getAttributeNS(ApplicationManifestTask.ANDROID,'exported'))
+        assertTrue(service.hasAttributeNS(ApplicationManifestTask.ANDROID,'permission'))
+        assertEquals('',service.getAttributeNS(ApplicationManifestTask.ANDROID,'permission'))
+        assertFalse(task.outputManifest.get().asFile.text.contains('PushForegroundService'))
+        assertTrue(task.outputManifest.get().asFile.text.contains('UPDATE_TRIGGER_V1'))
+        assertTrue(task.outputManifest.get().asFile.text.contains('com.store'))
+    }
+    @Test void localTrustIsCanonicalAndDoesNotChangeDefaults() {
+        def updates=ProjectBuilder.builder().withProjectDir(temporary.newFolder()).build().objects.newInstance(ParavoidApplicationExtension).updates
+        assertFalse(updates.configuration().containsKey('localTriggerCallers'))
+        updates.localTriggers.trustedCallers.set(['com.z':['B'*64,'b'*64], 'com.a':['a'*64]])
+        def value=updates.configuration()
+        assertEquals('{"com.a":["'+'a'*64+'"],"com.z":["'+'b'*64+'"]}',value.localTriggerCallers)
+        assertEquals('false',value.pushEnabled)
+        updates.localTriggers.trustedCallers.set(['bad':['a'*64]])
+        assertThrows(GradleException) { updates.configuration() }
+    }
     @Test void backgroundPushAddsPrivateTypedServiceOnlyWhenEnabled() {
         def disabled=fixture(''); disabled.complete.set(true); disabled.updatesEnabled.set(true); disabled.pushEnabled.set(true); disabled.rewrite()
         assertFalse(disabled.outputManifest.get().asFile.text.contains('PushForegroundService'))

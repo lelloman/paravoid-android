@@ -15,3 +15,5 @@ includeBuild('paravoid-work')
 include ':paravoid-recovery-api'
 
 include ':paravoid-update-api'
+
+include ':paravoid-update-ipc'

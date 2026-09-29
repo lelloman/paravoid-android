@@ -31,6 +31,75 @@ public final class UpdateEngineTest {
                 s.cached(); e.checkNow(); worker.submit(()->{}).get(); check(s.life.stages==1);
             } finally { worker.shutdownNow(); check(worker.awaitTermination(5,TimeUnit.SECONDS)); }
         }
+        localHints();
+        localHintsPreserveRetries();
         System.out.println("PASS update engine: push scope, duplicate suppression, consent, explicit update, check-only, disabled push");
     }
+    static void localHints() throws Exception {
+        try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {
+            ExecutorService worker=Executors.newSingleThreadExecutor();
+            try {
+                java.util.concurrent.atomic.AtomicReference<UpdateEngine.Work> work=new java.util.concurrent.atomic.AtomicReference<>();
+                java.io.File state=s.f.dir.resolve("local-engine").toFile();
+                UpdateEngine e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                    UpdateSchedule.defaults().preferences(true,false,false),null,false,work::set);
+                e.configurePush(false,false);
+                e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                check(work.get().kind==UpdateEngine.Kind.CHECK && !work.get().explicit);
+                long firstDue=work.get().dueSeconds;
+                e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                check(work.get().dueSeconds==firstDue);
+                s.head(); e.runJob(false,1,()->{}); worker.submit(()->{}).get();
+                check(s.f.requests==1 && s.life.stages==0 && e.current().available!=null);
+                e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                long due=work.get().dueSeconds; check(due==s.clock.wall+60);
+                // Reload preserves a throttled hint; more hints cannot move its deadline.
+                e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                    UpdateSchedule.defaults(),null,false,work::set);
+                e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                check(work.get().dueSeconds==due);
+                e.runJob(false,2,()->{}); worker.submit(()->{}).get(); check(s.f.requests==1);
+                e.schedule(UpdateSchedule.defaults().preferences(false,true,false)); worker.submit(()->{}).get();
+                e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                check(work.get().kind==UpdateEngine.Kind.NONE);
+                e.schedule(UpdateSchedule.defaults().preferences(true,true,false)); worker.submit(()->{}).get();
+                s.clock.wall=due; e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                s.cached(); e.runJob(false,3,()->{}); worker.submit(()->{}).get();
+                check(work.get().kind==UpdateEngine.Kind.UPDATE && !work.get().explicit);
+                // A hint during pending download survives without replacing update intent.
+                e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                check(work.get().kind==UpdateEngine.Kind.UPDATE);
+                s.cached(); s.f.responses.add(new Fake(200,ARCHIVE));
+                e.runJob(true,4,()->{}); worker.submit(()->{}).get();
+                check(s.life.stages==1 && work.get().kind==UpdateEngine.Kind.CHECK);
+                check(work.get().dueSeconds>=due+60);
+            } finally { worker.shutdownNow(); worker.awaitTermination(5,TimeUnit.SECONDS); }
+        }
+    }
+
+    static void localHintsPreserveRetries() throws Exception {
+        try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {
+            ExecutorService worker=Executors.newSingleThreadExecutor();
+            try {
+                java.util.concurrent.atomic.AtomicReference<UpdateEngine.Work> work=new java.util.concurrent.atomic.AtomicReference<>();
+                java.io.File state=s.f.dir.resolve("local-retry").toFile();
+                UpdateEngine e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                    UpdateSchedule.defaults().preferences(true,false,false),null,false,work::set);
+                e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                s.f.responses.add(new Fake(503,new byte[0]));
+                e.runJob(false,1,()->{}); worker.submit(()->{}).get();
+                long due=work.get().dueSeconds;
+                check(e.current().activity==DeliveryController.Activity.WAITING_TO_RETRY);
+                e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                check(work.get().dueSeconds==due && work.get().kind==UpdateEngine.Kind.CHECK);
+                check(java.nio.file.Files.readString(state.toPath().resolve("operations.properties")).contains("attempts=1"));
+                java.nio.file.Files.write(state.toPath().resolve("provider-running"),new byte[]{1});
+                e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                    UpdateSchedule.defaults(),null,true,work::set);
+                e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                check("PROVIDER_INTERRUPTED".equals(e.current().errorCode) && work.get().kind==UpdateEngine.Kind.NONE);
+            } finally { worker.shutdownNow(); worker.awaitTermination(5,TimeUnit.SECONDS); }
+        }
+    }
+
 }

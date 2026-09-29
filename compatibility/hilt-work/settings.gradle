@@ -20,3 +20,6 @@ project(':paravoid-recovery-api').projectDir = file('../../paravoid-recovery-api
 
 include ':paravoid-update-api'
 project(':paravoid-update-api').projectDir = file('../../paravoid-update-api')
+
+include ':paravoid-update-ipc'
+project(':paravoid-update-ipc').projectDir = file('../../paravoid-update-ipc')

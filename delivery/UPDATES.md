@@ -247,3 +247,52 @@ credential, release version or signature is accepted from the hint itself.
 A store adapter implements this protocol independently of Paravoid. A notification bridge
 may subscribe to the same authenticated stream and forward hints using its chosen provider;
 registration/addressing/retry guarantees of that provider belong to the integration.
+
+## Distributor-triggered local checks
+
+An installed distributor can share one server connection across many apps by calling each
+shell's authenticated Binder endpoint. No app-owned WebSocket or background service is
+required. Complete shells opt in separately from `updates.push`:
+
+```groovy
+updates {
+    enabled = true
+    // Existing server and trust-policy configuration still applies.
+    localTriggers {
+        trustedCallers = [
+            'com.lelloman.store': ['<64 hex characters: release certificate SHA-256>']
+        ]
+    }
+    schedule { checks = true; downloads = true }
+}
+```
+
+Multiple distributor packages and multiple certificate fingerprints per package are allowed.
+The plugin normalizes fingerprints and emits deterministic `localTriggerCallers` policy JSON.
+Omitting the map leaves the endpoint absent. This APK-pinned trust cannot be changed by a VPK.
+For signing rotation, Android's verified certificate history is accepted. Shared-UID callers
+are unsupported, including cases where package visibility hides their siblings.
+
+The exported `UpdateTriggerService` runs in `:paravoid_updates`, bypassing payload startup.
+Its v1 AIDL contract is published in the `paravoid-update-ipc` Android library (minimum API 24
+for distributor clients; complete shells still require API 30). Discover the action
+`com.lelloman.paravoidandroid.action.UPDATE_TRIGGER_V1`, then bind to an explicit component.
+Declare that action in the distributor's package visibility queries. Call
+`IUpdateTriggerV1.notifyUpdatesChanged(callback)`; both the method and callback are one-way.
+The callback reports QUEUED=1, COALESCED=2, REJECTED=3 or UNAVAILABLE=4. Successful acceptance
+means an ingress job was persisted, not that a release exists or was installed.
+
+The endpoint reads the real Binder caller UID and verifies its package and certificate
+before initializing update providers. It accepts no credentials, URLs or install commands.
+It uses `jobIdBase + 4`; the existing 0..3 job slots retain their purposes. JobScheduler's
+namespace is used on API 34+, with numeric IDs on earlier supported versions.
+
+Automatic-check and download preferences, policy hooks, network restrictions and restart
+preferences remain authoritative. Hints coalesce, persist across process death, and permit
+at most one new hint-triggered check per minute. Hints received during work retain a follow-up
+without replacing explicit intent or retry backoff. An interrupted custom provider still
+requires an explicit retry. Android controls actual background execution timing. Diagnostics
+use the `ParavoidTrigger` tag plus the existing shell update status and operation record.
+
+Distributor/client integration and real signed VPK acceptance are covered by the fixture in
+`compatibility/local-triggers`; see its README for reproducible commands and test limits.

@@ -7,12 +7,13 @@ import java.util.*;
 public final class UpdateConfiguration {
     private UpdateConfiguration() {}
     public static void validate(Map<String,String> values) throws ContractException {
-        Set<String> keys = new HashSet<>(Arrays.asList("mode", "metadataUrl", "payloadUrlTemplate",
+        Set<String> keys = new HashSet<>(Arrays.asList("localTriggerCallers", "mode", "metadataUrl", "payloadUrlTemplate",
             "checkerClass", "updaterClass", "policyClass", "intervalSeconds", "flexSeconds", "jobIdBase",
             "checks", "downloads", "checkUnmetered", "downloadUnmetered", "charging", "batteryNotLow",
             "deviceIdle", "retrySeconds", "maxRetrySeconds", "maxRetries", "pushEnabled", "pushBackgroundConnection", "pushWebSocketUrl", "pushTransportClass", "pushAuthenticationClass", "updateBehavior", "pushComponentClasses", "restartBehavior"));
         try {
             if (!keys.containsAll(values.keySet())) throw new IllegalArgumentException();
+            LocalTriggerCallers.read(values.get("localTriggerCallers"));
             String mode=values.getOrDefault("mode","api");
             if (!mode.equals("api") && !mode.equals("feed")) throw new IllegalArgumentException();
             for (String key : Arrays.asList("checkerClass","updaterClass","policyClass","pushTransportClass","pushAuthenticationClass")) {

@@ -7,9 +7,11 @@ import org.gradle.api.Action
 import javax.inject.Inject
 
 abstract class ParavoidUpdatesExtension {
+    final ParavoidLocalTriggersExtension localTriggers
     final ParavoidUpdatePushExtension push
     final ParavoidUpdateScheduleExtension schedule
     @Inject ParavoidUpdatesExtension(ObjectFactory objects) {
+        localTriggers=objects.newInstance(ParavoidLocalTriggersExtension)
         push=objects.newInstance(ParavoidUpdatePushExtension)
         schedule=objects.newInstance(ParavoidUpdateScheduleExtension)
         restartBehavior.convention('manual'); mode.convention('api'); metadataUrl.convention(''); payloadUrlTemplate.convention('')
@@ -17,6 +19,7 @@ abstract class ParavoidUpdatesExtension {
         enabled.convention(false); baseUrl.convention(''); channel.convention('stable')
         authentication.convention('public'); debugHttpAllowed.convention(false)
     }
+    void localTriggers(Action<ParavoidLocalTriggersExtension> action) { action.execute(localTriggers) }
     void push(Action<? super ParavoidUpdatePushExtension> action) { action.execute(push) }
     void schedule(Action<? super ParavoidUpdateScheduleExtension> action) { action.execute(schedule) }
     Map<String,String> configuration() {
@@ -26,6 +29,7 @@ abstract class ParavoidUpdatesExtension {
         values.putAll([pushEnabled:push.enabled.get().toString(), pushBackgroundConnection:push.backgroundConnection.get().toString(), pushWebSocketUrl:push.webSocketUrl.get(),
             pushTransportClass:push.transportClass.get(),pushAuthenticationClass:push.authenticationClass.get(),
             pushComponentClasses:push.componentClasses.get().join(';'),updateBehavior:push.enabled.get() ? push.behavior.get() : 'automatic'])
+        if(!localTriggers.trustedCallers.get().isEmpty()) values.localTriggerCallers=localTriggers.configuration()
         values
     }
     abstract Property<String> getRestartBehavior()

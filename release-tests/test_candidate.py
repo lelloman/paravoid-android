@@ -33,7 +33,7 @@ class CandidateTests(unittest.TestCase):
                 <groupId>{group}</groupId><artifactId>{name}</artifactId><version>{c['version']}</version>
                 <licenses><license><name>{c['licenseName']}</name><url>{c['licenseUrl']}</url></license></licenses></project>''')
             if name in MODULES:
-                extension = '.aar' if name in ('paravoid-api', 'paravoid-runtime') else '.jar'
+                extension = '.aar' if name in ('paravoid-api', 'paravoid-runtime', 'paravoid-update-ipc') else '.jar'
                 for suffix in (extension, '-sources.jar'):
                     with zipfile.ZipFile(str(stem) + suffix, 'w') as z:
                         z.writestr('fixture.txt', 'test')
@@ -71,7 +71,7 @@ class CandidateTests(unittest.TestCase):
         self.fixture()
         result = audit(decisions(), self.repo)
         self.assertEqual([], result['failures'])
-        self.assertEqual(26, len(result['artifacts']))
+        self.assertEqual(32, len(result['artifacts']))
         self.assertTrue(all(len(a['sha256']) == 64 for a in result['artifacts']))
 
     def test_missing_metadata_and_artifacts(self):

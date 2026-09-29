@@ -1,0 +1,35 @@
+plugins { id 'com.lelloman.paravoid' }
+android {
+    namespace 'com.lelloman.paravoidfixture.trigger'
+    compileSdk 36
+    defaultConfig {
+        applicationId providers.gradleProperty('fixturePackage').get()
+        minSdk 30; targetSdk 36; versionCode 1; versionName '1'
+        resValue 'string', 'generation', providers.gradleProperty('generation').getOrElse('one')
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
+}
+paravoid {
+    packaging = 'complete'
+    controlsLauncher = true
+    payloadVersion = providers.gradleProperty('payloadVersion').map { Long.valueOf(it) }.getOrElse(1L)
+    if(providers.gradleProperty('baseline').present) baselineDirectory = layout.projectDirectory.dir('build/accepted')
+    updates {
+        enabled = true
+        baseUrl = 'http://127.0.0.1:18765/'
+        debugHttpAllowed = true
+        authentication = 'public'
+        trustPolicyFile = layout.projectDirectory.file('build/keys/trust.json')
+        schedule {
+            checks = !providers.gradleProperty('checksDisabled').present
+            downloads = !providers.gradleProperty('downloadsDisabled').present
+            downloadUnmetered = false
+        }
+        localTriggers {
+            trustedCallers = [(providers.gradleProperty('callerPackage').get()):[providers.gradleProperty('callerPin').get()]]
+        }
+        restartBehavior = 'automatic'
+    }
+    signing { keyId = 'release'; privateKeyFile = layout.projectDirectory.file('build/keys/release.der') }
+}
+dependencies { implementation project(':paravoid-runtime') }

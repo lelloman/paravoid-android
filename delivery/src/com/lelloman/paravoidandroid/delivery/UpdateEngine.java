@@ -52,6 +52,8 @@ public final class UpdateEngine implements UpdateControl {
     private boolean pushEnabled, promptUpdates;
     private ExpectedArchive declined;
     private long lastPush;
+    private boolean localHintPending;
+    private long lastLocalCheck;
     private final LinkedHashSet<String> pushEvents=new LinkedHashSet<>();
     /** APK-pinned configuration, called before accepting transport events. */
     public void configurePush(boolean enabled, boolean prompt) {
@@ -72,6 +74,24 @@ public final class UpdateEngine implements UpdateControl {
             if(persist()) publish(true);
             } finally { callbacks.execute(completion); }
         });
+    }
+    /** Authenticated local IPC, independent of per-app network push wiring. */
+    public void localHint(Consumer<Boolean> completion) {
+        worker.execute(()-> {
+            if(!schedule.checks || "PROVIDER_INTERRUPTED".equals(error) || phase==DeliveryController.Activity.ERROR) {
+                callbacks.execute(()->completion.accept(true)); return;
+            }
+            localHintPending=true;
+            armLocalHint();
+            boolean saved=persist();
+            if(saved) publish(true);
+            callbacks.execute(()->completion.accept(saved));
+        });
+    }
+    private void armLocalHint() {
+        if(!localHintPending || !schedule.checks || kind!=Kind.NONE || phase==DeliveryController.Activity.ERROR) return;
+        kind=Kind.CHECK; explicit=false; target=null; attempts=0;
+        due=Math.max(clock.unixSeconds(),lastLocalCheck==0 ? 0 : lastLocalCheck+60);
     }
     @Override public void dismiss(ExpectedArchive offer) {
         worker.execute(()-> { declined=offer; persist(); publish(false); });
@@ -98,7 +118,7 @@ public final class UpdateEngine implements UpdateControl {
             long now=System.nanoTime();
             if(staging || now-lastProgressNanos>=250_000_000L) { lastProgressNanos=now; publish(false); }
         });
-        save(); publish(true);
+        armLocalHint(); save(); publish(true);
     }
     public DeliveryController.Snapshot current() { return snapshot; }
     @Override public void listen(DeliveryController.Listener listener) {
@@ -147,7 +167,7 @@ public final class UpdateEngine implements UpdateControl {
     @Override public void cancelDownload() {
         if(staging) return;
         cancellation.incrementAndGet(); client.cancelDownload();
-        worker.execute(()-> { if(phase==DeliveryController.Activity.READY) return; kind=Kind.NONE; target=null; phase=DeliveryController.Activity.CANCELLED; error=null; persist(); publish(true); });
+        worker.execute(()-> { if(phase==DeliveryController.Activity.READY) return; kind=Kind.NONE; localHintPending=false; target=null; phase=DeliveryController.Activity.CANCELLED; error=null; persist(); publish(true); });
     }
     @Override public void preferences(DeliveryPreferences value) {
         schedule(schedule.preferences(value.automaticChecks,value.automaticDownloads,value.unmeteredOnly));
@@ -159,9 +179,10 @@ public final class UpdateEngine implements UpdateControl {
     }
     private void setSchedule(UpdateSchedule value) {
         schedule=value;
+        if(!value.checks) localHintPending=false;
         nextCheck=lastCheck==0 ? 0 : lastCheck+schedule.intervalSeconds;
         if(!explicit && (!schedule.checks || kind==Kind.UPDATE && !schedule.downloads)) kind=Kind.NONE;
-        persist(); publish(true);
+        armLocalHint(); persist(); publish(true);
     }
     @Override public void retainedPrevious(int count) {
         worker.execute(()-> { try { lifecycle.setRetainedPrevious(count); } catch(ContractException failed) { fail(failed.code.name()); } publish(false); });
@@ -179,6 +200,7 @@ public final class UpdateEngine implements UpdateControl {
                 UpdatePolicy.Decision decision=Objects.requireNonNull(policy.evaluate(new UpdatePolicy.Context(kind==Kind.UPDATE,
                     clock.unixSeconds(),lastCheck,error,schedule.policyData)));
                 if(decision.kind==UpdatePolicy.Decision.Kind.SKIP) {
+                    localHintPending=false;
                     if(kind==Kind.CHECK) nextCheck=clock.unixSeconds()+schedule.intervalSeconds;
                     kind=Kind.NONE; phase=DeliveryController.Activity.IDLE; return;
                 }
@@ -187,6 +209,7 @@ public final class UpdateEngine implements UpdateControl {
                 }
             }
             if(attempts>schedule.maxRetries) { fail("RETRY_EXHAUSTED"); return; }
+            if(kind==Kind.CHECK && localHintPending) { localHintPending=false; lastLocalCheck=clock.unixSeconds(); }
             attempts++; lastKind=kind; lastTarget=target; lastExplicit=explicit;
             phase=DeliveryController.Activity.CHECKING; error=null; bytes=0; total=0;
             if(kind==Kind.CHECK) { lastCheck=clock.unixSeconds(); nextCheck=lastCheck+schedule.intervalSeconds; }
@@ -225,7 +248,7 @@ public final class UpdateEngine implements UpdateControl {
         } finally {
             staging=false; runningJob=0; stoppedJobs.remove(job);
             try { Files.deleteIfExists(file.resolveSibling("provider-running")); } catch(IOException failure) { fail("PREFERENCES_IO"); }
-            persist(); publish(true);
+            armLocalHint(); persist(); publish(true);
         }
     }
     private void fail(String code) { kind=Kind.NONE; error=code; phase=DeliveryController.Activity.ERROR; }
@@ -252,6 +275,7 @@ public final class UpdateEngine implements UpdateControl {
         p.setProperty("kind",kind.name()); p.setProperty("explicit",""+explicit); p.setProperty("lastKind",lastKind.name()); p.setProperty("lastExplicit",""+lastExplicit);
         p.setProperty("due",""+due); p.setProperty("nextCheck",""+nextCheck); p.setProperty("lastCheck",""+lastCheck); p.setProperty("attempts",""+attempts);
         p.setProperty("phase",phase.name()); if(error!=null) p.setProperty("error",error);
+        p.setProperty("localHintPending",""+localHintPending); p.setProperty("lastLocalCheck",""+lastLocalCheck);
         p.setProperty("pushEvents",String.join(",",pushEvents)); p.setProperty("lastPush",""+lastPush); offer(p,"declined.",declined);
         offer(p,"target.",target); offer(p,"lastTarget.",lastTarget); offer(p,"available.",available);
         PendingRetry.writeRecord(file,p);
@@ -268,6 +292,9 @@ public final class UpdateEngine implements UpdateControl {
             due=Long.parseLong(p.getProperty("due")); nextCheck=Long.parseLong(p.getProperty("nextCheck")); lastCheck=Long.parseLong(p.getProperty("lastCheck"));
             attempts=Integer.parseInt(p.getProperty("attempts")); partition=p.getProperty("partition"); phase=DeliveryController.Activity.valueOf(p.getProperty("phase")); error=p.getProperty("error");
             if(due<0 || nextCheck<0 || lastCheck<0 || attempts<0 || attempts>11) throw new IllegalArgumentException();
+            localHintPending=Boolean.parseBoolean(p.getProperty("localHintPending","false"));
+            lastLocalCheck=Long.parseLong(p.getProperty("lastLocalCheck","0"));
+            if(lastLocalCheck<0) throw new IllegalArgumentException();
             declined=offer(p,"declined."); lastPush=Long.parseLong(p.getProperty("lastPush","0"));
             String events=p.getProperty("pushEvents",""); if(!events.isEmpty()) pushEvents.addAll(Arrays.asList(events.split(",")));
             target=offer(p,"target."); lastTarget=offer(p,"lastTarget."); available=offer(p,"available.");

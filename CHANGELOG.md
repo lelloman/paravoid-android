@@ -2,7 +2,7 @@
 
 This file records changes that downstream Android apps may need to act on when
 updating their Paravoid plugin and runtime. Released versions are listed newest
-first. The seven published modules share one version. Entries under **Unreleased**
+first. The published modules share one version. Entries under **Unreleased**
 are development changes and are not an available Maven release.
 Add a concise Unreleased entry for every downstream-visible change. Before a
 version tag, move those entries into a dated `## [VERSION] - YYYY-MM-DD` section;
@@ -14,6 +14,13 @@ these entries into a dated version section and document its exact upgrade path.
 ## [Unreleased]
 
 ### Added
+
+- Opt-in authenticated local update triggers let a distributor such as LelloStore
+  share one server connection across installed complete shells. The new
+  `paravoid-update-ipc` module provides the Binder contract; shells verify the
+  caller's package and signing certificate before scheduling a signed update
+  check. Each app's check, download and restart preferences still apply, and no
+  per-app WebSocket is required. See [configuration and protocol](delivery/UPDATES.md#distributor-triggered-local-checks).
 
 - Opt-in complete-profile crash recovery in a separate shell process, durable
   next-launch routing, crash details and explicit repair download/restart. Choose
@@ -37,6 +44,15 @@ these entries into a dated version section and document its exact upgrade path.
   `paravoid { controlsLauncher = true }` to keep that separate entry.
 
 ### Migration
+
+- Local update triggers are disabled by default. To adopt them, upgrade the
+  Paravoid plugin/runtime, configure `updates.localTriggers.trustedCallers` with
+  the distributor package and certificate SHA-256 fingerprints, and build and
+  distribute a new shell APK. A VPK alone cannot enable the endpoint or change
+  its trusted callers. The distributor must also implement the relay; LelloStore
+  forwards socket/reconnect events and polling/manual checks. Enable automatic
+  checks and, if desired, downloads in each app. Android scheduling and hint
+  throttling mean a trigger does not guarantee an immediate download or restart.
 
 - Crash recovery is disabled by default. Enabling it or changing a custom provider
   requires a new shell APK; compatible app repairs can then ship as VPKs.

@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 import xml.etree.ElementTree as ET
 import zipfile
 
-MODULES = ('paravoid-update-api', 'paravoid-recovery-api', 'paravoid-api', 'paravoid-contract', 'paravoid-runtime',
+MODULES = ('paravoid-update-ipc', 'paravoid-update-api', 'paravoid-recovery-api', 'paravoid-api', 'paravoid-contract', 'paravoid-runtime',
            'paravoid-gradle-plugin', 'paravoid-hilt', 'paravoid-work')
 MARKERS = ('com.lelloman.paravoid', 'com.lelloman.paravoid.module',
            'com.lelloman.paravoid.shell', 'com.lelloman.paravoid.hilt',
@@ -75,7 +75,7 @@ def audit(config, repository):
             failures.append(f'Missing external signature: {path.name}.asc')
         return True
 
-    coordinates = [('com.lelloman.paravoid', name, 'aar' if name in ('paravoid-api', 'paravoid-runtime') else 'jar') for name in MODULES]
+    coordinates = [('com.lelloman.paravoid', name, 'aar' if name in ('paravoid-api', 'paravoid-runtime', 'paravoid-update-ipc') else 'jar') for name in MODULES]
     coordinates += [(name, name + '.gradle.plugin', 'pom') for name in MARKERS]
     for group, artifact, packaging in coordinates:
         directory = repository / group.replace('.', '/') / artifact / version

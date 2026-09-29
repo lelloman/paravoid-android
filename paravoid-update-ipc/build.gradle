@@ -1,0 +1,14 @@
+plugins { id 'com.android.library' }
+apply from: '../gradle/local-publication.gradle'
+android {
+    namespace 'com.lelloman.paravoidandroid.updates.ipc'
+    compileSdk 36
+    defaultConfig { minSdk 24 }
+    buildFeatures { aidl true }
+    publishing { singleVariant('release') { withSourcesJar() } }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+afterEvaluate { publishing.publications.create('release', MavenPublication) { from components.release } }
