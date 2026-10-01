@@ -202,11 +202,13 @@ public final class DeliveryClient {
             active = cancel;
         }
         Path partial = null;
+        Path reconstructed = null;
         boolean handedOff = false;
         DeliveryLocks.Claim lock = null;
         try {
             lock = DeliveryLocks.tryAcquire(directory.resolve("transfer.lock"));
             if (lock == null) throw new ContractException(ContractException.Code.UNAVAILABLE, "Another process is checking updates");
+            Files.deleteIfExists(directory.resolve("delta-target.vpk")); // Interrupted reconstruction, never a staged generation.
             current(captured, cancel); checkpoint.check();
             // Only the current transfer owner may lift suppression. A stale/busy
             // controller cannot clear another process's authentication failure.
@@ -218,6 +220,11 @@ public final class DeliveryClient {
                 throw new ContractException(ContractException.Code.CREDENTIAL_UNAVAILABLE, "Update access unavailable");
             HttpTransport transport = captured.transport;
             boolean feed="feed".equals(policy.updates.get("mode"));
+            ExpectedArchive baseIdentity = null;
+            if (!feed && updater == null && recoveryProvider == null) {
+                try { baseIdentity = lifecycle.deltaBaseIdentity(); }
+                catch (ContractException unavailable) { /* Optional byte source; full delivery remains available. */ }
+            }
             URI headUri = feed ? URI.create(policy.updates.get("metadataUrl")) : transport.headUri(scope.applicationId, scope.shellContractId, scope.channel, scope.sdk, scope.abis, scope.runtimeAbi);
             HttpTransport headTransport=feed ? endpointTransport(headUri,captured) : transport;
             UpdateRequest request=new UpdateRequest(scope.applicationId,scope.shellContractId,scope.channel,policy.baseUrl,
@@ -226,7 +233,8 @@ public final class DeliveryClient {
             RecoveryRequest recoveryRequest = new RecoveryRequest(scope.applicationId, scope.shellContractId, scope.channel,
                     policy.baseUrl, scope.sdk, scope.runtimeAbi, scope.abis, directory.resolve("provider").toFile(), captured.bearer);
             HttpTransport.HeadBytes response;
-            if (checker == null && recoveryProvider == null) response = headTransport.head(headUri, cached == null ? null : "\"" + cached.head.envelopeSha256 + "\"", cancel);
+            if (checker == null && recoveryProvider == null) response = headTransport.head(headUri, cached == null ? null : "\"" + cached.head.envelopeSha256 + "\"", cancel,
+                baseIdentity == null ? null : baseIdentity.archiveSha256);
             else {
                 Files.createDirectories(recoveryRequest.privateDirectory.toPath());
                 try { response = new HttpTransport.HeadBytes(false, checker != null ? checker.check(request, cancel) : recoveryProvider.check(recoveryRequest, cancel), null); }
@@ -265,7 +273,11 @@ public final class DeliveryClient {
                 downloading = true;
                 current(captured, cancel); checkpoint.check();
                 progress.changed("DOWNLOADING", 0, expected.archiveSize);
-                if (updater == null && recoveryProvider == null) archiveTransport.download(archiveUri, partial, expected.archiveSize, expected.archiveSha256, cancel,
+                if (!feed && updater == null && recoveryProvider == null)
+                    reconstructed = tryDelta(scope, head, expected, baseIdentity, reservation, transport, captured, cancel, checkpoint);
+                if (reconstructed != null) {
+                    Files.deleteIfExists(partial); partial = reconstructed;
+                } else if (updater == null && recoveryProvider == null) archiveTransport.download(archiveUri, partial, expected.archiveSize, expected.archiveSha256, cancel,
                     bytes -> progress.changed("DOWNLOADING", bytes, expected.archiveSize));
                 else {
                     if (Files.isSymbolicLink(partial)) throw new HttpTransport.Failure("unsafe-partial");
@@ -317,11 +329,59 @@ public final class DeliveryClient {
                 try {
                     if (partial != null && (handedOff || session != captured
                             || !captured.partition.equals(readMarker("credential-scope")))) Files.deleteIfExists(partial);
+                    if (reconstructed != null) Files.deleteIfExists(reconstructed);
                 } finally {
                     try { if (lock != null) lock.close(); }
                     finally { if (active == cancel) active = null; }
                 }
             }
+        }
+    }
+
+    private Path tryDelta(RequestScope scope, VerifiedHead head, ExpectedArchive target, ExpectedArchive identity,
+            DownloadReservation reservation, HttpTransport transport, Session captured,
+            HttpTransport.Cancellation cancel, Checkpoint checkpoint) throws IOException, ContractException {
+        if (identity == null || !target.equals(head.release)) return null;
+        ExpectedDelta chosen = null;
+        for (ExpectedDelta delta : head.release.deltas) {
+            // Compare actual signed wire sizes; a patch must save at least 20 percent.
+            if (DeltaPatch.ALGORITHM.equals(delta.algorithm) && delta.baseArchiveSha256.equals(identity.archiveSha256)
+                    && delta.baseArchiveSize == identity.archiveSize
+                    && delta.patchSize <= target.archiveSize-(target.archiveSize+4)/5
+                    && (chosen == null || delta.patchSize < chosen.patchSize)) chosen = delta;
+        }
+        if (chosen == null) return null;
+        final ExpectedDelta delta = chosen;
+        URI uri = transport.deltaUri(scope.applicationId, target.releaseId, delta.baseArchiveSha256);
+        Path patch = transport.partial(directory, policy.shellContractId+":"+captured.credential.id+":delta:"+target.archiveSha256,
+            uri, delta.patchSize, delta.patchSha256);
+        Path output = directory.resolve("delta-target.vpk");
+        boolean complete = false;
+        try (DeltaBase base = reservation.openDeltaBase(delta.baseArchiveSha256)) {
+            if (base == null) return null;
+            progress.changed("DOWNLOADING", 0, delta.patchSize);
+            transport.downloadDelta(uri, patch, delta.patchSize, delta.patchSha256, cancel,
+                bytes -> progress.changed("DOWNLOADING", bytes, delta.patchSize));
+            current(captured, cancel); checkpoint.check();
+            progress.changed("RECONSTRUCTING", 0, target.archiveSize);
+            DeltaPatch.apply(patch.toFile(), base, output.toFile(), delta, target, cancel::check);
+            complete = true; return output;
+        } catch (IOException | ContractException failure) {
+            complete = false;
+            // Cancellation and authentication failures never trigger another transfer.
+            cancel.check(); current(captured, cancel); checkpoint.check(); validCredential(captured.credential);
+            if (failure instanceof HttpTransport.Failure) {
+                int status = ((HttpTransport.Failure)failure).status;
+                if (status == 401 || status == 403) throw failure;
+            }
+            if (failure instanceof ContractException) {
+                ContractException.Code code = ((ContractException)failure).code;
+                if (code != ContractException.Code.IO && code != ContractException.Code.INTEGRITY) throw failure;
+            }
+            return null; // Same authenticated target, complete VPK route; no delta chains.
+        } finally {
+            Files.deleteIfExists(patch);
+            if (!complete) Files.deleteIfExists(output);
         }
     }
 

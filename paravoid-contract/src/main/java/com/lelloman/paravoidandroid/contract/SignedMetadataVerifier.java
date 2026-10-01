@@ -34,11 +34,7 @@ public final class SignedMetadataVerifier implements MetadataVerifier {
             case "available":
                 parsed = HeadStatus.AVAILABLE;
                 Map<String,Object> r = object(b.get("release"));
-                fields(r, "releaseId payloadVersion manifestSha256 archiveSha256 archiveSize");
-                long size = number(r, "archiveSize", 1);
-                if (size > Protocol.MAX_ARCHIVE_BYTES) throw fail(LIMIT_EXCEEDED, "Archive byte limit");
-                release = new ExpectedArchive(identifier(r, "releaseId"), number(r, "payloadVersion", 1),
-                    hash(r, "manifestSha256"), hash(r, "archiveSha256"), size);
+                release = release(r);
                 break;
             case "no-compatible-release": parsed = HeadStatus.NO_COMPATIBLE_RELEASE; break;
             case "shell-update-required": parsed = HeadStatus.SHELL_UPDATE_REQUIRED; break;
@@ -73,16 +69,37 @@ public final class SignedMetadataVerifier implements MetadataVerifier {
             if(min>Integer.MAX_VALUE || max>Integer.MAX_VALUE || max!=0 && max<min) throw fail(MALFORMED,"Invalid SDK range");
             List<String> supported=abis(item.get("abis"));
             Map<String,Object> r=object(item.get("release"));
-            fields(r,"releaseId payloadVersion manifestSha256 archiveSha256 archiveSize");
-            long size=number(r,"archiveSize",1);
-            if(size>Protocol.MAX_ARCHIVE_BYTES) throw fail(LIMIT_EXCEEDED,"Archive byte limit");
-            ExpectedArchive candidate=new ExpectedArchive(identifier(r,"releaseId"),number(r,"payloadVersion",1),hash(r,"manifestSha256"),hash(r,"archiveSha256"),size);
+            ExpectedArchive candidate=release(r);
             if(scope.sdk<min || max!=0 && scope.sdk>max || !supported.isEmpty() && Collections.disjoint(scope.abis,supported)) continue;
             if(selected!=null && selected.payloadVersion==candidate.payloadVersion && !selected.equals(candidate)) throw fail(IDENTITY_CONFLICT,"Ambiguous feed release");
             if(selected==null || candidate.payloadVersion>selected.payloadVersion) selected=candidate;
         }
         HeadStatus parsed=selected!=null ? HeadStatus.AVAILABLE : status.equals("shell-update-required") ? HeadStatus.SHELL_UPDATE_REQUIRED : HeadStatus.NO_COMPATIBLE_RELEASE;
         return new VerifiedHead(scope,revision,issued,expires,parsed,selected,envelope.keyId,envelope.bodyBytes,bytes);
+    }
+
+    private static ExpectedArchive release(Map<String,Object> r) throws ContractException {
+        fields(r, "releaseId payloadVersion manifestSha256 archiveSha256 archiveSize" + (r.containsKey("deltas") ? " deltas" : ""));
+        long size = number(r, "archiveSize", 1);
+        if (size > Protocol.MAX_ARCHIVE_BYTES) throw fail(LIMIT_EXCEEDED, "Archive byte limit");
+        List<ExpectedDelta> deltas = new ArrayList<>();
+        if (r.containsKey("deltas")) {
+            if (!(r.get("deltas") instanceof List) || ((List<?>)r.get("deltas")).size() > 16)
+                throw fail(LIMIT_EXCEEDED, "Delta offer limit");
+            Set<String> identities = new HashSet<>();
+            for (Object entry : (List<?>)r.get("deltas")) {
+                Map<String,Object> d = object(entry);
+                fields(d, "algorithm baseArchiveSha256 baseArchiveSize patchSha256 patchSize");
+                String algorithm = identifier(d, "algorithm"), base = hash(d, "baseArchiveSha256");
+                long baseSize = number(d, "baseArchiveSize", 1), patchSize = number(d, "patchSize", 1);
+                if (baseSize > Protocol.MAX_ARCHIVE_BYTES || patchSize > Protocol.MAX_DELTA_BYTES)
+                    throw fail(LIMIT_EXCEEDED, "Delta byte limit");
+                if (!identities.add(algorithm + ":" + base)) throw fail(MALFORMED, "Duplicate delta offer");
+                deltas.add(new ExpectedDelta(algorithm, base, baseSize, hash(d, "patchSha256"), patchSize));
+            }
+        }
+        return new ExpectedArchive(identifier(r, "releaseId"), number(r, "payloadVersion", 1),
+            hash(r, "manifestSha256"), hash(r, "archiveSha256"), size, deltas);
     }
 
     @Override public VerifiedGrant verifyGrant(byte[] bytes, ShellPolicy policy) throws ContractException {

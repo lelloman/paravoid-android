@@ -33,6 +33,45 @@ public class CompleteVpkVerifierTest {
         assertEquals(release.shellContractId, next.shellContractId);
         assertNotEquals(release.identity.archiveSha256, next.identity.archiveSha256);
     }
+    @Test public void reconstructedSignedVpkPassesOrdinaryVerifierAndDeltaDoesNotAuthorizeIncompatibleContent() throws Exception {
+        File original = pack(components("A"), Collections.emptyMap());
+        ExpectedArchive baseIdentity = verifier.verifyEmbedded(original, f.policy, f.scope).identity;
+        for (boolean incompatible : Arrays.asList(false, true)) {
+            Map<String,Object> changes = new LinkedHashMap<>(); changes.put("payloadVersion", 2);
+            if (incompatible) changes.put("shellContractId", "f".repeat(64));
+            File target = pack(components("B"), changes);
+            byte[] targetBytes = Files.readAllBytes(target.toPath());
+            // Valid signed ZIP bytes, including an intentionally incompatible developer-signed release.
+            byte[] envelope;
+            try (ZipFile zip = new ZipFile(target)) { envelope = zip.getInputStream(zip.getEntry("release.json")).readAllBytes(); }
+            ExpectedArchive identity = new ExpectedArchive("a", 2, Digests.sha256(envelope), Digests.sha256(targetBytes), targetBytes.length);
+            byte[] control = rawDeflate(ByteBuffer.allocate(24).order(ByteOrder.LITTLE_ENDIAN).putLong(0).putLong(targetBytes.length).putLong(0).array());
+            byte[] difference = rawDeflate(new byte[0]), literal = rawDeflate(targetBytes);
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream(); bytes.write("DVPKD001".getBytes(StandardCharsets.US_ASCII));
+            bytes.write(ByteBuffer.allocate(24).order(ByteOrder.LITTLE_ENDIAN).putLong(control.length).putLong(difference.length).putLong(targetBytes.length).array());
+            bytes.write(control); bytes.write(difference); bytes.write(literal);
+            File patch = write(bytes.toByteArray()), reconstructed = new File(temp.getRoot(), incompatible ? "incompatible.vpk" : "reconstructed.vpk");
+            ExpectedDelta delta = new ExpectedDelta(DeltaPatch.ALGORITHM, baseIdentity.archiveSha256, original.length(), Digests.sha256(bytes.toByteArray()), patch.length());
+            try (RandomAccessFile source = new RandomAccessFile(original, "r")) {
+                DeltaBase base = new DeltaBase() {
+                    public ExpectedArchive identity() { return baseIdentity; }
+                    public int read(long position, byte[] buffer, int offset, int length) throws IOException { source.seek(position); return source.read(buffer, offset, length); }
+                    public void close() { }
+                };
+                DeltaPatch.apply(patch, base, reconstructed, delta, identity, () -> {});
+            }
+            assertArrayEquals(targetBytes, Files.readAllBytes(reconstructed.toPath()));
+            if (incompatible) assertThrows(ContractException.class, () -> verifier.verifyDownloaded(reconstructed, f.policy, f.scope, identity));
+            else assertEquals(identity, verifier.verifyDownloaded(reconstructed, f.policy, f.scope, identity).identity);
+        }
+    }
+    private static byte[] rawDeflate(byte[] bytes) throws IOException {
+        Deflater deflater = new Deflater(9, true);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try (DeflaterOutputStream stream = new DeflaterOutputStream(output, deflater)) { stream.write(bytes); }
+        finally { deflater.end(); }
+        return output.toByteArray();
+    }
     @Test public void signedInventoryStillRejectsUnknownMissingAndNoncontiguousRoles() throws Exception {
         Map<String,byte[]> c = components("A"); c.put("extra", new byte[]{1}); rejected(pack(c, Collections.emptyMap()));
         c = components("A"); c.remove("java-resources.jar"); rejected(pack(c, Collections.emptyMap()));

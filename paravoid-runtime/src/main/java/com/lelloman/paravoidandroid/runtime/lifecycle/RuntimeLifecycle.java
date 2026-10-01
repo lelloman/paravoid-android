@@ -74,6 +74,9 @@ public final class RuntimeLifecycle implements Lifecycle {
     @Override public AdmissionResult observeHead(VerifiedHead head, CredentialScope scope) throws ContractException {
         return admission.observeHead(head, scope);
     }
+    @Override public ExpectedArchive deltaBaseIdentity() throws ContractException {
+        return selection(SelectionJournal::deltaBaseIdentity);
+    }
     @Override public StageResult stageDownloaded(File archive, AdmissionId id) throws ContractException {
         ExpectedArchive expected = admission.resolve(id);
         // Direct callers already own a source archive: only the private copy and
@@ -89,6 +92,30 @@ public final class RuntimeLifecycle implements Lifecycle {
             if (!expected.equals(admission.resolve(id))) throw fail(Code.STALE_ADMISSION);
             return new DownloadReservation() {
                 private boolean staged;
+                private DeltaBase base;
+                @Override public DeltaBase openDeltaBase(String hash) throws ContractException {
+                    claim.check();
+                    if (staged || base != null) throw fail(Code.UNAVAILABLE);
+                    if (hash == null || !hash.matches("[0-9a-f]{64}")) throw fail(Code.MALFORMED);
+                    base = selection(j -> {
+                        SelectionJournal.Generation generation = j.deltaBase(hash);
+                        if (generation == null) return null;
+                        Path path = root.resolve("generations").resolve(generation.directory).resolve("archive.vpk");
+                        // Open while cleanup/selection is excluded. On Android/Linux this descriptor
+                        // remains valid after unlink; it is not a process execution lease.
+                        java.nio.channels.FileChannel channel = java.nio.channels.FileChannel.open(path,
+                            StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
+                        return new DeltaBase() {
+                            public ExpectedArchive identity() { return generation.identity; }
+                            public int read(long position, byte[] bytes, int offset, int length) throws IOException {
+                                if (position < 0) throw new IOException("Invalid base position");
+                                return channel.read(java.nio.ByteBuffer.wrap(bytes, offset, length), position);
+                            }
+                            public void close() throws IOException { channel.close(); }
+                        };
+                    });
+                    return base;
+                }
                 @Override public StageResult stage(File archive) throws ContractException {
                     claim.check();
                     if (staged) throw fail(Code.UNAVAILABLE);
@@ -96,7 +123,11 @@ public final class RuntimeLifecycle implements Lifecycle {
                     if (!expected.equals(admission.resolve(id))) throw fail(Code.STALE_ADMISSION);
                     return stageReserved(archive, id, expected);
                 }
-                @Override public void close() throws ContractException { claim.close(); }
+                @Override public void close() throws ContractException {
+                    try { if (base != null) base.close(); }
+                    catch (IOException failure) { throw fail(Code.IO); }
+                    finally { claim.close(); }
+                }
             };
         } catch (ContractException | RuntimeException failure) {
             try { claim.close(); } catch (ContractException closeFailure) { failure.addSuppressed(closeFailure); }

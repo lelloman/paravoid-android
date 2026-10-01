@@ -12,6 +12,32 @@ public class SignedMetadataVerifierTest {
     static MetadataTestSupport fixture;
     final SignedMetadataVerifier verifier = new SignedMetadataVerifier();
     @BeforeClass public static void keys() throws Exception { fixture = new MetadataTestSupport(); }
+    @SuppressWarnings("unchecked") @Test public void authenticatesOptionalDeltaOffersAndKeepsReleaseIdentityStable() throws Exception {
+        Map<String,Object> body = fixture.headBody(2);
+        ExpectedArchive original = verifier.verifyHead(fixture.head(body), fixture.policy, fixture.scope).release;
+        Map<String,Object> delta = new LinkedHashMap<>();
+        delta.put("algorithm", DeltaPatch.ALGORITHM); delta.put("baseArchiveSha256", "d".repeat(64));
+        delta.put("baseArchiveSize", 8192); delta.put("patchSha256", "f".repeat(64)); delta.put("patchSize", 1024);
+        Map<String,Object> release = (Map<String,Object>)body.get("release");
+        release.put("deltas", Collections.singletonList(delta));
+        ExpectedArchive parsed = verifier.verifyHead(fixture.head(body), fixture.policy, fixture.scope).release;
+        assertEquals(original, parsed); assertEquals(original.hashCode(), parsed.hashCode());
+        assertEquals(1, parsed.deltas.size()); assertEquals(1024, parsed.deltas.get(0).patchSize);
+        assertThrows(UnsupportedOperationException.class, () -> parsed.deltas.clear());
+        release.put("deltas", Arrays.asList(delta, delta));
+        assertCode(MALFORMED, () -> verifier.verifyHead(fixture.head(body), fixture.policy, fixture.scope));
+        release.put("deltas", Collections.singletonList(delta));
+        delta.put("patchSize", Protocol.MAX_DELTA_BYTES+1);
+        assertCode(LIMIT_EXCEEDED, () -> verifier.verifyHead(fixture.head(body), fixture.policy, fixture.scope));
+        delta.put("patchSize", 1024); delta.put("unexpected", true);
+        assertCode(MALFORMED, () -> verifier.verifyHead(fixture.head(body), fixture.policy, fixture.scope));
+        delta.remove("unexpected"); delta.put("baseArchiveSha256", "bad");
+        assertCode(MALFORMED, () -> verifier.verifyHead(fixture.head(body), fixture.policy, fixture.scope));
+        delta.put("baseArchiveSha256", "d".repeat(64)); delta.put("algorithm", "future-codec");
+        assertEquals("future-codec", verifier.verifyHead(fixture.head(body), fixture.policy, fixture.scope).release.deltas.get(0).algorithm);
+        release.put("deltas", Collections.nCopies(17, delta));
+        assertCode(LIMIT_EXCEEDED, () -> verifier.verifyHead(fixture.head(body), fixture.policy, fixture.scope));
+    }
     @Test public void verifiesOffersAndExactBytesButDoesNotPretendToAdmitTime() throws Exception {
         byte[] canonical = StrictJson.canonical(fixture.headBody(1));
         byte[] body = (" \n" + new String(canonical, StandardCharsets.UTF_8) + "\n").getBytes(StandardCharsets.UTF_8);

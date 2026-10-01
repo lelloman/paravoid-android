@@ -10,6 +10,7 @@ public final class Protocol {
     public static final int PROTOCOL_VERSION = 1, FORMAT_VERSION = 1, RUNTIME_ABI = 1;
     public static final long MAX_INTEGER = 9007199254740991L;
     public static final long MAX_ARCHIVE_BYTES = 1024L * 1024 * 1024;
+    public static final long MAX_DELTA_BYTES = 256L * 1024 * 1024;
     public static final int MAX_RELEASE_BYTES = 1024 * 1024, MAX_HEAD_BYTES = 64 * 1024;
     public static final int MAX_GRANT_BYTES = 16 * 1024;
     public static final int GRANT_BLOCK_ID = 0x50564132; // Candidate, collision review still required.
@@ -101,11 +102,18 @@ public final class Protocol {
     public static final class ExpectedArchive {
         public final String releaseId, manifestSha256, archiveSha256;
         public final long payloadVersion, archiveSize;
+        /** Optional signed delivery alternatives; never part of release identity equality. */
+        public final List<ExpectedDelta> deltas;
         public ExpectedArchive(String releaseId, long payloadVersion, String manifestSha256,
                 String archiveSha256, long archiveSize) {
+            this(releaseId, payloadVersion, manifestSha256, archiveSha256, archiveSize, Collections.emptyList());
+        }
+        public ExpectedArchive(String releaseId, long payloadVersion, String manifestSha256,
+                String archiveSha256, long archiveSize, List<ExpectedDelta> deltas) {
             this.releaseId = required(releaseId); this.payloadVersion = payloadVersion;
             this.manifestSha256 = required(manifestSha256); this.archiveSha256 = required(archiveSha256);
             this.archiveSize = archiveSize;
+            this.deltas = list(deltas);
         }
         @Override public boolean equals(Object other) {
             if (!(other instanceof ExpectedArchive)) return false;
@@ -115,6 +123,17 @@ public final class Protocol {
                 && archiveSize == b.archiveSize;
         }
         @Override public int hashCode() { return Objects.hash(releaseId, payloadVersion, manifestSha256, archiveSha256, archiveSize); }
+    }
+
+    /** Authenticated inside the target release's signed discovery offer. */
+    public static final class ExpectedDelta {
+        public final String algorithm, baseArchiveSha256, patchSha256;
+        public final long baseArchiveSize, patchSize;
+        public ExpectedDelta(String algorithm, String baseArchiveSha256, long baseArchiveSize,
+                String patchSha256, long patchSize) {
+            this.algorithm = required(algorithm); this.baseArchiveSha256 = required(baseArchiveSha256);
+            this.baseArchiveSize = baseArchiveSize; this.patchSha256 = required(patchSha256); this.patchSize = patchSize;
+        }
     }
 
     /** Authenticated metadata only: temporal/replay admission belongs to Lifecycle. */

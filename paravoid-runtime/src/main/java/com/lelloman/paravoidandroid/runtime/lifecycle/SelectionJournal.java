@@ -162,6 +162,14 @@ final class SelectionJournal {
         if (!s.quarantined || s.pending != null || s.selected == null || !s.selected.identity.equals(identity)) throw fail(Code.UNAVAILABLE);
         return s.selected;
     }
+    /** A byte source only: does not acquire, trial-mark, retry or execute this generation. */
+    Generation deltaBase(String archiveSha256) throws ContractException {
+        State s = read();
+        return s.selected != null && s.selected.identity.archiveSha256.equals(archiveSha256) ? s.selected : null;
+    }
+    ExpectedArchive deltaBaseIdentity() throws ContractException {
+        State s = read(); return s.selected == null ? null : s.selected.identity;
+    }
     /** Facade must reverify intact bytes outside selection and obtain explicit user confirmation first. */
     void retry(Generation generation) throws ContractException {
         State s = forHandle(generation);

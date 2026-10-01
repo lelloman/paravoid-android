@@ -17,6 +17,8 @@ public interface Lifecycle {
     default DownloadReservation reserveDownload(AdmissionId admission) throws ContractException {
         throw new ContractException(ContractException.Code.UNAVAILABLE, "Download reservation not supported");
     }
+    /** Optional selected byte identity for delta discovery. Does not select or execute a generation. */
+    default ExpectedArchive deltaBaseIdentity() throws ContractException { return null; }
     /** Borrows the path until return. Never modifies/deletes it. Copies and verifies privately. */
     StageResult stageDownloaded(File completedArchive, AdmissionId admission) throws ContractException;
     StageResult stageEmbedded(File embeddedArchive) throws ContractException;

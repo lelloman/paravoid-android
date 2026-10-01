@@ -12,6 +12,9 @@ including Jetpack Compose.
 
 The complete profile implements signed VPK packaging, embedded/empty bootstrap,
 public or APK-grant authenticated delivery, cold activation and recovery controls.
+The built-in HTTP updater also supports optional [delta VPK delivery](DVPK.md):
+distributors extract signed VPKs from uploaded embedded-payload shell APKs and
+generate smaller transfers; shells reconstruct and verify the complete target.
 It is under release acceptance, not yet a production-ready published v1. See
 [the bounded release checklist](RELEASE-READINESS.md), [v1 contract](V1.md), and
 [combined validation evidence](parallel-finish/INTEGRATION.md).

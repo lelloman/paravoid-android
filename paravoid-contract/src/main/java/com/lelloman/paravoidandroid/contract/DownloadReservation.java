@@ -10,6 +10,8 @@ import com.lelloman.paravoidandroid.contract.Protocol.StageResult;
  * Implementations must release exclusion on process death without resetting security state.
  */
 public interface DownloadReservation extends AutoCloseable {
+    /** Optional exact selected base. Null means use the complete VPK; never loads or selects code. */
+    default DeltaBase openDeltaBase(String archiveSha256) throws ContractException { return null; }
     /** Borrows the complete archive synchronously; does not select or execute it. */
     StageResult stage(File archive) throws ContractException;
     @Override void close() throws ContractException;

@@ -1,4 +1,16 @@
-# APK grant personalization
+# Distributor tools
+
+## Delta VPK reference encoder
+
+`python3 delivery/tools/dvpk.py BASE.vpk TARGET.vpk OUTPUT.dvpk` creates a
+`bsdiff-deflate-v1` patch and prints its descriptor as JSON. Install `bsdiff4`
+(tested with 1.2.6) in a host virtual environment. Inputs must already be verified
+signed VPKs extracted from embedded-payload shell APKs; this tool neither signs
+VPKs nor authenticates APKs. It independently checks exact reconstruction before
+atomically writing the result. It uses host memory proportional to input sizes.
+See [the complete publishing and wire specification](../../DVPK.md).
+
+## APK grant personalization
 
 `bash delivery/tools/personalize.sh INPUT.apk OUTPUT.apk --grant /private/grant.json
 --apksigner /path/to/Android/Sdk/build-tools/36.0.0/apksigner`

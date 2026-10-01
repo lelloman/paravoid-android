@@ -15,6 +15,13 @@ these entries into a dated version section and document its exact upgrade path.
 
 ### Added
 
+- Optional DVPK delivery in the built-in HTTP v1 updater, with bounded streaming
+  reconstruction, authenticated base/patch/target hashes and full-VPK fallback.
+  A new shell APK is required to enable it. Distributors negotiate discovery
+  support and generate deltas from archived signed VPKs extracted from uploaded
+  embedded-payload shell APKs. App publishers continue to upload APKs only.
+  See [wire format and distributor responsibilities](DVPK.md).
+
 - Opt-in authenticated local update triggers let a distributor such as LelloStore
   share one server connection across installed complete shells. The new
   `paravoid-update-ipc` module provides the Binder contract; shells verify the

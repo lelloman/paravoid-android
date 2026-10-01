@@ -9,6 +9,7 @@ javac --release 11 -Xlint:all -d "$output" "${contracts[@]}" "${sources[@]}"
 java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.TransportTest
 java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.AttemptPolicyTest
 java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.DeliveryClientTest
+java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.DeltaDeliveryTest
 java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.RecoveryProviderTest
 java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.ApkGrantReaderTest
 java -ea -cp "$output" com.lelloman.paravoidandroid.delivery.ApkPolicyReaderTest

@@ -79,6 +79,19 @@ public final class LifecycleTest {
         lifecycle.setCredentialScope(null);
         AdmissionTest.check(lifecycle.acquireForProcess() == lease); // Accepted offline execution is independent of credentials.
         Fixture two = new Fixture(parent, 2); RuntimeLifecycle staging = lifecycle(root, two, true);
+        AdmissionTest.check(staging.deltaBaseIdentity().equals(one.release.identity));
+        AdmissionId twoAdmission = admit(staging, two);
+        try (DownloadReservation reservation = staging.reserveDownload(twoAdmission)) {
+            AdmissionTest.check(reservation.openDeltaBase("f".repeat(64)) == null);
+            try (DeltaBase base = reservation.openDeltaBase(one.release.identity.archiveSha256)) {
+                AdmissionTest.check(base.identity().equals(one.release.identity));
+                byte[] bytes = new byte[(int)one.release.identity.archiveSize];
+                int done = 0; while (done < bytes.length) { int count = base.read(done, bytes, done, bytes.length-done); AdmissionTest.check(count > 0); done += count; }
+                AdmissionTest.check(Arrays.equals(bytes, Files.readAllBytes(one.source.toPath())));
+                AdmissionTest.check(base.read(bytes.length, bytes, 0, 1) == -1);
+                AdmissionTest.check(staging.snapshot().active.equals(one.release.identity));
+            }
+        }
         staging.stageDownloaded(two.source, admit(staging, two));
         AdmissionTest.check(staging.snapshot().waitingForProcesses && staging.snapshot().active.payloadVersion == 1);
         staging.cleanup(); AdmissionTest.check(lease.files().resourcesApk.isFile());

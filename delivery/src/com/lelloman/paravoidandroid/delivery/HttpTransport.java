@@ -7,6 +7,7 @@ import java.nio.file.*;
 import java.security.*;
 import java.util.*;
 import com.lelloman.paravoidandroid.contract.Protocol;
+import com.lelloman.paravoidandroid.contract.DeltaPatch;
 
 /** Internal byte transport. All signed identities must come from the shared verifier. */
 final class HttpTransport {
@@ -106,14 +107,28 @@ final class HttpTransport {
         if (!release.matches("[A-Za-z0-9_-]{1,64}")) throw new IllegalArgumentException("invalid release ID");
         return base.resolve("v1/apps/" + app + "/releases/" + release + "/payload.vpk");
     }
+    URI deltaUri(String app, String release, String base) {
+        if (!base.matches("[0-9a-f]{64}")) throw new IllegalArgumentException("invalid base hash");
+        return archiveUri(app, release).resolve("deltas/" + base + "/payload.dvpk");
+    }
 
     // A 304 is only an HTTP result: integration must enforce verified, fresh, identical-scope cache reuse.
     HeadBytes head(URI uri, String verifiedCacheEtag, Cancellation cancel) throws IOException {
+        return head(uri, verifiedCacheEtag, cancel, null);
+    }
+    HeadBytes head(URI uri, String verifiedCacheEtag, Cancellation cancel, String baseHash) throws IOException {
         if (verifiedCacheEtag != null && !verifiedCacheEtag.matches("\"[0-9a-f]{64}\""))
             throw new IllegalArgumentException("invalid cache validator");
         HttpURLConnection c = open(uri, cancel);
         try {
             c.setRequestProperty("Accept", "application/json");
+            if (!staticFiles) {
+                c.setRequestProperty("X-Paravoid-Dvpk", DeltaPatch.ALGORITHM);
+                if (baseHash != null) {
+                    if (!baseHash.matches("[0-9a-f]{64}")) throw new IllegalArgumentException("invalid base hash");
+                    c.setRequestProperty("X-Paravoid-Base-Sha256", baseHash);
+                }
+            }
             if (verifiedCacheEtag != null) c.setRequestProperty("If-None-Match", verifiedCacheEtag);
             int status = responseCode(c, cancel);
             cancel.check(); encoding(c);
@@ -152,6 +167,13 @@ final class HttpTransport {
         return download(uri, partial, size, sha256, cancel, ignored -> {});
     }
     Path download(URI uri, Path partial, long size, String sha256, Cancellation cancel, java.util.function.LongConsumer progress) throws IOException {
+        return download(uri, partial, size, sha256, cancel, progress, "application/vnd.paravoid.vpk");
+    }
+    Path downloadDelta(URI uri, Path partial, long size, String sha256, Cancellation cancel, java.util.function.LongConsumer progress) throws IOException {
+        return download(uri, partial, size, sha256, cancel, progress, "application/vnd.paravoid.dvpk");
+    }
+    private Path download(URI uri, Path partial, long size, String sha256, Cancellation cancel,
+            java.util.function.LongConsumer progress, String mediaType) throws IOException {
         validateArchive(size, sha256);
         String etag = quoted(sha256);
         boolean retried416 = false;
@@ -163,7 +185,7 @@ final class HttpTransport {
             if (offset >= size) { Files.delete(partial); offset = 0; }
             HttpURLConnection c = open(uri, cancel);
             try {
-                c.setRequestProperty("Accept", "application/vnd.paravoid.vpk");
+                c.setRequestProperty("Accept", mediaType);
                 if (offset > 0) {
                     c.setRequestProperty("Range", "bytes=" + offset + "-");
                     if (!staticFiles) c.setRequestProperty("If-Range", etag);
@@ -177,7 +199,7 @@ final class HttpTransport {
                     continue;
                 }
                 if (status != 200 && status != 206) throw status(c, status);
-                if (!staticFiles || !"application/octet-stream".equals(header(c,"Content-Type"))) mime(c, "application/vnd.paravoid.vpk");
+                if (!staticFiles || !"application/octet-stream".equals(header(c,"Content-Type"))) mime(c, mediaType);
                 if (!staticFiles && !etag.equals(header(c, "ETag"))) throw new Failure("invalid-etag");
                 long start = status == 200 ? 0 : offset;
                 if (status == 206 && (offset == 0 || !Objects.equals(header(c, "Content-Range"),
