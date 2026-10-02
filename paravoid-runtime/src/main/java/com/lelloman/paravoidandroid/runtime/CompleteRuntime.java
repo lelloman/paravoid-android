@@ -153,9 +153,11 @@ final class CompleteRuntime {
     }
     /**
      * Bounded wait for another update writer during startup. It runs on the main thread before any
-     * payload code, under the splash screen; past it, startup fails into recovery as before.
+     * window exists, so it must stay far below Android's ANR limits (about 5 seconds for input, 10 for
+     * a missing focused window). Long writers are kept away instead: update downloads and staging
+     * wait until this process has bootstrapped the installed contract (see RuntimeLifecycle).
      */
-    static final long STARTUP_WRITER_WAIT_MILLIS = 15_000;
+    static final long STARTUP_WRITER_WAIT_MILLIS = 2_000;
     private boolean embeddedRepairable(ContractException error) {
         return policy.bootstrap == Bootstrap.EMBEDDED &&
             (error.code == ContractException.Code.INCOMPATIBLE ||

@@ -52,13 +52,15 @@ these entries into a dated version section and document its exact upgrade path.
 
 ### Fixed
 
-- Complete shells no longer fail startup with `Update space: UNAVAILABLE` on the
-  first launch after an APK update that changes the shell contract. The update
-  process, started by `MY_PACKAGE_REPLACED`, could hold the update space while the
-  main process needed it to stage the embedded payload; startup gave up at once
-  and routed to crash recovery. Startup now waits up to 15 seconds for another
-  writer, retries loading any release it staged, and stages the embedded payload
-  only if still needed. Shells must be rebuilt to pick this up.
+- Complete shells no longer fail or hang their first launch after an APK update
+  that changes the shell contract. The update process, started by
+  `MY_PACKAGE_REPLACED`, could reserve the update space for a whole payload
+  download while the main process needed it to stage the embedded payload.
+  Embedded-bootstrap shells now record when the main process has acquired a
+  release for the installed contract; until then, update downloads and staging
+  return `UNAVAILABLE` and retry later. Startup also waits up to two seconds
+  for any other writer and retries loading before staging its own copy. Shells
+  must be rebuilt to pick this up.
 
 ### Migration
 

@@ -77,7 +77,40 @@ public final class RuntimeLifecycle implements Lifecycle {
     @Override public ExpectedArchive deltaBaseIdentity() throws ContractException {
         return selection(SelectionJournal::deltaBaseIdentity);
     }
+    /**
+     * Records that a release compatible with the installed shell contract was acquired, so update writes
+     * may start. Only {@link #acquireForProcess} calls it, after loading verified the generation.
+     */
+    private void markBootstrapped() throws ContractException {
+        if (policy.bootstrap != Bootstrap.EMBEDDED || bootstrappedForInstalledContract()) return;
+        Path marker = root.resolve(BOOTSTRAP_MARKER);
+        try {
+            Path temporary = Files.createTempFile(root, "bootstrapped-", ".tmp");
+            try {
+                Files.write(temporary, policy.shellContractId.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                Files.move(temporary, marker, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } finally { Files.deleteIfExists(temporary); }
+        } catch (IOException failure) { throw fail(Code.IO); }
+    }
+    private boolean bootstrappedForInstalledContract() {
+        try {
+            Path marker = root.resolve(BOOTSTRAP_MARKER);
+            if (!Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS) || Files.size(marker) > 256) return false;
+            return policy.shellContractId.equals(new String(Files.readAllBytes(marker), java.nio.charset.StandardCharsets.US_ASCII));
+        } catch (IOException unreadable) { return false; }
+    }
+    /**
+     * An embedded-bootstrap shell installs its first release for a contract from its own APK, in the
+     * main process at launch. Until that happened, update writers (the update process after
+     * MY_PACKAGE_REPLACED or boot) must not hold the update space: a download keeps it for the whole
+     * transfer, which would block or fail that launch. They get UNAVAILABLE and retry later.
+     */
+    private void requireBootstrapped() throws ContractException {
+        if (policy.bootstrap == Bootstrap.EMBEDDED && !bootstrappedForInstalledContract()) throw fail(Code.UNAVAILABLE);
+    }
+    static final String BOOTSTRAP_MARKER = "bootstrapped-contract";
     @Override public StageResult stageDownloaded(File archive, AdmissionId id) throws ContractException {
+        requireBootstrapped();
         ExpectedArchive expected = admission.resolve(id);
         // Direct callers already own a source archive: only the private copy and
         // materialization remain. Delivery instead holds its reservation across HTTP.
@@ -86,6 +119,7 @@ public final class RuntimeLifecycle implements Lifecycle {
         }
     }
     @Override public DownloadReservation reserveDownload(AdmissionId id) throws ContractException {
+        requireBootstrapped();
         ExpectedArchive expected = admission.resolve(id);
         SpaceAdmission.Claim claim = reserveSpace(expected.archiveSize, 3);
         try {
@@ -256,7 +290,8 @@ public final class RuntimeLifecycle implements Lifecycle {
                         if (current != null && !installed.isCurrent(current)) throw fail(Code.CREDENTIAL_CHANGED);
                         return j.acquire(candidate);
                     });
-                    Lease handle = new Lease(acquired, loaded); PROCESS_HANDLES.put(root, handle); return handle;
+                    Lease handle = new Lease(acquired, loaded); PROCESS_HANDLES.put(root, handle);
+                    markBootstrapped(); return handle;
                 } catch (ContractException changed) {
                     if (changed.code != Code.UNAVAILABLE) throw changed;
                 }

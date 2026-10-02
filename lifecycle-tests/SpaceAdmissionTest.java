@@ -26,6 +26,12 @@ public final class SpaceAdmissionTest {
         return new RuntimeLifecycle(root.toFile(), policy(Authentication.PUBLIC, "contract"), scope("contract", 30),
             fixture, LifecycleTest.CLOCK, true, null, free::get);
     }
+    private static RuntimeLifecycle embeddedLifecycle(Path root, LifecycleTest.Fixture fixture, AtomicLong free) throws Exception {
+        ShellPolicy base = policy(Authentication.PUBLIC, "contract");
+        ShellPolicy embedded = new ShellPolicy("app", "contract", base.trust, "https://test/", "stable", Authentication.PUBLIC,
+            Bootstrap.EMBEDDED, true, false, 1, java.util.Collections.emptyMap(), new byte[0]);
+        return new RuntimeLifecycle(root.toFile(), embedded, scope("contract", 30), fixture, LifecycleTest.CLOCK, true, null, free::get);
+    }
     public static void main(String[] args) throws Exception {
         if (args.length != 0) {
             Path root = Paths.get(args[1]);
@@ -161,6 +167,24 @@ public final class SpaceAdmissionTest {
             }
         } finally { again.destroyForcibly(); }
         check(embedded.snapshot().pending.equals(one.release.identity));
-        System.out.println("PASS update-space admission: cross-JVM exclusion/death, same-JVM lock safety, exact budget, cleanup, cancellation, credential change, preserved active generation/replay floors, bounded startup waits for another writer");
+
+        // Embedded bootstrap: update writers stay out of the update space until the main process has
+        // acquired a release for the installed contract, so an update download can never hold it
+        // across the first launch after install or after a contract-changing APK update.
+        Path bootRoot = parent.resolve("embedded-bootstrap");
+        RuntimeLifecycle bootOne = embeddedLifecycle(bootRoot, one, free); bootOne.initializeNew();
+        RuntimeLifecycle bootTwo = embeddedLifecycle(bootRoot, two, free);
+        Path marker = bootRoot.resolve(RuntimeLifecycle.BOOTSTRAP_MARKER);
+        check(bootOne.stageEmbedded(one.source).status == StageStatus.PENDING); // Embedded staging is never gated.
+        AdmissionId download = LifecycleTest.admit(bootTwo, two);
+        fails(Code.UNAVAILABLE, () -> bootTwo.reserveDownload(download)); // Staged but not yet acquired.
+        fails(Code.UNAVAILABLE, () -> bootTwo.stageDownloaded(two.source, download));
+        check(!Files.exists(marker));
+        bootOne.acquireForProcess();
+        check(new String(Files.readAllBytes(marker), "US-ASCII").equals("contract"));
+        try (DownloadReservation allowed = bootTwo.reserveDownload(download)) { check(allowed != null); }
+        Files.write(marker, "previous-contract".getBytes("US-ASCII")); // As left by the replaced shell.
+        fails(Code.UNAVAILABLE, () -> bootTwo.reserveDownload(download));
+        System.out.println("PASS update-space admission: cross-JVM exclusion/death, same-JVM lock safety, exact budget, cleanup, cancellation, credential change, preserved active generation/replay floors, bounded startup waits for another writer, update writes gated on embedded bootstrap");
     }
 }
