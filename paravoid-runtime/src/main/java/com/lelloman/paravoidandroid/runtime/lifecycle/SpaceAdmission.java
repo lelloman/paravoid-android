@@ -23,6 +23,24 @@ final class SpaceAdmission {
             throw fail(Code.LIMIT_EXCEEDED);
         return size * copies + HEADROOM; // MAX_ARCHIVE_BYTES bounds arithmetic well below Long.MAX_VALUE.
     }
+    /**
+     * Like {@link #acquire(Path)} but waits up to {@code timeoutMillis} while another writer, in this or
+     * another process, holds the space. The class monitor is released between attempts so a holder in
+     * this process can close its claim. Timeout or interruption fails with UNAVAILABLE, as a busy single
+     * attempt does.
+     */
+    static Claim acquire(Path root, long timeoutMillis) throws ContractException {
+        long deadline = System.nanoTime() + Math.max(0, timeoutMillis) * 1_000_000L;
+        while (true) {
+            try { return acquire(root); }
+            catch (ContractException busy) {
+                if (busy.code != Code.UNAVAILABLE || System.nanoTime() - deadline >= 0) throw busy;
+            }
+            try { Thread.sleep(WAIT_STEP_MILLIS); }
+            catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw fail(Code.UNAVAILABLE); }
+        }
+    }
+    static final long WAIT_STEP_MILLIS = 50;
     static synchronized Claim acquire(Path root) throws ContractException {
         ProcessLocks.requireOutsideSelection();
         try {

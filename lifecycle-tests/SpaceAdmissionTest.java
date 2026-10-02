@@ -33,6 +33,7 @@ public final class SpaceAdmissionTest {
             try (SpaceAdmission.Claim claim = SpaceAdmission.acquire(root)) {
                 claim.check(); System.out.println("ready"); System.out.flush();
                 if (args[0].equals("hold")) Thread.sleep(60000);
+                if (args[0].equals("brief")) Thread.sleep(1500); // An update process finishing its staging.
             }
             return;
         }
@@ -127,6 +128,39 @@ public final class SpaceAdmissionTest {
         }
         check(!Files.exists(source));
         check(embedded.snapshot().pending.equals(one.release.identity));
-        System.out.println("PASS update-space admission: cross-JVM exclusion/death, same-JVM lock safety, exact budget, cleanup, cancellation, credential change, preserved active generation/replay floors");
+
+        // Startup waits: another process holds the space briefly, as the update process does while it
+        // reconciles after an APK replacement. A short wait still fails like a single busy attempt;
+        // a bounded wait succeeds once the holder releases, and leaves staged state untouched.
+        Process brief = child("brief", locks);
+        try {
+            ready(brief);
+            long started = System.nanoTime();
+            fails(Code.UNAVAILABLE, () -> SpaceAdmission.acquire(locks, 200));
+            check(System.nanoTime() - started >= 150_000_000L); // Actually waited before giving up.
+            try (SpaceAdmission.Claim waited = SpaceAdmission.acquire(locks, 10_000)) { waited.check(); }
+            check(brief.waitFor(10, TimeUnit.SECONDS) && brief.exitValue() == 0);
+        } finally { brief.destroyForcibly(); }
+        try (SpaceAdmission.Claim held = SpaceAdmission.acquire(locks)) {
+            fails(Code.UNAVAILABLE, () -> SpaceAdmission.acquire(locks, 100)); // Same-JVM holder: bounded, no deadlock.
+        }
+        Process stager = child("brief", embeddedRoot);
+        try {
+            ready(stager);
+            check(!embedded.awaitIdleWriters(100));
+            check(embedded.awaitIdleWriters(10_000));
+            check(embedded.snapshot().pending.equals(one.release.identity)); // Waiting never cleans or stages.
+        } finally { stager.destroyForcibly(); }
+        Process again = child("brief", embeddedRoot);
+        try {
+            ready(again);
+            fails(Code.UNAVAILABLE, () -> embedded.reserveEmbedded(one.source.length(), 100));
+            try (RuntimeLifecycle.EmbeddedReservation waited = embedded.reserveEmbedded(one.source.length(), 10_000)) {
+                Files.copy(one.source.toPath(), waited.sourceFile().toPath());
+                check(waited.stage().status == StageStatus.ALREADY_PENDING); // Identical pending release: idempotent.
+            }
+        } finally { again.destroyForcibly(); }
+        check(embedded.snapshot().pending.equals(one.release.identity));
+        System.out.println("PASS update-space admission: cross-JVM exclusion/death, same-JVM lock safety, exact budget, cleanup, cancellation, credential change, preserved active generation/replay floors, bounded startup waits for another writer");
     }
 }

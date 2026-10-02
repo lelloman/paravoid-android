@@ -135,8 +135,11 @@ public final class RuntimeLifecycle implements Lifecycle {
         }
     }
     private SpaceAdmission.Claim reserveSpace(long size, int copies) throws ContractException {
+        return reserveSpace(size, copies, 0);
+    }
+    private SpaceAdmission.Claim reserveSpace(long size, int copies, long waitMillis) throws ContractException {
         long required = SpaceAdmission.required(size, copies);
-        SpaceAdmission.Claim claim = SpaceAdmission.acquire(root);
+        SpaceAdmission.Claim claim = waitMillis > 0 ? SpaceAdmission.acquire(root, waitMillis) : SpaceAdmission.acquire(root);
         try {
             // Only a new space owner can reap a prior process's embedded input.
             // Public cleanup() must not touch an input being copied during a reservation.
@@ -173,6 +176,25 @@ public final class RuntimeLifecycle implements Lifecycle {
     /** Shell adapter reserves before copying the embedded APK entry to private temporary storage. */
     public EmbeddedReservation reserveEmbedded(long archiveSize) throws ContractException {
         return new EmbeddedReservation(reserveSpace(archiveSize, 3), archiveSize);
+    }
+    /**
+     * Startup variant: waits up to {@code waitMillis} for another writer (typically the update process
+     * reconciling after an APK replacement) instead of failing immediately with UNAVAILABLE.
+     */
+    public EmbeddedReservation reserveEmbedded(long archiveSize, long waitMillis) throws ContractException {
+        return new EmbeddedReservation(reserveSpace(archiveSize, 3, waitMillis), archiveSize);
+    }
+    /**
+     * Waits up to {@code waitMillis} until no writer holds the update space, then releases it at once.
+     * Returns false on timeout. Startup uses it so a release staged by another process is seen before
+     * deciding to stage the embedded payload. It performs no cleanup and never touches staged state.
+     */
+    public boolean awaitIdleWriters(long waitMillis) throws ContractException {
+        SpaceAdmission.Claim claim;
+        try { claim = SpaceAdmission.acquire(root, waitMillis); }
+        catch (ContractException busy) { if (busy.code == Code.UNAVAILABLE) return false; throw busy; }
+        claim.close();
+        return true;
     }
     public final class EmbeddedReservation implements AutoCloseable {
         private final SpaceAdmission.Claim claim;

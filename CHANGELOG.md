@@ -50,6 +50,16 @@ these entries into a dated version section and document its exact upgrade path.
 - The extra **App updates** launcher icon defaults to off. Set
   `paravoid { controlsLauncher = true }` to keep that separate entry.
 
+### Fixed
+
+- Complete shells no longer fail startup with `Update space: UNAVAILABLE` on the
+  first launch after an APK update that changes the shell contract. The update
+  process, started by `MY_PACKAGE_REPLACED`, could hold the update space while the
+  main process needed it to stage the embedded payload; startup gave up at once
+  and routed to crash recovery. Startup now waits up to 15 seconds for another
+  writer, retries loading any release it staged, and stages the embedded payload
+  only if still needed. Shells must be rebuilt to pick this up.
+
 ### Migration
 
 - Local update triggers are disabled by default. To adopt them, upgrade the

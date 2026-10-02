@@ -121,17 +121,28 @@ final class CompleteRuntime {
             CrashRecovery.instance.identity(policy.shellContractId, state.active);
             if (CrashRecovery.instance.blocked()) throw new CrashRecovery.Required();
         }
-        if (policy.bootstrap == Bootstrap.EMBEDDED && state.active == null && state.pending == null) stageEmbedded();
+        if (policy.bootstrap == Bootstrap.EMBEDDED && state.active == null && state.pending == null) {
+            // The update process may be staging right now (it starts on MY_PACKAGE_REPLACED and on
+            // boot). Let it finish, and stage the embedded payload only if nothing usable appeared.
+            lifecycle.awaitIdleWriters(STARTUP_WRITER_WAIT_MILLIS);
+            LifecycleSnapshot settled = lifecycle.snapshot();
+            if (settled.active == null && settled.pending == null) stageEmbedded();
+        }
         try { lease = lifecycle.acquireForProcess(); }
         catch (ContractException error) {
             // A repair APK can carry a higher release under the same contract too.
             // Admission still enforces lineage floors and immutable identities;
             // staging an intact quarantined release never clears its quarantine.
-            if (policy.bootstrap != Bootstrap.EMBEDDED ||
-                    (error.code != ContractException.Code.INCOMPATIBLE &&
-                     error.code != ContractException.Code.UNAVAILABLE &&
-                     error.code != ContractException.Code.INTEGRITY)) throw error;
-            stageEmbedded(); lease = lifecycle.acquireForProcess();
+            if (!embeddedRepairable(error)) throw error;
+            // After a contract-changing APK update, the update process can hold the space while it
+            // stages a compatible release. Wait for it and retry before staging our own copy.
+            GenerationLease settled = null;
+            if (lifecycle.awaitIdleWriters(STARTUP_WRITER_WAIT_MILLIS)) {
+                try { settled = lifecycle.acquireForProcess(); }
+                catch (ContractException again) { if (!embeddedRepairable(again)) throw again; }
+            }
+            if (settled == null) { stageEmbedded(); settled = lifecycle.acquireForProcess(); }
+            lease = settled;
         }
         installStartupObserver();
         if (CrashRecovery.instance != null) {
@@ -140,12 +151,23 @@ final class CompleteRuntime {
         }
         return CompleteGenerationLoader.load(app, lease, parent);
     }
+    /**
+     * Bounded wait for another update writer during startup. It runs on the main thread before any
+     * payload code, under the splash screen; past it, startup fails into recovery as before.
+     */
+    static final long STARTUP_WRITER_WAIT_MILLIS = 15_000;
+    private boolean embeddedRepairable(ContractException error) {
+        return policy.bootstrap == Bootstrap.EMBEDDED &&
+            (error.code == ContractException.Code.INCOMPATIBLE ||
+             error.code == ContractException.Code.UNAVAILABLE ||
+             error.code == ContractException.Code.INTEGRITY);
+    }
     private void stageEmbedded() throws Exception {
         try (ZipFile apk = new ZipFile(environment.currentBaseApk())) {
             ZipEntry entry = apk.getEntry("assets/paravoid/payload.vpk");
             if (entry == null || entry.getSize() < 1 || entry.getSize() > Protocol.MAX_ARCHIVE_BYTES)
                 throw new IOException("Embedded VPK missing or too large");
-            try (RuntimeLifecycle.EmbeddedReservation reservation = lifecycle.reserveEmbedded(entry.getSize())) {
+            try (RuntimeLifecycle.EmbeddedReservation reservation = lifecycle.reserveEmbedded(entry.getSize(), STARTUP_WRITER_WAIT_MILLIS)) {
                 try (InputStream in = apk.getInputStream(entry); OutputStream out = new FileOutputStream(reservation.sourceFile())) {
                     byte[] buffer = new byte[8192]; int n; long total = 0;
                     while ((n = in.read(buffer)) != -1) {
