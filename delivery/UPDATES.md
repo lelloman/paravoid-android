@@ -152,8 +152,16 @@ app. If it cannot establish safe process ownership or stop them, it reports fail
   new command/approval.
 - `observe(...)` exposes phase, progress, available/pending release, `promptRequired`,
   schedule and errors. `dismiss(release)` declines that offer.
-- `schedule(UpdateSchedule)` changes persisted scheduling preferences;
-  `preferences(checks, downloads, unmeteredOnly)` is the simpler existing interface.
+- `schedule(UpdateSchedule)` persists a complete runtime schedule and replaces earlier
+  preferences; `preferences(checks, downloads, unmeteredOnly)` persists only those
+  three user choices.
+
+Only these explicit choices are durable. The installed shell policy's schedule is the
+default on every start, so a shell update that changes its schedule (for example
+enabling checks or lengthening the interval) reaches existing installs, except for
+fields the app or user chose at runtime. Preferences apply on top of a runtime
+schedule, which applies on top of the policy. Update state written before this layering
+stored only the effective schedule; it adopts the current policy once.
 
 Optional `checkerClass`, `updaterClass`, and `policyClass` implement `UpdateChecker`,
 `UpdateUpdater`, and `UpdatePolicy` from `paravoid-update-api`. Supply their public

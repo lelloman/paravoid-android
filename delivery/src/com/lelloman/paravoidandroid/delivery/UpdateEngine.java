@@ -37,8 +37,14 @@ public final class UpdateEngine implements UpdateControl {
     private volatile boolean stopped;
     private volatile boolean staging;
     private volatile DeliveryController.Snapshot snapshot;
+    /** Effective schedule: installed policy defaults, then a runtime schedule, then user preferences. */
     private volatile UpdateSchedule schedule;
     private volatile UpdateSchedule requestedSchedule;
+    // Only explicit choices are durable. Policy defaults are re-read on every start, so an
+    // updated shell's schedule reaches existing installs unless an override was chosen.
+    private final UpdateSchedule defaults;
+    private volatile UpdateSchedule runtimeSchedule;
+    private volatile DeliveryPreferences userPreferences;
     private Kind kind=Kind.NONE, lastKind=Kind.CHECK;
     private volatile boolean explicit;
     private boolean lastExplicit;
@@ -102,9 +108,15 @@ public final class UpdateEngine implements UpdateControl {
             boolean customProvider, Consumer<Work> scheduler) throws IOException {
         this.client=client; this.lifecycle=lifecycle; this.scope=scope; this.clock=clock; this.worker=worker;
         this.callbacks=callbacks; this.policy=policy; this.customProvider=customProvider; this.scheduler=scheduler;
-        file=directory.toPath().resolve("operations.properties"); schedule=defaults;
+        file=directory.toPath().resolve("operations.properties"); this.defaults=Objects.requireNonNull(defaults);
+        schedule=defaults;
         Files.createDirectories(file.getParent());
-        load();
+        UpdateSchedule persisted=load();
+        schedule=effective(runtimeSchedule,userPreferences);
+        // A changed policy or override applies to existing durable intent like setSchedule.
+        if(persisted!=null && persisted.intervalSeconds!=schedule.intervalSeconds) nextCheck=lastCheck==0 ? 0 : lastCheck+schedule.intervalSeconds;
+        if(!schedule.checks) localHintPending=false;
+        if(!explicit && (!schedule.checks || kind==Kind.UPDATE && !schedule.downloads)) kind=Kind.NONE;
         String current=client.credentialPartition();
         if(!Objects.equals(partition,current)) { kind=Kind.NONE; available=null; target=null; nextCheck=0; attempts=0; }
         partition=current;
@@ -169,13 +181,24 @@ public final class UpdateEngine implements UpdateControl {
         cancellation.incrementAndGet(); client.cancelDownload();
         worker.execute(()-> { if(phase==DeliveryController.Activity.READY) return; kind=Kind.NONE; localHintPending=false; target=null; phase=DeliveryController.Activity.CANCELLED; error=null; persist(); publish(true); });
     }
+    /** A user choice of checks/downloads; other schedule fields keep following the installed policy. */
     @Override public void preferences(DeliveryPreferences value) {
-        schedule(schedule.preferences(value.automaticChecks,value.automaticDownloads,value.unmeteredOnly));
+        DeliveryPreferences chosen=new DeliveryPreferences(value.automaticChecks,value.automaticDownloads,value.unmeteredOnly);
+        request(effective(runtimeSchedule,chosen),()->userPreferences=chosen);
     }
+    /** A complete runtime schedule, which also replaces earlier user preferences. */
     @Override public void schedule(UpdateSchedule value) {
-        requestedSchedule=Objects.requireNonNull(value);
+        Objects.requireNonNull(value);
+        request(value,()-> { runtimeSchedule=value; userPreferences=null; });
+    }
+    private void request(UpdateSchedule value,Runnable record) {
+        requestedSchedule=value;
         if(!explicit && (!value.checks || !value.downloads) && !staging) client.cancelDownload();
-        worker.execute(()->setSchedule(value));
+        worker.execute(()-> { record.run(); setSchedule(effective(runtimeSchedule,userPreferences)); });
+    }
+    private UpdateSchedule effective(UpdateSchedule runtime,DeliveryPreferences preferences) {
+        UpdateSchedule base=runtime!=null ? runtime : defaults;
+        return preferences==null ? base : base.preferences(preferences.automaticChecks,preferences.automaticDownloads,preferences.unmeteredOnly);
     }
     private void setSchedule(UpdateSchedule value) {
         schedule=value;
@@ -270,8 +293,15 @@ public final class UpdateEngine implements UpdateControl {
         });
     }
     private void save() throws IOException {
+        // The effective schedule is diagnostic only; overrides are the durable choices.
         Properties p=new Properties(); p.putAll(UpdateScheduleCodec.write(schedule));
-        p.setProperty("version","1"); p.setProperty("partition",partition==null ? "" : partition);
+        if(runtimeSchedule!=null) UpdateScheduleCodec.write(runtimeSchedule).forEach((k,v)->p.setProperty("runtime."+k,v));
+        if(userPreferences!=null) {
+            p.setProperty("preferences.checks",""+userPreferences.automaticChecks);
+            p.setProperty("preferences.downloads",""+userPreferences.automaticDownloads);
+            p.setProperty("preferences.unmeteredOnly",""+userPreferences.unmeteredOnly);
+        }
+        p.setProperty("version","2"); p.setProperty("partition",partition==null ? "" : partition);
         p.setProperty("kind",kind.name()); p.setProperty("explicit",""+explicit); p.setProperty("lastKind",lastKind.name()); p.setProperty("lastExplicit",""+lastExplicit);
         p.setProperty("due",""+due); p.setProperty("nextCheck",""+nextCheck); p.setProperty("lastCheck",""+lastCheck); p.setProperty("attempts",""+attempts);
         p.setProperty("phase",phase.name()); if(error!=null) p.setProperty("error",error);
@@ -280,14 +310,28 @@ public final class UpdateEngine implements UpdateControl {
         offer(p,"target.",target); offer(p,"lastTarget.",lastTarget); offer(p,"available.",available);
         PendingRetry.writeRecord(file,p);
     }
-    private void load() throws IOException {
-        if(!Files.exists(file)) return;
+    /** Restores durable intent and returns the previously effective schedule, if any. */
+    private UpdateSchedule load() throws IOException {
+        if(!Files.exists(file)) return null;
         if(Files.size(file)>65536) throw new IOException("Invalid update state");
         Properties p=new Properties(); try(InputStream in=Files.newInputStream(file)) { p.load(in); }
         try {
-            if(!"1".equals(p.getProperty("version"))) throw new IllegalArgumentException();
-            Map<String,String> values=new LinkedHashMap<>(); p.forEach((k,v)->values.put((String)k,(String)v));
-            schedule=UpdateScheduleCodec.read(values); kind=Kind.valueOf(p.getProperty("kind")); lastKind=Kind.valueOf(p.getProperty("lastKind"));
+            String version=p.getProperty("version");
+            if(!"1".equals(version) && !"2".equals(version)) throw new IllegalArgumentException();
+            Map<String,String> values=new LinkedHashMap<>(), runtime=new LinkedHashMap<>();
+            p.forEach((k,v)-> {
+                String key=(String)k;
+                if(key.startsWith("runtime.")) runtime.put(key.substring(8),(String)v); else values.put(key,(String)v);
+            });
+            UpdateSchedule persisted=UpdateScheduleCodec.read(values);
+            // Version 1 stored only the effective schedule, which cannot distinguish policy
+            // defaults from choices; it adopts the current policy. Intent below is kept.
+            if("2".equals(version)) {
+                runtimeSchedule=runtime.isEmpty() ? null : UpdateScheduleCodec.read(runtime);
+                if(p.containsKey("preferences.checks")) userPreferences=new DeliveryPreferences(bool(p,"preferences.checks"),
+                    bool(p,"preferences.downloads"),bool(p,"preferences.unmeteredOnly"));
+            }
+            kind=Kind.valueOf(p.getProperty("kind")); lastKind=Kind.valueOf(p.getProperty("lastKind"));
             explicit=Boolean.parseBoolean(p.getProperty("explicit")); lastExplicit=Boolean.parseBoolean(p.getProperty("lastExplicit"));
             due=Long.parseLong(p.getProperty("due")); nextCheck=Long.parseLong(p.getProperty("nextCheck")); lastCheck=Long.parseLong(p.getProperty("lastCheck"));
             attempts=Integer.parseInt(p.getProperty("attempts")); partition=p.getProperty("partition"); phase=DeliveryController.Activity.valueOf(p.getProperty("phase")); error=p.getProperty("error");
@@ -298,7 +342,13 @@ public final class UpdateEngine implements UpdateControl {
             declined=offer(p,"declined."); lastPush=Long.parseLong(p.getProperty("lastPush","0"));
             String events=p.getProperty("pushEvents",""); if(!events.isEmpty()) pushEvents.addAll(Arrays.asList(events.split(",")));
             target=offer(p,"target."); lastTarget=offer(p,"lastTarget."); available=offer(p,"available.");
+            return persisted;
         } catch(RuntimeException invalid) { throw new IOException("Invalid update state"); }
+    }
+    private static boolean bool(Properties p,String key) {
+        String value=p.getProperty(key);
+        if(!"true".equals(value) && !"false".equals(value)) throw new IllegalArgumentException("Invalid preference");
+        return Boolean.parseBoolean(value);
     }
     private static void offer(Properties p,String prefix,ExpectedArchive a) {
         if(a==null) return;

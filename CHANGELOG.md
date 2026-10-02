@@ -62,6 +62,17 @@ these entries into a dated version section and document its exact upgrade path.
   for any other writer and retries loading before staging its own copy. Shells
   must be rebuilt to pick this up.
 
+- A shell update that changes the installed update schedule now reaches existing
+  installs. The runtime used to persist the whole effective schedule on first
+  start and prefer it over the shell policy from then on, so changes such as
+  enabling background checks (needed for local update hints) or lengthening
+  the check interval only applied to fresh installs. Only explicit runtime
+  choices (`preferences(...)` and `schedule(...)`) are now durable; everything
+  else follows the installed policy on every start. Existing update state adopts
+  the current policy once, keeping pending work, retries and offers; runtime
+  update preference choices made before this change are not retained. Shells
+  must be rebuilt to pick this up.
+
 ### Migration
 
 - Local update triggers are disabled by default. To adopt them, upgrade the

@@ -33,7 +33,8 @@ public final class UpdateEngineTest {
         }
         localHints();
         localHintsPreserveRetries();
-        System.out.println("PASS update engine: push scope, duplicate suppression, consent, explicit update, check-only, disabled push");
+        policyDefaultsReachExistingInstalls();
+        System.out.println("PASS update engine: push scope, duplicate suppression, consent, explicit update, check-only, disabled push, policy defaults vs durable choices");
     }
     static void localHints() throws Exception {
         try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {
@@ -102,4 +103,55 @@ public final class UpdateEngineTest {
         }
     }
 
+
+    /** Only explicit choices are durable; an updated shell's schedule reaches existing installs. */
+    static void policyDefaultsReachExistingInstalls() throws Exception {
+        try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {
+            ExecutorService worker=Executors.newSingleThreadExecutor();
+            try {
+                java.util.concurrent.atomic.AtomicReference<UpdateEngine.Work> work=new java.util.concurrent.atomic.AtomicReference<>();
+                java.io.File state=s.f.dir.resolve("policy-engine").toFile();
+                java.nio.file.Path file=state.toPath().resolve("operations.properties");
+                UpdateSchedule manual=UpdateSchedule.defaults().preferences(false,false,true);
+                UpdateSchedule hinted=new UpdateSchedule(172800,21600,true,true,false,true,false,false,false,30,3600,3,java.util.Collections.emptyMap());
+                UpdateEngine e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,manual,null,false,work::set);
+                e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                check(work.get().kind==UpdateEngine.Kind.NONE);
+
+                // The next shell enables checks with a longer interval; nothing was chosen at runtime.
+                e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,hinted,null,false,work::set);
+                check(e.current().schedule.checks && e.current().schedule.downloads && e.current().schedule.intervalSeconds==172800);
+                e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                check(work.get().kind==UpdateEngine.Kind.CHECK && !work.get().explicit);
+                s.head(); e.runJob(false,1,()->{}); worker.submit(()->{}).get();
+                check(s.f.requests==1 && work.get().nextCheckSeconds==s.clock.wall+172800);
+
+                // A user choice survives restarts and policy changes; other fields follow the policy.
+                e.preferences(new DeliveryPreferences(false,true,true)); worker.submit(()->{}).get();
+                UpdateSchedule shorter=new UpdateSchedule(86400,7200,true,true,false,true,false,false,false,30,3600,3,java.util.Collections.emptyMap());
+                e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,shorter,null,false,work::set);
+                check(!e.current().schedule.checks && e.current().schedule.downloads && e.current().schedule.intervalSeconds==86400);
+                check(work.get().nextCheckSeconds==s.clock.wall+86400);
+                e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                check(work.get().kind==UpdateEngine.Kind.NONE);
+
+                // A complete runtime schedule replaces earlier preferences and is durable too.
+                UpdateSchedule runtime=new UpdateSchedule(43200,3600,true,false,false,true,false,false,false,30,3600,3,java.util.Collections.emptyMap());
+                e.schedule(runtime); worker.submit(()->{}).get();
+                e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,hinted,null,false,work::set);
+                check(e.current().schedule.checks && !e.current().schedule.downloads && e.current().schedule.intervalSeconds==43200);
+                e.preferences(new DeliveryPreferences(true,true,true)); worker.submit(()->{}).get();
+                e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,hinted,null,false,work::set);
+                check(e.current().schedule.downloads && e.current().schedule.intervalSeconds==43200);
+
+                // Version 1 stored only the effective schedule; it adopts the current policy and keeps intent.
+                String legacy=java.nio.file.Files.readString(file).replace("version=2","version=1").replace("checks=true","checks=false");
+                java.nio.file.Files.writeString(file,legacy);
+                e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,hinted,null,false,work::set);
+                check(e.current().schedule.checks && e.current().schedule.intervalSeconds==172800);
+                check(e.current().lastCheckSeconds==s.clock.wall && work.get().nextCheckSeconds==s.clock.wall+172800);
+                check(java.nio.file.Files.readString(file).contains("version=2") && !java.nio.file.Files.readString(file).contains("runtime."));
+            } finally { worker.shutdownNow(); worker.awaitTermination(5,TimeUnit.SECONDS); }
+        }
+    }
 }
