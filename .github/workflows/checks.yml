@@ -1,0 +1,52 @@
+name: Host and consumer checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;35.0.0 build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install fixture signing dependency
+        run: python -m pip install cryptography
+      - name: Host regression
+        shell: bash
+        run: |
+          set -o pipefail
+          bash release-tests/regression.sh 2>&1 | tee host-regression.log
+      - name: Local publication and standalone consumer
+        shell: bash
+        run: |
+          set -o pipefail
+          bash release-tests/local-publication.sh 2>&1 | tee local-consumer.log
+      - name: Retain test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-and-consumer-evidence
+          path: |
+            host-regression.log
+            local-consumer.log
+            paravoid-*/build/test-results/
+            paravoid-*/build/reports/tests/
+          retention-days: 14

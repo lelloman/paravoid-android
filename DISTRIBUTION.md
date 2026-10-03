@@ -58,8 +58,9 @@ Shell APK distribution remains an ordinary Android installation/update concern.
 Paravoid can report that a new shell is needed; it does not silently install one.
 
 V1 distributes one complete VPK, including all packaged resource configurations
-and ABIs. Configuration-targeted downloads, deltas and live code replacement are
-out of scope. Do not rename today's `module.zip` to `.vpk` and claim conformance.
+and ABIs. Optional delta transport reconstructs and verifies the complete signed VPK; see
+[DVPK.md](DVPK.md). Configuration-targeted downloads and live code replacement
+remain out of scope. Do not rename today's `module.zip` to `.vpk` and claim conformance.
 
 ## 2. Identities and compatibility
 

@@ -51,7 +51,7 @@ development staging behavior without invented licensing. The Gradle script still
 rejects non-file repositories. Credentials must not appear in the decisions file,
 repository URL, command line, report or checked-in source.
 
-The read-only audit requires Python 3.11+. It checks all six artifacts and five plugin marker POMs, exact
+The read-only audit requires Python 3.11+. It checks all nine artifacts and five plugin marker POMs, exact
 coordinate/license alignment, internal dependency versions, readable nonempty
 binary/source ZIPs, and SHA-256 hashes. It optionally requires Javadoc artifacts.
 Exit codes: `0` means these local checks passed, `1` means candidate deficiencies,

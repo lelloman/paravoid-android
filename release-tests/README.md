@@ -14,7 +14,7 @@ runtime, lifecycle and delivery host suites plus Android delivery compilation.
 It accepts the Gradle/cache/offline variables below and deliberately does not
 select a connected device. Installed/physical and real-app gates remain separate.
 
-`bash release-tests/local-publication.sh` publishes all seven projects to a fresh
+`bash release-tests/local-publication.sh` publishes all nine projects to a fresh
 local Maven directory and builds a standalone consumer against those artifacts.
 The consumer has no included build, source dependency or project substitution.
 It resolves the main/Hilt/Work plugin markers; only the main plugin is applied.
@@ -86,3 +86,23 @@ The complete bundle passed again after the controls observer fix (`72f5816`),
 including its deterministic lifecycle-ordering test:
 `/tmp/paravoid-five-tracks-observer-regression.log`. JUnit count remains 161;
 the additional assertions live in the separate delivery host suite.
+
+## Continuous checks
+
+[GitHub CI](../.github/workflows/checks.yml) runs `regression.sh` and
+`local-publication.sh` with JDK 21 and SDK 36 on pushes, pull requests and manual
+dispatch. It retains logs and test reports, without publishing artifacts remotely.
+See the [quickstart](../docs/quickstart.md) for local setup. Device and external
+release gates remain in [the current checklist](../RELEASE-READINESS.md).
+
+Current local validation, 2026-10-03: the complete `regression.sh` bundle passes
+with 185 Gradle tests (98 plugin, 40 contract, 28 runtime, 10 Hilt, 9 Work),
+lifecycle and delivery Java checks, 22 delivery Python tests, 13 device-helper
+tests and 25 release-tool tests. The device-helper tests are host tests; installed
+current-engine results are recorded separately in the device test guide. Local log:
+`/tmp/paravoid-final-five-items-regression.log` (not a portable release record).
+
+The nine-module local publication and standalone normal/shell/VPK consumer build
+also pass; log `/tmp/paravoid-final-five-items-consumer.log`, staging repository
+`/tmp/paravoid-local-publication.8FHYCf`. These local paths are session evidence,
+not remote publication or final-candidate acceptance records.

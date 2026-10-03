@@ -8,6 +8,10 @@ The same application implementation should also build as a traditional,
 self-contained Android APK or AAB. Both modes are intended to render native UI,
 including Jetpack Compose.
 
+Start with the [complete-profile quickstart](docs/quickstart.md).
+[Release readiness](RELEASE-READINESS.md) is the current acceptance tracker; dated
+reports and older experiments below provide historical context.
+
 ## Current complete-profile status
 
 The complete profile implements signed VPK packaging, embedded/empty bootstrap,
@@ -52,7 +56,7 @@ code-only provider and requires a new shell APK to enable.
 ## Paravoid release changes
 
 [CHANGELOG.md](CHANGELOG.md) is the downstream upgrade record for the plugin,
-runtime and optional integrations. The seven modules use one coordinated version.
+runtime and optional integrations. The nine modules use one coordinated version.
 Each tagged release gets a dated entry with migration guidance. An app moving
 across several versions can read all intervening entries with:
 

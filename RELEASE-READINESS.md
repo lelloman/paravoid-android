@@ -4,19 +4,15 @@ This is the bounded release checklist, not a declaration of readiness. Original
 acceptance baseline: `509cb65`; later evidence names its tested revisions below
 and in the linked reports. Do not substitute host tests for installed tests or independent review.
 
-| Gate | Remaining acceptance | Status |
-| --- | --- | --- |
-| Persistence | First/replacement retry/cancel writes, deletion, bounded temporary slots and documented durability limits | Host matrix and 22 installed boundaries/API pass on API 30/36.1; see delivery/PERSISTENCE-TESTS.md |
-| Startup | Supported factory construction and provider/Activity/service startup; later crashes excluded | Seven installed cases/API on API 30/36.1 pass; explicit scope/handler limits in integration-v1/STARTUP-FAILURES.md |
-| Recovery races | Installed stale identity, pending repair, corruption and live lease refusal | Passed on API 30/36.1; pending-repair lifecycle gap fixed; see integration-v1/STARTUP-FAILURES.md |
-| Controls access | Document and test fallback when dynamic shortcut unavailable | App-owned observable update state and controls implemented; extra launcher entry is opt-in. API 30/36.1 cold/offline/shortcut-absent checks pass with the fixture's explicit alias; see integration-v1/CONTROLS-LAUNCHER.md |
-| Storage/processes | Selected distinct-release contention/death/cancel and publication I/O; restart identity/stall limits | Selected matrix passed on both APIs; see delivery/device-tests/README.md and V1.md restart limits |
-| HTTPS/auth | Signed release HTTPS download, personalized install, revoke/replace, interrupted transfer and fail-closed grants | Passed on API 30/36.1; local TLS and scope in delivery/device-tests/HTTPS-RELEASE.md |
-| Security/signing | Signing-block ID collision audit and independent protocol/security review | Scoped internal audit and AOSP ID survey recorded in delivery/SECURITY-REVIEW-2026-09-23.md; allocation-amplification fix tested; independent reviewer/private-ID approval still needed |
-| Real app | Final-runtime Pezzottify fixed-shell A-to-B, data/workflows, incompatible rejection and forward repair | Logged-out API 30 matrix passes with final-runtime producer-built A/B/4/5, preference/Room checks, incompatible/reused-identity refusal, quarantine/repair and offline relaunch; authenticated workflows still need approved backend/account; see release-tests/PEZZOTTIFY.md |
-| Physical device | Signed release ARM64 core matrix | Guarded HTTPS runner and nine host safety/routing tests prepared; no physical hardware connected/executed; see delivery/device-tests/PHYSICAL-ARM64.md |
-| Packaging/regression | Large valid payload execution, publication failures, optional integrations and final matrix | Near-limit VPK runs on both APIs; final-rename IO and 159-test host bundle pass; see delivery/device-tests/LARGE-PAYLOAD.md and release-tests/README.md |
-| Distribution | Version/license/repository, production metadata/tag/release notes, repeatable validation | GitHub/JitPack selected; changelog and skipped-version comparison added, with a version-tag notes gate. Six-module local publication/consumer tests pass; license/tag and actual remote build/consumer remain pending; see release-tests/JITPACK.md |
+| Gate | Current evidence / remaining work |
+| --- | --- |
+| Host/build | Current local regression passes: 185 Gradle tests plus lifecycle/delivery and Python suites. Repeat host regression and local standalone publication/consumer validation on the final candidate. CI repeats these checks; neither approves a release. |
+| Installed | Current unified-engine bootstrap/controls and ten retry/cancellation death boundaries pass on disposable API 36.1. API 30, scheduled retry replacement, HTTPS, storage and publication reruns remain pending. |
+| Payload R8 | Normal and shell saved-data upgrades pass on API 36.1 with transitive AAR/JAR consumer rules. Real-app integration and complete-profile shrinking acceptance remain pending. |
+| Physical ARM64 | No physical device supplied or tested. |
+| Authenticated real app | Backend/account and full login/content/playback/native/update/repair evidence needed. |
+| Independent security | Independent reviewer and signing-block/private-ID approval needed. |
+| Distribution | Nine-module local staging and standalone normal/shell/VPK builds pass in this session. License/version, actual remote build and standalone remote consumer acceptance remain pending. |
 
 ## Current candidate evidence and remaining inputs — 2026-10-03
 
@@ -63,9 +59,9 @@ or emulator evidence to stand in for the required physical or external result.
 - Process termination does not establish physical power/cache-loss durability.
 - Independent security review is not replaced by self-review or another copy of
   the same automated tests.
-- Deferred v1 features remain deferred: targeted/delta delivery, hot swap, dynamic
+- Deferred v1 features remain deferred: configuration-targeted delivery, hot swap, dynamic
   manifest changes, data rollback, online root rotation, isolated/direct-boot
-  payloads, shell AAB and shrinking.
+  payloads, shell AAB. Payload shrinking is experimental and still needs release acceptance.
 
 ## External decisions requested
 
@@ -113,3 +109,22 @@ clarified in V1.md. No new release gate was waived to obtain these results.
   Local publication/standalone consumer passed again at `4815fb3`:
   `/tmp/paravoid-final-publication.log`, local repository
   `/tmp/paravoid-local-publication.ZkIgPX`. No remote publication or phone use.
+
+## Historical acceptance matrix
+
+These results describe earlier revisions and controllers. They do not satisfy the
+current candidate gates without a recorded rerun.
+
+| Gate | Remaining acceptance | Status |
+| --- | --- | --- |
+| Persistence | First/replacement retry/cancel writes, deletion, bounded temporary slots and documented durability limits | Host matrix and 22 installed boundaries/API pass on API 30/36.1; see delivery/PERSISTENCE-TESTS.md |
+| Startup | Supported factory construction and provider/Activity/service startup; later crashes excluded | Seven installed cases/API on API 30/36.1 pass; explicit scope/handler limits in integration-v1/STARTUP-FAILURES.md |
+| Recovery races | Installed stale identity, pending repair, corruption and live lease refusal | Passed on API 30/36.1; pending-repair lifecycle gap fixed; see integration-v1/STARTUP-FAILURES.md |
+| Controls access | Document and test fallback when dynamic shortcut unavailable | App-owned observable update state and controls implemented; extra launcher entry is opt-in. API 30/36.1 cold/offline/shortcut-absent checks pass with the fixture's explicit alias; see integration-v1/CONTROLS-LAUNCHER.md |
+| Storage/processes | Selected distinct-release contention/death/cancel and publication I/O; restart identity/stall limits | Selected matrix passed on both APIs; see delivery/device-tests/README.md and V1.md restart limits |
+| HTTPS/auth | Signed release HTTPS download, personalized install, revoke/replace, interrupted transfer and fail-closed grants | Passed on API 30/36.1; local TLS and scope in delivery/device-tests/HTTPS-RELEASE.md |
+| Security/signing | Signing-block ID collision audit and independent protocol/security review | Scoped internal audit and AOSP ID survey recorded in delivery/SECURITY-REVIEW-2026-09-23.md; allocation-amplification fix tested; independent reviewer/private-ID approval still needed |
+| Real app | Final-runtime Pezzottify fixed-shell A-to-B, data/workflows, incompatible rejection and forward repair | Logged-out API 30 matrix passes with final-runtime producer-built A/B/4/5, preference/Room checks, incompatible/reused-identity refusal, quarantine/repair and offline relaunch; authenticated workflows still need approved backend/account; see release-tests/PEZZOTTIFY.md |
+| Physical device | Signed release ARM64 core matrix | Guarded HTTPS runner and nine host safety/routing tests prepared; no physical hardware connected/executed; see delivery/device-tests/PHYSICAL-ARM64.md |
+| Packaging/regression | Large valid payload execution, publication failures, optional integrations and final matrix | Near-limit VPK runs on both APIs; final-rename IO and 159-test host bundle pass; see delivery/device-tests/LARGE-PAYLOAD.md and release-tests/README.md |
+| Distribution | Version/license/repository, production metadata/tag/release notes, repeatable validation | GitHub/JitPack selected; changelog and skipped-version comparison added, with a version-tag notes gate. Six-module local publication/consumer tests pass; license/tag and actual remote build/consumer remain pending; see release-tests/JITPACK.md |

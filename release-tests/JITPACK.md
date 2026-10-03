@@ -6,7 +6,7 @@ this setup does not change mirror direction, enable the disabled Fucina push
 remote, or assume a Fucina package-registry endpoint.
 
 `jitpack.yml` selects JDK 17, installs the required SDK packages and explicitly
-publishes all six projects (including the three included plugin builds) to Maven
+publishes all nine projects (including the three included plugin builds) to Maven
 local for JitPack collection. The runner needs Android command-line tools and
 accepted SDK licenses. No emulator, Python fixture keys, Maven Central account,
 PGP key or Gradle Plugin Portal upload is required for this publication path.
@@ -85,7 +85,7 @@ This is local coordinate/build evidence, not a successful remote JitPack build.
 
 Before public release, select a license and release tag (or explicitly approve a
 commit-based test publication), ensure all needed sources are on GitHub, then
-authorize the remote push/build. Check JitPack's build log and download all six
+authorize the remote push/build. Check JitPack's build log and download all nine
 modules, and rerun the standalone consumer against `https://jitpack.io` with that
 exact version. Do not mark remote distribution complete until that passes.
 Never move/reuse a released tag. Fucina CI may run these same local checks; an
