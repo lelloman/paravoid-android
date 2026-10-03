@@ -47,6 +47,13 @@ these entries into a dated version section and document its exact upgrade path.
 
 ### Changed
 
+- Payload R8 now automatically consumes transitive AAR/JAR consumer ProGuard
+  rules, selects version-targeted rules for its actual SDK R8, and records them
+  in `payload-consumer-rules.pro`. Manifest metadata referring to payload classes
+  is retained, including Startup initializers. App-specific reflection and
+  serialization still require app rules. Rebuild minified payloads and validate
+  upgrades with existing user data; archive the consumer rules with the mapping.
+
 - The extra **App updates** launcher icon defaults to off. Set
   `paravoid { controlsLauncher = true }` to keep that separate entry.
 

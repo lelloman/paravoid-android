@@ -8,6 +8,7 @@ import android.os.Parcel;
 import android.widget.TextView;
 import dalvik.system.InMemoryDexClassLoader;
 import java.util.ServiceLoader;
+import java.io.*;
 
 public final class MainActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
@@ -19,7 +20,7 @@ public final class MainActivity extends Activity {
         setContentView(result);
         try {
             check();
-            result.setText("PASS: reflection, service discovery, Parcelable, provider, receiver class, and payload loader");
+            result.setText("PASS: reflection, dependency consumer rules, saved settings, service discovery, Parcelable, provider, receiver class, and payload loader");
         } catch (Exception | LinkageError failure) {
             result.setText("FAIL: " + failure);
         }
@@ -55,6 +56,32 @@ public final class MainActivity extends Activity {
         require(response != null && "pong".equals(response.getString("result")), "provider");
         require(getClassLoader().loadClass("com.lelloman.paravoidcompat.minification.ProbeReceiver") != null, "receiver class");
         require(RenameProbe.answer() == 7, "obfuscatable class");
+        Class<?> greeting = Class.forName("com.lelloman.paravoidcompat.consumer.JarGreeting", true, getClassLoader());
+        require("jar consumer rule".equals(greeting.getMethod("value").invoke(null)), "JAR consumer rule");
+        savedSettings();
+    }
+
+    private void savedSettings() throws Exception {
+        Class<?> model = Class.forName("com.lelloman.paravoidcompat.consumer.SavedSettings", true, getClassLoader());
+        File file = new File(getFilesDir(), "saved-settings.ser");
+        if (!file.exists()) {
+            Object initial = model.getConstructor().newInstance();
+            model.getField("savedChoice").setInt(initial, 73); // Non-default user choice.
+            model.getField("seedNonce").set(initial, java.util.UUID.randomUUID().toString());
+            try (ObjectOutputStream output = new ObjectOutputStream(new FileOutputStream(file))) {
+                output.writeObject(initial);
+            }
+        }
+        try (ObjectInputStream input = new ObjectInputStream(new FileInputStream(file)) {
+            @Override protected Class<?> resolveClass(ObjectStreamClass descriptor) throws IOException, ClassNotFoundException {
+                return Class.forName(descriptor.getName(), false, MainActivity.this.getClassLoader());
+            }
+        }) {
+            Object restored = input.readObject();
+            require(restored.getClass() == model && model.getField("savedChoice").getInt(restored) == 73
+                && ((String) model.getField("seedNonce").get(restored)).length() == 36,
+                "existing serialized settings with preserved dependency field names");
+        }
     }
 
     private static void require(boolean condition, String label) {

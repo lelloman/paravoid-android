@@ -20,3 +20,5 @@ project(':paravoid-update-api').projectDir = file('../../paravoid-update-api')
 
 include ':paravoid-update-ipc'
 project(':paravoid-update-ipc').projectDir = file('../../paravoid-update-ipc')
+
+include ':consumer-library', ':jar-library'

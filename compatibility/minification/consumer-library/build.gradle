@@ -1,0 +1,7 @@
+plugins { id 'com.android.library' }
+android {
+    namespace 'com.lelloman.paravoidcompat.consumer'
+    compileSdk 36
+    defaultConfig { minSdk 28; consumerProguardFiles 'consumer.pro' }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
+}

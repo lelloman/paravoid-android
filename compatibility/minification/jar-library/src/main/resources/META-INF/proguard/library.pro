@@ -1,0 +1,1 @@
+-keep class com.lelloman.paravoidcompat.consumer.JarGreeting { *; }

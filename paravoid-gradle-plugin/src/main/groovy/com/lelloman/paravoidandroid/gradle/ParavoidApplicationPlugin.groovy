@@ -164,6 +164,16 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 minSdk.set(variant.minSdk.apiLevel)
                 minifyPayload.set(extension.minifyPayload)
                 payloadProguardFiles.from(extension.payloadProguardFiles)
+                if (extension.minifyPayload.get()) {
+                    // AGP 8.13.2 is pinned by this plugin. Use its variant-aware
+                    // transitive extraction, including project AAR consumer rules
+                    // and META-INF/proguard in JARs, without resolving at configuration.
+                    dependencyProguardRules.from(variant.runtimeConfiguration.incoming.artifactView {
+                        attributes.attribute(org.gradle.api.artifacts.type.ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
+                            'android-consumer-proguard-rules')
+                    }.files)
+                }
+                consumerRulesFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/payload-consumer-rules.pro"))
                 if (extension.crashRecovery.enabled.get() && extension.crashRecovery.updater.get() == 'custom') recoveryJars.from(recoveryLibraries)
                 recoveryProvider.set(extension.crashRecovery.enabled.get() ? extension.crashRecovery.providerClass : project.providers.provider { '' })
                 d8Jar.set(components.sdkComponents.sdkDirectory.map { it.file("build-tools/${android.buildToolsVersion}/lib/d8.jar") })

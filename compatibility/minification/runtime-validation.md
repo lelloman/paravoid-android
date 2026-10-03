@@ -1,13 +1,22 @@
 # Payload R8: dependency rules and runtime validation
 
-The experimental `minifyPayload` path does not collect dependency consumer
-ProGuard rules automatically. It generates rules for manifest components and
-Paravoid entry points and applies the app's `payloadProguardFiles`. A successful
+The experimental `minifyPayload` path collects dependency consumer ProGuard
+rules from the variant's transitive AARs and JARs, including project libraries and
+`META-INF/proguard`. It selects version-targeted `META-INF/com.android.tools/r8*`
+rules for the SDK R8 that actually packages the payload, using AGP 8.13.2's matching
+semantics. It records the selected, deduplicated rules in
+`build/outputs/paravoid/<variant>/payload-consumer-rules.pro` with content hashes.
+
+The plugin also generates rules for manifest components, Paravoid entry points
+and metadata names/values that resolve to payload classes (including Startup
+initializers). It applies the app's `payloadProguardFiles` after dependency rules.
+Libraries can still ship incomplete rules; app-specific reflection, JNI and
+serialization rules remain the app's responsibility. A successful
 build, contract check, or Store validation does not establish runtime safety.
 
-## Failures observed in Accordomi
+## Historical failures observed in Accordomi
 
-These failures were observed with payload R8 8.6.2-dev, Kotlin 2.2 metadata,
+These failures predate automatic consumer-rule collection and were observed with payload R8 8.6.2-dev, Kotlin 2.2 metadata,
 AndroidX Startup, Hilt, Navigation Compose, and DataStore Preferences:
 
 | Runtime symptom | Missing protection |
@@ -63,3 +72,17 @@ it must not be used to explain a specific runtime crash without its stack trace.
 If an already published payload is broken, validate a higher-version repair
 payload against the installed shell contract and publish that repair. Do not
 assume a shell replacement or deletion of user data is required.
+
+## Automated retained-data regression
+
+The [minification fixture](README.md) has an Android library with an otherwise
+unused serialized settings class kept solely by its consumer rules, plus a
+reflection-only JAR dependency kept by `META-INF/proguard`. Its upgrade runner
+installs an unminified seed, saves a non-default choice, replaces the APK with the
+minified version using `adb install -r`, and cold-starts it again. It checks both
+runtime lookup and byte-for-byte preservation of the existing settings file in
+normal and shell modes. No data clear occurs between seed and replacement.
+
+This is a serialization/schema regression, not a substitute for DataStore, Room,
+Navigation or authenticated workflows in the actual downstream app. Keep the
+application-specific saved-data checks above when adopting payload shrinking.

@@ -7,7 +7,7 @@ android {
         applicationId 'com.lelloman.paravoidcompat.minification'
         minSdk 28
         targetSdk 36
-        versionCode 1
+        versionCode providers.gradleProperty('probeVersion').map { it.toInteger() }.getOrElse(1)
         versionName '1.0'
     }
     compileOptions {
@@ -21,4 +21,8 @@ paravoid {
     payloadProguardFiles.from(layout.projectDirectory.file('payload-rules.pro'))
 }
 
-dependencies { implementation project(':paravoid-runtime') }
+dependencies {
+    implementation project(':paravoid-runtime')
+    implementation project(':consumer-library')
+    implementation project(':jar-library')
+}

@@ -24,6 +24,9 @@ class ApplicationPackagingTest {
             'package example; public class CustomKeep { public static String value() { return "kept"; } }')
         write(root, 'app/src/main/java/example/Obfuscatable.java',
             'package example; public class Obfuscatable { public static String value() { return "renamed"; } }')
+        write(root, 'app/src/main/java/example/ManifestInitializer.java', 'package example; public class ManifestInitializer { public ManifestInitializer() {} }')
+        File manifest = new File(root, 'app/src/main/AndroidManifest.xml')
+        manifest.text = manifest.text.replace('</application>', '<meta-data android:name="example.ManifestInitializer" android:value="androidx.startup" /></application>')
         write(root, 'app/payload-rules.pro', '''
             -keep class example.CustomKeep { *; }
             -keep,allowobfuscation class example.Obfuscatable { *; }
@@ -40,6 +43,7 @@ class ApplicationPackagingTest {
         assertTrue(mapping.contains('example.MainActivity -> example.MainActivity:'))
         assertTrue(mapping.contains('example.MyApplication -> example.MyApplication:'))
         assertTrue(mapping.contains('example.CustomKeep -> example.CustomKeep:'))
+        assertTrue(mapping.contains('example.ManifestInitializer -> example.ManifestInitializer:'))
         assertTrue((mapping =~ /example\.Obfuscatable -> (?!example\.Obfuscatable:)[^:]+:/).find())
         new ZipFile(new File(output, 'module.zip')).withCloseable { zip ->
             String payload = dexText(zip)
@@ -48,6 +52,41 @@ class ApplicationPackagingTest {
             assertTrue(payload.contains('Lexample/CustomKeep;'))
             assertFalse(payload.contains('Lexample/Unused;'))
         }
+    }
+
+    @Test void payloadMinificationCollectsTransitiveAarAndJarConsumerRulesAndTracksChanges() {
+        File root = fixture()
+        new File(root, 'settings.gradle') << "\ninclude ':consumerleaf', ':consumerwrapper', ':consumerjar'\n"
+        ['consumerleaf', 'consumerwrapper'].each { name ->
+            write(root, "${name}/build.gradle", "plugins { id 'com.android.library' }; android { namespace 'example.${name}'; compileSdk 36; defaultConfig { minSdk 28; consumerProguardFiles 'consumer.pro' } }")
+            write(root, "${name}/src/main/AndroidManifest.xml", '<manifest />')
+            write(root, "${name}/consumer.pro", '')
+        }
+        write(root, 'consumerleaf/src/main/java/example/LibraryModel.java', 'package example; public class LibraryModel { public String storedField = "persisted"; }')
+        write(root, 'consumerleaf/consumer.pro', '-keep class example.LibraryModel { *; }')
+        new File(root, 'consumerwrapper/build.gradle') << "\ndependencies { api project(':consumerleaf') }\n"
+        write(root, 'consumerjar/build.gradle', "plugins { id 'java-library' }")
+        write(root, 'consumerjar/src/main/java/example/JarModel.java', 'package example; public class JarModel { public String storedField = "jar"; }')
+        write(root, 'consumerjar/src/main/resources/META-INF/proguard/library.pro', '-keep class example.JarModel { *; }')
+        new File(root, 'app/build.gradle') << "\nparavoid.minifyPayload = true\ndependencies { implementation project(':consumerwrapper'); implementation project(':consumerjar') }\n"
+        run(root, ':app:assembleParavoidAndroidDebug').build()
+        File output = new File(root, 'app/build/outputs/paravoid/paravoidAndroidDebug')
+        String rules = new File(output, 'payload-consumer-rules.pro').text
+        assertTrue(rules.contains('example.LibraryModel'))
+        assertTrue(rules.contains('example.JarModel'))
+        String mapping = new File(output, 'payload-mapping.txt').text
+        assertTrue(mapping.contains('example.LibraryModel -> example.LibraryModel:'))
+        assertTrue(mapping.contains('example.JarModel -> example.JarModel:'))
+        assertEquals(TaskOutcome.UP_TO_DATE, run(root, ':app:assembleParavoidAndroidDebug').build()
+            .task(':app:packageParavoidAndroidDebugParavoidApplication').outcome)
+        write(root, 'consumerleaf/consumer.pro', '-keep class example.LibraryModel { *; }\n# changed dependency rule')
+        def changed = run(root, ':app:assembleParavoidAndroidDebug').build()
+        assertEquals(TaskOutcome.SUCCESS, changed.task(':app:packageParavoidAndroidDebugParavoidApplication').outcome)
+        assertTrue(new File(output, 'payload-consumer-rules.pro').text.contains('# changed dependency rule'))
+        new File(root, 'app/build.gradle') << "\nparavoid.minifyPayload = false\n"
+        run(root, ':app:assembleParavoidAndroidDebug').build()
+        assertFalse(new File(output, 'payload-consumer-rules.pro').exists())
+        assertFalse(new File(output, 'payload-mapping.txt').exists())
     }
 
     @Test void completeProfileRejectsLegacyResourceShellWithoutRunningPackagingDependencies() {

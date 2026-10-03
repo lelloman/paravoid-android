@@ -27,6 +27,8 @@ abstract class PackageApplicationTask extends DefaultTask {
     @Input abstract Property<Integer> getMinSdk()
     @Input abstract Property<Boolean> getMinifyPayload()
     @InputFiles @PathSensitive(PathSensitivity.RELATIVE) abstract ConfigurableFileCollection getPayloadProguardFiles()
+    @InputFiles @PathSensitive(PathSensitivity.RELATIVE) abstract ConfigurableFileCollection getDependencyProguardRules()
+    @Optional @OutputFile abstract RegularFileProperty getConsumerRulesFile()
     @Classpath abstract ConfigurableFileCollection getRecoveryJars()
     @Input abstract Property<String> getRecoveryProvider()
     @Classpath abstract ConfigurableFileCollection getUpdateJars()
@@ -132,6 +134,9 @@ abstract class PackageApplicationTask extends DefaultTask {
         if (minifyPayload.get()) {
             File rules = new File(temporaryDir, 'payload-rules.pro')
             rules.text = keepRules(manifestFile.get().asFile, payload)
+            File consumer = consumerRulesFile.get().asFile
+            consumer.parentFile.mkdirs()
+            consumer.setText(PayloadConsumerRules.merge(dependencyProguardRules.files, PayloadConsumerRules.r8Version(d8Jar.get().asFile)), 'UTF-8')
             File mapping = mappingFile.get().asFile
             mapping.parentFile.mkdirs()
             execOperations.javaexec {
@@ -139,12 +144,13 @@ abstract class PackageApplicationTask extends DefaultTask {
                 mainClass.set('com.android.tools.r8.R8')
                 args '--release', '--min-api', minSdk.get().toString(), '--lib', androidJar.get().asFile.absolutePath,
                     '--classpath', shell.absolutePath, '--output', dexZip.absolutePath,
-                    '--pg-conf', rules.absolutePath, '--pg-map-output', mapping.absolutePath
+                    '--pg-conf', rules.absolutePath, '--pg-conf', consumer.absolutePath, '--pg-map-output', mapping.absolutePath
                 payloadProguardFiles.files.each { args '--pg-conf', it.absolutePath }
                 args payload.absolutePath
             }.assertNormalExitValue()
         } else {
             Files.deleteIfExists(mappingFile.get().asFile.toPath())
+            Files.deleteIfExists(consumerRulesFile.get().asFile.toPath())
             execOperations.javaexec {
                 classpath(d8Jar.get().asFile)
                 mainClass.set('com.android.tools.r8.D8')
@@ -186,8 +192,11 @@ abstract class PackageApplicationTask extends DefaultTask {
         def metadata = document.getElementsByTagName('meta-data')
         (0..<metadata.length).each { index ->
             def element = metadata.item(index)
-            if (element.getAttributeNS(android, 'name') in ['paravoid.application', 'paravoid.componentFactory']) {
-                String name = element.getAttributeNS(android, 'value')
+            // Startup and other libraries use metadata keys or values as class
+            // names. Only matching payload classes are kept below; resource IDs
+            // and ordinary metadata values never become broad keep patterns.
+            ['name', 'value'].each { attribute ->
+                String name = element.getAttributeNS(android, attribute)
                 if (name) names.add(name)
             }
         }

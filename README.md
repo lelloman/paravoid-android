@@ -29,7 +29,9 @@ It shrinks, optimizes, and obfuscates the payload before DEX packaging and write
 `build/outputs/paravoid/<variant>/payload-mapping.txt`. Manifest components and
 Paravoid's class-name entry points are retained automatically. Apps that load
 other classes by name must supply rules through `paravoid.payloadProguardFiles.from(...)`.
-Dependency consumer ProGuard rules are not collected automatically. See the
+Dependency consumer ProGuard rules are collected automatically from transitive
+AARs and JARs and recorded in `payload-consumer-rules.pro`. Version-targeted rules
+are selected for the SDK R8 used by payload packaging. See the
 [runtime validation guide](compatibility/minification/runtime-validation.md) for
 Startup, Hilt, Navigation, and DataStore failure modes, example keep rules, and
 saved-data upgrade checks.
