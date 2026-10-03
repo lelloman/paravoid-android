@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "gates": {
+    "host": {"status": "pending", "reason": "Run release-tests/regression.sh against the final candidate source revision and retain its log."},
+    "installed": {"status": "pending", "reason": "Current API 36.1 bootstrap and ten engine death boundaries pass; API 30, scheduled replacement, HTTPS and publication/storage reruns remain."},
+    "physicalArm64": {"status": "pending", "reason": "No authorized physical ARM64 device is connected; see delivery/device-tests/PHYSICAL-ARM64.md."},
+    "authenticatedApp": {"status": "pending", "reason": "Provide an approved backend/account for login, content, playback, native, fixed-shell update and repair workflows."},
+    "security": {"status": "pending", "reason": "Independent protocol and signing-block reviewer must approve the final source revision; self-review does not close this gate."},
+    "remoteConsumer": {"status": "pending", "reason": "Choose license/release version, then authorize remote publication and validate an actual remote consumer; local staging is insufficient."}
+  }
+}

@@ -18,6 +18,41 @@ and in the linked reports. Do not substitute host tests for installed tests or i
 | Packaging/regression | Large valid payload execution, publication failures, optional integrations and final matrix | Near-limit VPK runs on both APIs; final-rename IO and 159-test host bundle pass; see delivery/device-tests/LARGE-PAYLOAD.md and release-tests/README.md |
 | Distribution | Version/license/repository, production metadata/tag/release notes, repeatable validation | GitHub/JitPack selected; changelog and skipped-version comparison added, with a version-tag notes gate. Six-module local publication/consumer tests pass; license/tag and actual remote build/consumer remain pending; see release-tests/JITPACK.md |
 
+## Current candidate evidence and remaining inputs — 2026-10-03
+
+The September reports below are historical evidence. The current update owner is
+`UpdateEngine` in `:paravoid_updates`; it persists one `operations.properties`
+record rather than the prior controller's retry/cancellation files. Current API
+36.1 bootstrap/control and ten installed record-death checks pass; see
+[the current-engine report](delivery/device-tests/README.md#current-engine-validation--2026-10-03).
+API 30, scheduled retry replacement, release HTTPS, publication and storage reruns
+remain separate. No physical device is connected and no authenticated account,
+independent reviewer, license or release version has been supplied for this pass.
+
+Audit retained evidence against a full final candidate source SHA:
+
+```sh
+python3 release-tests/acceptance.py --plan release-tests/acceptance-plan.json \
+  --revision FULL_FINAL_SOURCE_SHA
+```
+
+The checked-in plan deliberately lists all unresolved gates. Copy it into the
+local evidence directory and fill in actual results. A passing gate needs
+`status: "passed"`, the exact `revision`, `command`, `platform`, `recordedBy`, and
+an `evidence` array of `{ "path": "relative/log/file", "sha256": "HEX_HASH" }`.
+Paths resolve relative to the plan. Record `deviceType: "physical-arm64"` for
+physical testing, the full `workflows` list (`login`, `content`, `playback`,
+`native`, `update`, `repair`) for the authenticated app, `reviewType: "independent"`
+for security, and the actual HTTPS `repositoryUrl` for remote consumer validation.
+
+The read-only audit exits 1 for missing/stale/changed evidence and 2 for invalid
+inputs. It checks records and file hashes; it does not infer success from log text,
+verify reviewer identity, replace independent review, or approve a release. Even
+complete records report `releaseApproved: false`. License/version/signing metadata
+still go through [candidate preparation](release-tests/CANDIDATE.md); publication
+still requires the owner's concrete release decision. Never fill a gate with host
+or emulator evidence to stand in for the required physical or external result.
+
 ## Scope and completion rules
 
 - Local implementation, tests and documentation may proceed while external inputs
