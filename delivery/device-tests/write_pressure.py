@@ -1,4 +1,5 @@
 """Real ENOSPC during archive/component copying, on a disposable debuggable emulator only."""
+from engine_state import state as engine_state
 import hashlib
 from pathlib import Path
 import subprocess
@@ -20,7 +21,7 @@ def run(root, serial, app, launcher, archive, server, adb, ui, tap, phase='archi
     assert len(active) == 1
     digest = hashlib.sha256(data(active[0])).hexdigest()
     main_pid = adb('shell', 'pidof', app).strip()
-    owner = adb('shell', 'pidof', app + ':paravoid_recovery').strip()
+    owner = adb('shell', 'pidof', app + ':paravoid_updates').strip()
     assert owner.isdigit() and main_pid.isdigit()
     worker_pid = None
     def reserve():
@@ -116,20 +117,20 @@ def run(root, serial, app, launcher, archive, server, adb, ui, tap, phase='archi
                 assert gate.wait(timeout=10) == 0
                 for _ in range(15):
                     state = ui()
-                    if 'Update status: IO' in state:
+                    if engine_state(adb, app).get('error') == 'IO':
                         break
                     time.sleep(.25)
                 else:
                     raise AssertionError('Missing terminal storage IO result: ' + state)
-                assert 'Pending: none' in state and 'A local app generation is available.' in state
+                assert engine_state(adb, app).get('phase') == 'ERROR'
                 assert security == data(store + 'security') and selection == data(store + 'selection')
                 assert hashlib.sha256(data(active[0])).hexdigest() == digest
                 assert adb('shell', 'pidof', app).strip() == main_pid
-                assert not adb('shell', 'run-as', app, 'find', 'no_backup', '-name', 'paravoid-update-preferences.retry').strip()
+                assert engine_state(adb, app).get('kind') == 'NONE'
                 print('PASS: real mid-' + phase + '-copy ENOSPC; active archive, selection/security records and main PID preserved; no network retry', flush=True)
                 tap('Retry update access')
                 for _ in range(30):
-                    if 'Update: READY' in ui():
+                    if engine_state(adb, app).get('phase') == 'READY':
                         break
                     time.sleep(.25)
                 else:

@@ -21,7 +21,7 @@ public final class PersistenceDeathGate {
             if (locations.isEmpty()) throw new AssertionError("Missing production line information");
             for (Location location : locations) {
                 BreakpointRequest stop = vm.eventRequestManager().createBreakpointRequest(location);
-                if (args.length > 4) stop.addCountFilter(Integer.parseInt(args[4]));
+                if (args.length > 4 && args.length < 6) stop.addCountFilter(Integer.parseInt(args[4]));
                 stop.setSuspendPolicy(EventRequest.SUSPEND_ALL); stop.enable();
             }
             Files.writeString(markers.resolve("ready"), "armed\n");
@@ -31,6 +31,27 @@ public final class PersistenceDeathGate {
                 if (events == null) continue;
                 for (Event event : events) {
                     if (event instanceof BreakpointEvent) {
+                        BreakpointEvent breakpoint = (BreakpointEvent) event;
+                        if (args.length >= 6) {
+                            // The unified writer also persists intent/attempt/schedule.
+                            // Filter by the real Properties argument, not a fragile
+                            // number of writes or a test-mutated persisted record.
+                            StackFrame frame = breakpoint.thread().frame(0);
+                            LocalVariable variable = frame.visibleVariableByName("p");
+                            if (variable == null) throw new AssertionError("Missing writer Properties debug variable");
+                            ObjectReference record = (ObjectReference) frame.getValue(variable);
+                            Method getter = record.referenceType().allMethods().stream()
+                                .filter(method -> method.name().equals("getProperty") && method.argumentTypeNames().size() == 1)
+                                .findFirst().orElseThrow(() -> new AssertionError("Missing Properties getter on " + record.referenceType().name()));
+                            Value phase = record.invokeMethod(breakpoint.thread(), getter,
+                                List.of(vm.mirrorOf("phase")), ObjectReference.INVOKE_SINGLE_THREADED);
+                            if (!(phase instanceof StringReference) || !args[5].equals(((StringReference) phase).value())) continue;
+                            if (args.length >= 7) {
+                                Value attempts = record.invokeMethod(breakpoint.thread(), getter,
+                                    List.of(vm.mirrorOf("attempts")), ObjectReference.INVOKE_SINGLE_THREADED);
+                                if (!(attempts instanceof StringReference) || !args[6].equals(((StringReference) attempts).value())) continue;
+                            }
+                        }
                         Files.writeString(markers.resolve("reached"), args[2] + ":" + args[3]);
                         vm.exit(73); return;
                     }

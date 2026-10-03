@@ -66,8 +66,8 @@ def point(node):
 
 
 def tap(label):
-    node = next(n for n in ET.fromstring(ui()).iter('node') if n.attrib.get('text', '').lower() == label.lower())
-    adb('shell', 'input', 'tap', *point(node))
+    from controls_ui import tap as tap_control
+    tap_control(adb, ui, label)
 
 
 def launch():
@@ -80,7 +80,7 @@ def controls():
     alias = resolved_updates_alias(launchers, APP)
     if alias is not None:
         adb('shell', 'am', 'start', '-W', '-n', alias)
-        expect('A local app generation is available.')
+        expect('Installed version')
         return
     # Older shells, or integrators explicitly opting out of the manifest alias.
     w, h = map(int, re.search(r'(\d+)x(\d+)', adb('shell', 'wm', 'size')).groups())
@@ -95,7 +95,7 @@ def controls():
         nodes = list(ET.fromstring(ui()).iter('node'))
         shortcuts = [n for n in nodes if n.attrib.get('text') in ('App updates', 'Paravoid app updates')]
         if shortcuts:
-            adb('shell', 'input', 'tap', *point(shortcuts[0])); expect('A local app generation is available.'); return
+            adb('shell', 'input', 'tap', *point(shortcuts[0])); expect('Installed version'); return
         adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
     raise AssertionError('Release shell controls shortcut not found')
 
@@ -205,35 +205,35 @@ try:
                 check=True, timeout=120)
             carriers.append(carrier)
         server = start_server('untrusted')
-        adb('install', source); launch(); expect('Update access unavailable')
+        adb('install', source); launch(); expect('Update access is unavailable')
         assert not requests
         assert 'not debuggable' in adb('shell', 'run-as', APP, 'id', check=False).lower()
-        adb('install', '-r', carriers[0]); launch(); expect('Update: WAITING_TO_RETRY')
+        adb('install', '-r', carriers[0]); launch(); expect('Waiting to retry')
         assert not requests, 'Untrusted TLS reached HTTP handler'
-        tap('Cancel download'); expect('Update: CANCELLED')
+        tap('Cancel download'); expect('Update cancelled')
         server.shutdown(); server.server_close(); server = start_server('server')
-        tap('Retry update access'); expect('Pending: ' + release['releaseId'])
+        tap('Retry update access'); expect('Ready to restart')
         assert any(value and value.startswith('bytes=') for value in ranges), 'Interrupted TLS download did not resume'
         assert requests and all(value == 0 for value in requests)
         tap('Restart app…'); tap('Stop and restart')
         expect('generation=A;asset=payload-asset;java=payload-java-resource')
         print('PASS non-debuggable signed release: missing grant denied, untrusted TLS refused, personalized CLI carrier downloads/resumes/activates over trusted HTTPS', args.serial, flush=True)
-        controls(); catalog.revoke(tokens[0]); tap('Check now'); expect('Update access unavailable')
+        controls(); catalog.revoke(tokens[0]); tap('Check now'); expect('Update access is unavailable')
         count = len(requests)
         adb('shell', 'am', 'force-stop', APP); launch()
         expect('generation=A;asset=payload-asset;java=payload-java-resource')
         # A new controller's snapshot is IDLE when the foreground check is
         # throttled; the prior process's error text is not persisted.
-        controls(); expect('Current: p1'); assert len(requests) == count
+        controls(); expect('Installed version   1'); assert len(requests) == count
         adb('install', '-r', carriers[1]); launch()
         expect('generation=A;asset=payload-asset;java=payload-java-resource')
-        controls(); tap('Check now'); expect('Update: READY')
+        controls(); tap('Check now'); expect('Installed version   1')
         assert len(requests) > count and all(value == 1 for value in requests[count:])
         print('PASS revoked key preserves active app/suppresses requests; APK credential replacement restores HTTPS updates with only the new key', args.serial, flush=True)
         count = len(requests)
         adb('install', '-r', source); launch()
         expect('generation=A;asset=payload-asset;java=payload-java-resource')
-        controls(); tap('Check now'); expect('Update access unavailable'); assert len(requests) == count
+        controls(); tap('Check now'); expect('Update access is unavailable'); assert len(requests) == count
         server.shutdown(); server.server_close(); server = None
         adb('shell', 'am', 'force-stop', APP); launch()
         expect('generation=A;asset=payload-asset;java=payload-java-resource')

@@ -2,13 +2,29 @@
 
 ## Retry/cancellation persistence
 
-`public_bootstrap.py --serial SERIAL --persistence-crash` exercises ten production
-write-boundary deaths and two retry-deletion deaths on an installed empty/public
-shell. `--persistence-delete` runs only the deletion subset. See
-[the persistence report](../PERSISTENCE-TESTS.md) for commands, both-API results
-and the distinction between host, installed process-death and power-loss evidence.
-`persistence-matrix.sh SERIAL [PORT]` adds natural retry replacement and five
-independent first-cancellation cases, for all 20 write combinations plus deletion.
+The current runner targets `UpdateEngine` in `:paravoid_updates` and the unified
+`no_backup/paravoid-updates-v1/operations.properties` record. Run:
+
+```sh
+python3 delivery/device-tests/public_bootstrap.py --serial emulator-SERIAL --restart-controls
+bash delivery/device-tests/persistence-matrix.sh emulator-SERIAL
+```
+
+Build the ordinary empty/public A/p1 fixture first. The matrix tests retry and
+cancellation replacements at five write/sync/rename boundaries, then scheduled
+retry replacements. It verifies recovery of committed intent, one bounded temporary
+slot, unchanged active archive/security/selection and a surviving payload process.
+Cancellation replaces the record with `kind=NONE`; there is no separate retry-file
+unlink transaction. `--persistence-delete` remains a compatibility selector for
+cancellation before/after rename. `--persistence-first-cancel` selects a cancellation
+boundary; unified records already exist after startup, so it is not a first-file
+publication test.
+
+The September results in [the persistence report](../PERSISTENCE-TESTS.md) exercised
+the previous `DeliveryController` and recovery-process owner. They remain historical
+evidence and do not establish installed coverage of the current engine. Current
+runs must record their revision, platform, command and results. Process death does
+not establish physical power-loss durability.
 
 ## Release HTTPS and large valid payloads
 
@@ -37,9 +53,9 @@ p1 main and worker remain usable, while a real worker reservation is refused.
   observe a real permission-denied IOException. Restore permissions in `finally`.
 - `death`: terminate the publication owner through JDWP without writer cleanup;
   reopen controls through the real launcher shortcut in a fresh recovery process.
-- `cancel`: press the actual Cancel download control while publication is paused.
-  This is after the documented non-cancellable staging boundary: p2 may commit as
-  pending, but p1 remains active and the cancelled controller schedules no retry.
+- `cancel` (legacy selector name): verify the actual Cancel download control is
+  absent while publication is paused. Current staging is non-cancellable: p2
+  commits as pending while p1 remains active.
 
 IO/death leave selection unchanged; all three preserve the active archive hash,
 main/worker PIDs and the already-admitted security record. After ownership is
@@ -52,6 +68,8 @@ simultaneous HTTP transfers.
 Passed all six cases on API 30/36.1 x86_64, 2026-09-23. Logs:
 `/tmp/paravoid-publication-{io,death,cancel}{30,36}.log`. Production code at
 `d7f7072`; no production fault switch or replacement locking implementation.
+These September runs exercised the previous controller; the refreshed current-engine
+IO/death/staging harness needs a new installed run before these gates can be closed.
 This does not exhaust all possible scheduling orders, kernel-write interruption
 or physical power-loss behavior. Earlier host publication and installed ENOSPC
 cases below remain complementary evidence.
@@ -351,3 +369,24 @@ policy/grant/HTTP/head/VPK/lifecycle code runs without verifier mocks or bypasse
 Both auth suites passed. Public suite results and remaining integration limitations
 are recorded in [the finish handoff](../FINISH-HANDOFF.md). This evidence covers
 empty-to-downloaded production delivery, not the complete V1 acceptance matrix.
+
+## Current-engine validation — 2026-10-03
+
+On disposable `ParavoidReview36` / `emulator-5596`, API 36.1 x86_64, with production
+runtime source at `8ac79eb` and the refreshed harness in this change:
+
+- `public_bootstrap.py --serial emulator-5596 --restart-controls` passed signed
+  download, durable explicit preferences, manual discovery with background checks
+  disabled, cancelled confirmation and confirmed offline activation.
+- `public_bootstrap.py --serial emulator-5596 --persistence-crash` passed all five
+  retry and five cancellation write/sync/rename deaths. It preserved the active
+  payload PID/archive and security/selection records. Owner/caller recovery is
+  deliberately cold; live Binder observer reconnection is a separate scenario.
+- Thirteen Python helper/safety/routing tests passed. The JDWP gate compiles with
+  `javac --add-modules jdk.jdi` and selects the engine's actual phase/attempt using
+  the named Properties variable (ART argument slots differ from host JDI).
+
+Logs: `/tmp/paravoid-item2-build.log`, `/tmp/paravoid-item2-public.log`,
+`/tmp/paravoid-item2-persistence.log`. Scheduled retry replacement, refreshed
+HTTPS/publication/ENOSPC runners, API 30 and physical ARM64 require separate current
+runs. The September passing reports do not close those current-engine gates.

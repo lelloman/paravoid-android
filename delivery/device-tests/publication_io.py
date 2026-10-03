@@ -35,7 +35,7 @@ def run(root, serial, app, archive, catalog, query, head, server, adb, ui, tap, 
         device.await_(lambda: text in ui(), text)
 
     main_pid = adb('shell', 'pidof', app).strip()
-    owner = adb('shell', 'pidof', app + ':paravoid_recovery').strip()
+    owner = adb('shell', 'pidof', app + ':paravoid_updates').strip()
     assert main_pid.isdigit() and owner.isdigit() and main_pid != owner
     assert 'generation=A' in adb('shell', 'content', 'query', '--uri', 'content://' + app + '.worker')
     worker = adb('shell', 'pidof', app + ':worker').strip()
@@ -106,16 +106,17 @@ def run(root, serial, app, archive, catalog, query, head, server, adb, ui, tap, 
                 elif mode == 'death':
                     (markers / 'kill').touch(); wait('dead')
                 else:
-                    tap('Cancel download')
-                    assert len(data('no_backup/paravoid-update-preferences.cancel')) == 36
+                    # The staging boundary is non-cancellable in UpdateEngine.
+                    # The UI must not offer a cancellation while publication is paused.
+                    assert 'Cancel download' not in ui()
                     assert device.state() == initial
                     (markers / 'resume').touch()
                 assert gate.wait(timeout=10) == 0
-            if mode == 'io': await_status('Update status: IO')
+            if mode == 'io': await_status('Update couldn’t finish')
             elif mode == 'death':
-                device.await_(lambda: not device.run('shell', 'pidof', app + ':paravoid_recovery', check=False).strip(), 'publication owner death')
+                device.await_(lambda: not device.run('shell', 'pidof', app + ':paravoid_updates', check=False).strip(), 'publication owner death')
             else:
-                await_status('Update: CANCELLED')
+                await_status('Ready to restart')
                 assert device.state()['pending']['version'] == 2, 'Late cancellation must not undo committed staging'
                 assert device.state()['active'] == initial['active']
             assert data(store + 'security') == security
@@ -124,15 +125,16 @@ def run(root, serial, app, archive, catalog, query, head, server, adb, ui, tap, 
             assert hashlib.sha256(data(active)).digest() == digest
             assert adb('shell', 'pidof', app).strip() == main_pid
             assert adb('shell', 'pidof', app + ':worker').strip() == worker
-            assert not adb('shell', 'run-as', app, 'find', 'no_backup', '-name', 'paravoid-update-preferences.retry').strip()
+            assert not adb('shell', 'run-as', app, 'find', 'no_backup/paravoid-updates-v1', '-name', '*.tmp').strip()
             assert 'result=ADMITTED' in reserve(), 'Failed publication leaked writer ownership'
             print('PASS: signed distinct p2 publication ' + mode + '; p1 reader/worker/security and bytes survive; competing owner excluded then admitted', serial, flush=True)
             if mode == 'death':
                 import sys
-                subprocess.run([sys.executable, str(root / 'integration-v1/controls-shortcut.py'), '--serial', serial], check=True, timeout=150)
-                assert adb('shell', 'pidof', app + ':paravoid_recovery').strip() != owner
+                from engine_state import controls
+                controls(adb, app)
+                assert adb('shell', 'pidof', app + ':paravoid_updates').strip() != owner
             if mode != 'cancel':
-                tap('Retry update access'); await_status('Pending: p2')
+                tap('Retry update access'); await_status('Ready to restart')
             assert device.state()['pending']['version'] == 2
             server.shutdown(); server.server_close()
             tap('Restart app…'); tap('Stop and restart')

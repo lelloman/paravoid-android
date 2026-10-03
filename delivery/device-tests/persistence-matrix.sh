@@ -10,6 +10,5 @@ device_args=(--serial "$1" --server-port "${2:-18765}")
 # fixture shell's data; only the explicitly selected disposable emulator is used.
 python3 -u delivery/device-tests/public_bootstrap.py "${device_args[@]}" --persistence-crash
 python3 -u delivery/device-tests/public_bootstrap.py "${device_args[@]}" --persistence-retry-replacement
-for boundary in created written synced renamed directory-synced; do
-  python3 -u delivery/device-tests/public_bootstrap.py "${device_args[@]}" --persistence-first-cancel "$boundary"
-done
+# --persistence-first-cancel remains a single-boundary compatibility selector;
+# unified-record cancellation is already covered at all five boundaries above.

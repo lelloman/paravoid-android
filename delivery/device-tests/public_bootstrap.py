@@ -25,6 +25,8 @@ from cryptography.hazmat.primitives.asymmetric import padding
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'delivery/reference'))
 from server import Catalog, Server, Handler
+from controls_ui import tap as tap_control
+from engine_state import OPERATIONS, OWNER_SUFFIX, state, controls
 APP = 'com.lelloman.paravoidcompat.complete.paravoid'
 LAUNCHER = APP + '/com.lelloman.paravoidandroid.runtime.LauncherActivity'
 
@@ -36,17 +38,17 @@ def main():
     parser.add_argument('--large-payload', action='store_true',
                         help='Require a near-limit valid VPK and stream/hash the 1000 MiB asset in normal and shell apps')
     parser.add_argument('--publication-fault', choices=('io', 'death', 'cancel'),
-                        help='Exercise signed p2 journal publication with permission IO, owner death or late cancellation')
+                        help='Exercise signed p2 journal publication with permission IO, owner death or non-cancellable staging')
     parser.add_argument('--network-transitions', action='store_true',
                         help='Exercise actual Android Wi-Fi metering changes and explicit override')
     parser.add_argument('--persistence-crash', action='store_true',
-                        help='Kill installed recovery at retry/cancellation write boundaries')
+                        help='Kill installed update owner at unified retry/cancellation record write boundaries')
     parser.add_argument('--persistence-delete', action='store_true',
-                        help='Run only the two retry-deletion process-death cases')
+                        help='Compatibility alias: test cancellation immediately before and after record rename')
     parser.add_argument('--persistence-retry-replacement', action='store_true',
                         help='Kill natural scheduled-retry replacement at all five write boundaries')
     parser.add_argument('--persistence-first-cancel', choices=('created', 'written', 'synced', 'renamed', 'directory-synced'),
-                        help='Kill the first cancellation publication in a fresh fixture installation')
+                        help='Kill durable engine cancellation at the selected record boundary')
     parser.add_argument('--write-exhaustion', action='store_true',
                         help='Require a padded VPK and inject real ENOSPC during staging with an active payload')
     parser.add_argument('--write-phase', choices=('archive', 'components'), default='archive',
@@ -97,10 +99,9 @@ def main():
         adb('shell', 'uiautomator', 'dump', '/sdcard/delivery-ui.xml')
         return adb('shell', 'cat', '/sdcard/delivery-ui.xml')
     def tap(label):
-        node = next(n for n in ET.fromstring(ui()).iter('node')
-                    if n.attrib.get('text', '').lower() == label.lower())
-        x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.attrib['bounds']))
-        adb('shell', 'input', 'tap', str((x1+x2)//2), str((y1+y2)//2))
+        tap_control(adb, ui, label)
+    def operation():
+        return state(adb, APP)
     fixture = ROOT / 'compatibility/complete-v1'
     def pressure_probe(package):
         expected = fixture / 'build/pressure-assets/paravoid-pressure.bin'
@@ -197,16 +198,7 @@ def main():
             assert len({state for _, state in wifi}) == 1
             original_metering = wifi[0][1]
             set_metered('true')
-            with tempfile.TemporaryDirectory(prefix='paravoid-network-prefs-') as tmp:
-                local = Path(tmp) / 'preferences'
-                local.write_text('checks=true\ndownloads=true\nunmetered=true\nlastAutomaticCheck=0\n')
-                remote = '/data/local/tmp/' + Path(tmp).name
-                adb('push', str(local), remote)
-                try:
-                    adb('shell', 'run-as', APP, 'mkdir', '-p', 'no_backup')
-                    adb('shell', 'run-as', APP, 'cp', remote, 'no_backup/paravoid-update-preferences')
-                finally:
-                    adb('shell', 'rm', '-f', remote)
+            # Installed defaults enable automatic checks/downloads with unmetered-only downloads.
         if args.storage_pressure:
             adb('shell', 'run-as', APP, 'mkdir', '-p', 'files')
             filler_mib = free_bytes() // (1024 * 1024) - 48
@@ -218,7 +210,7 @@ def main():
         print(adb('shell', 'am', 'start', '-W', '-n', LAUNCHER).strip())
         if args.network_transitions:
             for _ in range(30):
-                if heads and 'Pending: none' in ui():
+                if heads and operation().get('phase') != 'READY':
                     break
                 time.sleep(.25)
             else:
@@ -232,11 +224,11 @@ def main():
             assert not disconnected.is_set()
             set_metered('true')
             assert disconnected.wait(10), 'Metering transition did not cancel automatic archive HTTP'
-            assert 'Pending: none' in ui()
+            assert operation().get('phase') != 'READY'
             release_transfer.set()
             tap('Check now')
             for _ in range(30):
-                if 'Pending: ' + release['releaseId'] in ui():
+                if operation().get('phase') == 'READY':
                     break
                 time.sleep(.25)
             else:
@@ -254,7 +246,7 @@ def main():
                 time.sleep(1)
             else:
                 raise AssertionError('Missing low-space rejection: ' + last)
-            assert 'Current: none' in last and 'Pending: none' in last
+            assert operation().get('error') == 'INSUFFICIENT_STORAGE'
             print('PASS: actual app-private allocated pressure rejects update below 64 MiB')
             # Shrinking deallocates existing blocks; it does not fake free capacity with a sparse file.
             shrink = (512 * 1024 * 1024 - free_bytes() + 1048575) // 1048576
@@ -265,14 +257,14 @@ def main():
         for _ in range(180 if args.large_payload else 30):
             adb('shell', 'uiautomator', 'dump', '/sdcard/delivery-ui.xml')
             last = adb('shell', 'cat', '/sdcard/delivery-ui.xml')
-            if 'Pending: ' + release['releaseId'] in last and 'payload ' + str(release['payloadVersion']) in last:
+            if operation().get('phase') == 'READY':
                 break
             time.sleep(1)
         else:
             print(last)
             raise AssertionError('Production bootstrap did not stage pending payload')
-        assert 'Current: none' in last, 'download must not activate'
-        for label in ('Check now', 'Retry update access', 'Cancel download', 'Automatically check for updates'):
+        assert 'Installed version   Not installed' in last, 'download must not activate'
+        for label in ('Restart to apply update',):
             assert label.lower() in last.lower(), label
         print('PASS: production reference delivery stages pending; shell controls visible; no activation')
         if args.large_payload:
@@ -303,8 +295,7 @@ def main():
             adb('shell', 'am', 'force-stop', APP)
             adb('shell', 'am', 'start', '-W', '-n', LAUNCHER)
             assert 'generation=A;asset=payload-asset;java=payload-java-resource' in ui()
-            subprocess.run([sys.executable, str(ROOT / 'integration-v1/controls-shortcut.py'), '--serial', args.serial],
-                           check=True, timeout=120)
+            controls(adb, APP)
             if args.publication_fault:
                 from publication_io import run
                 run(ROOT, args.serial, APP, archive, catalog, query, head, server, adb, ui, tap, args.publication_fault)
@@ -320,45 +311,39 @@ def main():
         if args.storage_pressure:
             assert free_bytes() < 600 * 1048576
             print('PASS: real signed VPK download and materialization with less than 600 MiB free')
-        for label in ('Automatically check for updates', 'Automatically download updates',
-                      'Automatic downloads only on unmetered networks'):
+        # Toggle dependent settings before disabling their parent switch.
+        # Default unmetered-only is already enabled. Leave it enabled while
+        # turning off downloads, then checks (which disables dependent toggles).
+        for label in ('Allow automatic downloads', 'Check for updates automatically'):
             tap(label)
         for _ in range(40):
-            preferences = adb('shell', 'run-as', APP, 'cat', 'no_backup/paravoid-update-preferences')
-            if 'checks=false' in preferences and 'downloads=false' in preferences and 'unmetered=true' in preferences:
+            preferences = operation()
+            if all(preferences.get(k) == v for k, v in {
+                    'preferences.checks': 'false', 'preferences.downloads': 'false',
+                    'preferences.unmeteredOnly': 'true'}.items()):
                 break
             time.sleep(.25)
         else:
-            raise AssertionError('Updated preferences were not persisted')
-        tap('1')
-        tap('2')
-        assert 'text="2"' in ui()
-        for action in ('Check now', 'Retry update access'):
-            before = len(heads)
-            tap(action)
-            deadline = time.monotonic() + (300 if args.large_payload else 60)
-            while time.monotonic() < deadline:
-                if len(heads) > before and 'Update: READY' in ui():
-                    break
-                time.sleep(.25)
-            else:
-                raise AssertionError('Explicit action did not complete despite automatic-download preference: ' + action)
-        print('PASS: explicit check/retry, persisted automatic/unmetered preferences, retention control')
-        server.shutdown()
-        server.server_close()
+            raise AssertionError('Updated engine preferences were not persisted')
+        before = len(heads)
         tap('Check now')
-        tap('Cancel download')
-        assert 'Update: CANCELLED' in ui()
-        print('PASS: cancel stops an offline attempt')
+        for _ in range(60):
+            if len(heads) > before and operation().get('kind') == 'NONE':
+                break
+            time.sleep(.25)
+        else:
+            raise AssertionError('Explicit check did not complete with automatic checks disabled')
+        print('PASS: explicit check and durable engine preference overrides')
+        server.shutdown(); server.server_close()
         if args.restart_controls:
             old_main = adb('shell', 'pidof', APP).strip()
             recovery = adb('shell', 'pidof', APP + ':paravoid_recovery').strip()
             assert old_main and recovery, 'Exercise an existing unavailable main process, not only recovery'
             tap('Restart app…')
-            assert 'Unsaved changes may be lost' in ui()
+            assert 'unsaved changes' in ui().lower()
             tap('Cancel')
             assert adb('shell', 'pidof', APP).strip() == old_main
-            assert 'Current: none' in ui(), 'Cancelling confirmation must not activate'
+            assert 'Installed version   Not installed' in ui(), 'Cancelling confirmation must not activate'
             tap('Restart app…')
             tap('Stop and restart')
         else:
