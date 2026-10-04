@@ -89,8 +89,18 @@ public final class UpdateEngine implements UpdateControl {
     /** Authenticated local IPC, independent of per-app network push wiring. */
     public void localHint(Consumer<Boolean> completion) {
         worker.execute(()-> {
-            if(!schedule.checks || "PROVIDER_INTERRUPTED".equals(error) || phase==DeliveryController.Activity.ERROR) {
+            if(!schedule.checks || "PROVIDER_INTERRUPTED".equals(error)) {
                 callbacks.execute(()->completion.accept(true)); return;
+            }
+            if(phase==DeliveryController.Activity.ERROR) {
+                // A fresh trusted hint may retry temporary built-in writer contention
+                // after the previous operation exhausted its budget. Do not replay a
+                // failed explicit download or bypass permanent/custom-provider errors.
+                if(customProvider || !"UNAVAILABLE".equals(error)) {
+                    callbacks.execute(()->completion.accept(true)); return;
+                }
+                phase=DeliveryController.Activity.IDLE; error=null;
+                lastLocalCheck=Math.max(lastLocalCheck,lastCheck);
             }
             localHintPending=true;
             armLocalHint();

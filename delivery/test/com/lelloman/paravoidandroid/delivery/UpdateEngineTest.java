@@ -35,6 +35,7 @@ public final class UpdateEngineTest {
         earlyPeriodicWakeupKeepsDeadline();
         unavailableRetriesAndSurvivesReload();
         unavailableRetryBudgetIsBounded();
+        localHintRecoversExhaustedContention();
         unavailableFromOldContractStartsFresh();
         terminalStageFailuresIgnoreHints();
         localHintsPreserveRetries();
@@ -188,6 +189,59 @@ public final class UpdateEngineTest {
                     check(e.current().activity==DeliveryController.Activity.ERROR && work.get().kind==UpdateEngine.Kind.NONE);
                 }
             } finally { worker.shutdownNow(); worker.awaitTermination(5,TimeUnit.SECONDS); }
+        }
+    }
+
+    static void localHintRecoversExhaustedContention() throws Exception {
+        for(boolean reload : new boolean[]{false,true}) {
+            try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {
+                ExecutorService worker=Executors.newSingleThreadExecutor();
+                try {
+                    java.util.concurrent.atomic.AtomicReference<UpdateEngine.Work> work=new java.util.concurrent.atomic.AtomicReference<>();
+                    java.io.File state=s.f.dir.resolve("hint-after-exhaustion").toFile();
+                    // Zero retries exercises the cooldown even when failure is immediate.
+                    UpdateSchedule schedule=new UpdateSchedule(172800,21600,true,false,false,true,
+                        false,false,false,30,3600,0,java.util.Collections.emptyMap());
+                    UpdateEngine e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                        schedule,null,false,work::set);
+                    try(DeliveryLocks.Claim held=DeliveryLocks.tryAcquire(s.f.dir.resolve("transfer.lock"))) {
+                        check(held!=null);
+                        // Recovery must not inherit explicit download intent.
+                        e.checkNow(); worker.submit(()->{}).get();
+                        check(e.current().activity==DeliveryController.Activity.ERROR);
+                        e.updateNow(); worker.submit(()->{}).get();
+                        check(e.current().activity==DeliveryController.Activity.ERROR && "UNAVAILABLE".equals(e.current().errorCode));
+                    }
+                    if(reload) {
+                        e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                            schedule,null,true,work::set);
+                        e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                        check(e.current().activity==DeliveryController.Activity.ERROR && work.get().kind==UpdateEngine.Kind.NONE);
+                        e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                            schedule,null,false,work::set);
+                    }
+                    e.preferences(new DeliveryPreferences(false,false,true)); worker.submit(()->{}).get();
+                    e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                    check(e.current().activity==DeliveryController.Activity.ERROR && work.get().kind==UpdateEngine.Kind.NONE);
+                    e.preferences(new DeliveryPreferences(true,false,true)); worker.submit(()->{}).get();
+                    e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                    long due=work.get().dueSeconds;
+                    check(work.get().kind==UpdateEngine.Kind.CHECK && !work.get().explicit && due==s.clock.wall+60);
+                    check(e.current().errorCode==null);
+                    e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                    check(work.get().dueSeconds==due);
+                    e.runJob(false,10,()->{}); worker.submit(()->{}).get();
+                    check(s.f.requests==0);
+                    // The cooldown and fresh check survive an updater-process restart.
+                    e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                        schedule,null,false,work::set);
+                    check(work.get().dueSeconds==due && !work.get().explicit);
+                    s.clock.wall=due; s.metadata.expiresAt=due+100;
+                    s.head(); e.runJob(false,11,()->{}); worker.submit(()->{}).get();
+                    check(s.f.requests==1 && e.current().activity==DeliveryController.Activity.AVAILABLE);
+                    check(s.life.stages==0 && work.get().kind==UpdateEngine.Kind.NONE);
+                } finally { worker.shutdownNow(); worker.awaitTermination(5,TimeUnit.SECONDS); }
+            }
         }
     }
 
