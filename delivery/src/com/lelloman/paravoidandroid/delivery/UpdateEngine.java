@@ -124,7 +124,13 @@ public final class UpdateEngine implements UpdateControl {
         if(!explicit && (!schedule.checks || kind==Kind.UPDATE && !schedule.downloads)) kind=Kind.NONE;
         String current=client.credentialPartition();
         boolean samePartition=Objects.equals(partition,current);
-        if(!samePartition) { kind=Kind.NONE; available=null; target=null; nextCheck=0; attempts=0; }
+        if(!samePartition) {
+            kind=Kind.NONE; available=null; target=null; nextCheck=0; attempts=0;
+            if(!customProvider && "UNAVAILABLE".equals(error)) {
+                phase=DeliveryController.Activity.IDLE; error=null;
+                explicit=false; lastKind=Kind.NONE; lastTarget=null; lastExplicit=false;
+            }
+        }
         partition=current;
         // Older shells made temporary writer contention terminal. Resume the saved operation
         // with its remaining retry budget, without overriding disabled automatic preferences.

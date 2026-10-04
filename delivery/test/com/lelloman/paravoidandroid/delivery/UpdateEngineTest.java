@@ -35,6 +35,7 @@ public final class UpdateEngineTest {
         earlyPeriodicWakeupKeepsDeadline();
         unavailableRetriesAndSurvivesReload();
         unavailableRetryBudgetIsBounded();
+        unavailableFromOldContractStartsFresh();
         terminalStageFailuresIgnoreHints();
         localHintsPreserveRetries();
         policyDefaultsReachExistingInstalls();
@@ -186,6 +187,33 @@ public final class UpdateEngineTest {
                         schedule,null,false,work::set);
                     check(e.current().activity==DeliveryController.Activity.ERROR && work.get().kind==UpdateEngine.Kind.NONE);
                 }
+            } finally { worker.shutdownNow(); worker.awaitTermination(5,TimeUnit.SECONDS); }
+        }
+    }
+
+    static void unavailableFromOldContractStartsFresh() throws Exception {
+        try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {
+            ExecutorService worker=Executors.newSingleThreadExecutor();
+            try {
+                java.util.concurrent.atomic.AtomicReference<UpdateEngine.Work> work=new java.util.concurrent.atomic.AtomicReference<>();
+                java.io.File state=s.f.dir.resolve("old-contract-engine").toFile();
+                UpdateEngine e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                    UpdateSchedule.defaults(),null,false,work::set);
+                java.nio.file.Path record=state.toPath().resolve("operations.properties");
+                java.util.Properties p=new java.util.Properties();
+                try(java.io.InputStream in=java.nio.file.Files.newInputStream(record)) { p.load(in); }
+                p.setProperty("partition","old-shell-contract"); p.setProperty("phase","ERROR");
+                p.setProperty("error","UNAVAILABLE"); p.setProperty("lastKind","UPDATE");
+                p.setProperty("explicit","true"); p.setProperty("lastExplicit","true"); p.setProperty("attempts","4");
+                PendingRetry.writeRecord(record,p);
+                e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                    UpdateSchedule.defaults(),null,false,work::set);
+                check(e.current().errorCode==null && e.current().activity==DeliveryController.Activity.IDLE);
+                check(work.get().kind==UpdateEngine.Kind.NONE && !work.get().explicit && work.get().checkDeadlineSeconds()==0);
+                e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                check(work.get().kind==UpdateEngine.Kind.CHECK && !work.get().explicit);
+                s.head(); e.runJob(false,1,()->{}); worker.submit(()->{}).get();
+                check(s.f.requests==1 && work.get().kind==UpdateEngine.Kind.UPDATE);
             } finally { worker.shutdownNow(); worker.awaitTermination(5,TimeUnit.SECONDS); }
         }
     }
