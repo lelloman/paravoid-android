@@ -23,9 +23,8 @@ final class UpdateScheduler {
         UpdateSchedule s=work.schedule;
         if(s.checks) put(base,false,false,0,s,true);
         else cancel(base);
-        long now=System.currentTimeMillis()/1000;
-        if(work.kind==UpdateEngine.Kind.CHECK) put(base+1,false,work.explicit,work.dueSeconds,s,false);
-        else if(work.kind==UpdateEngine.Kind.NONE && s.checks && work.nextCheckSeconds<=now) put(base+1,false,false,0,s,false);
+        Long checkDeadline=work.checkDeadlineSeconds();
+        if(checkDeadline!=null) put(base+1,false,work.kind==UpdateEngine.Kind.CHECK && work.explicit,checkDeadline,s,false);
         else cancel(base+1);
         if(work.kind==UpdateEngine.Kind.UPDATE && (work.explicit || s.checks && s.downloads)) put(base+2,true,work.explicit,work.dueSeconds,s,false);
         else cancel(base+2);

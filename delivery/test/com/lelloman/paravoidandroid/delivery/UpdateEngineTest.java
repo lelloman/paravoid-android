@@ -32,6 +32,7 @@ public final class UpdateEngineTest {
             } finally { worker.shutdownNow(); check(worker.awaitTermination(5,TimeUnit.SECONDS)); }
         }
         localHints();
+        earlyPeriodicWakeupKeepsDeadline();
         localHintsPreserveRetries();
         policyDefaultsReachExistingInstalls();
         System.out.println("PASS update engine: push scope, duplicate suppression, consent, explicit update, check-only, disabled push, policy defaults vs durable choices");
@@ -78,6 +79,36 @@ public final class UpdateEngineTest {
         }
     }
 
+    static void earlyPeriodicWakeupKeepsDeadline() throws Exception {
+        try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {
+            ExecutorService worker=Executors.newSingleThreadExecutor();
+            try {
+                java.util.concurrent.atomic.AtomicReference<UpdateEngine.Work> work=new java.util.concurrent.atomic.AtomicReference<>();
+                java.io.File state=s.f.dir.resolve("early-periodic-engine").toFile();
+                UpdateSchedule schedule=UpdateSchedule.defaults().preferences(true,false,false);
+                UpdateEngine e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                    schedule,null,false,work::set);
+                s.head(); e.checkNow(); worker.submit(()->{}).get();
+                long deadline=s.clock.wall+schedule.intervalSeconds;
+                check(work.get().checkDeadlineSeconds()==deadline);
+                s.clock.wall=deadline-schedule.flexSeconds;
+                e.runJob(false,1,()->{}); worker.submit(()->{}).get();
+                check(s.f.requests==1 && work.get().checkDeadlineSeconds()==deadline);
+                // Process death must restore the same one-off deadline, not wait for another period.
+                e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                    schedule,null,false,work::set);
+                check(work.get().checkDeadlineSeconds()==deadline);
+                s.clock.wall=deadline;
+                s.cached(); e.runJob(false,2,()->{}); worker.submit(()->{}).get();
+                check(s.f.requests==2 && work.get().checkDeadlineSeconds()==deadline+schedule.intervalSeconds);
+                e.preferences(new DeliveryPreferences(false,false,false)); worker.submit(()->{}).get();
+                check(work.get().checkDeadlineSeconds()==null);
+                s.cached(); e.checkNow(); worker.submit(()->{}).get();
+                check(work.get().checkDeadlineSeconds()==null);
+            } finally { worker.shutdownNow(); worker.awaitTermination(5,TimeUnit.SECONDS); }
+        }
+    }
+
     static void localHintsPreserveRetries() throws Exception {
         try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {
             ExecutorService worker=Executors.newSingleThreadExecutor();
@@ -91,6 +122,7 @@ public final class UpdateEngineTest {
                 e.runJob(false,1,()->{}); worker.submit(()->{}).get();
                 long due=work.get().dueSeconds;
                 check(e.current().activity==DeliveryController.Activity.WAITING_TO_RETRY);
+                check(work.get().checkDeadlineSeconds()==due);
                 e.localHint(saved->check(saved)); worker.submit(()->{}).get();
                 check(work.get().dueSeconds==due && work.get().kind==UpdateEngine.Kind.CHECK);
                 check(java.nio.file.Files.readString(state.toPath().resolve("operations.properties")).contains("attempts=1"));

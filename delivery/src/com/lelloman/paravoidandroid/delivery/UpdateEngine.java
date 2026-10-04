@@ -21,6 +21,11 @@ public final class UpdateEngine implements UpdateControl {
         Work(UpdateSchedule schedule, Kind kind, boolean explicit, long due, long nextCheck) {
             this.schedule=schedule; this.kind=kind; this.explicit=explicit; dueSeconds=due; nextCheckSeconds=nextCheck;
         }
+        /** Keep the next check armed even when a periodic wakeup arrives before it is due. */
+        public Long checkDeadlineSeconds() {
+            if(kind==Kind.CHECK) return dueSeconds;
+            return kind==Kind.NONE && schedule.checks ? nextCheckSeconds : null;
+        }
     }
     private final DeliveryClient client;
     private final Lifecycle lifecycle;
