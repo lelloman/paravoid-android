@@ -123,8 +123,17 @@ public final class UpdateEngine implements UpdateControl {
         if(!schedule.checks) localHintPending=false;
         if(!explicit && (!schedule.checks || kind==Kind.UPDATE && !schedule.downloads)) kind=Kind.NONE;
         String current=client.credentialPartition();
-        if(!Objects.equals(partition,current)) { kind=Kind.NONE; available=null; target=null; nextCheck=0; attempts=0; }
+        boolean samePartition=Objects.equals(partition,current);
+        if(!samePartition) { kind=Kind.NONE; available=null; target=null; nextCheck=0; attempts=0; }
         partition=current;
+        // Older shells made temporary writer contention terminal. Resume the saved operation
+        // with its remaining retry budget, without overriding disabled automatic preferences.
+        if(samePartition && !customProvider && phase==DeliveryController.Activity.ERROR && "UNAVAILABLE".equals(error)
+                && attempts<=schedule.maxRetries && lastKind!=Kind.NONE
+                && (lastExplicit || schedule.checks && (lastKind!=Kind.UPDATE || schedule.downloads))) {
+            kind=lastKind; target=lastTarget; explicit=lastExplicit;
+            deferRetry("UNAVAILABLE",-1);
+        }
         // An interrupted custom provider requires an explicit retry; do not create a crash loop.
         if(customProvider && Files.exists(file.resolveSibling("provider-running"))) {
             kind=Kind.NONE; error="PROVIDER_INTERRUPTED"; phase=DeliveryController.Activity.ERROR;
@@ -254,7 +263,11 @@ public final class UpdateEngine implements UpdateControl {
             if(result.status==HeadStatus.SHELL_UPDATE_REQUIRED) error="SHELL_UPDATE_REQUIRED";
             else if(result.status==HeadStatus.NO_COMPATIBLE_RELEASE) error="NO_COMPATIBLE_RELEASE";
             kind=autoDownload ? Kind.UPDATE : Kind.NONE; target=null; attempts=0; due=clock.unixSeconds();
-        } catch(ContractException failure) { fail(failure.code.name()); }
+        } catch(ContractException failure) {
+            if(failure.code==ContractException.Code.UNAVAILABLE && attempts<=schedule.maxRetries)
+                deferRetry(failure.code.name(),-1);
+            else fail(failure.code.name());
+        }
         catch(Exception | LinkageError failure) {
             if(stopped) { due=clock.unixSeconds()+30; phase=DeliveryController.Activity.WAITING_TO_RETRY; attempts=Math.max(0,attempts-1); }
             else if(epoch!=cancellation.get()) { kind=Kind.NONE; phase=DeliveryController.Activity.CANCELLED; error=null; }
@@ -269,8 +282,7 @@ public final class UpdateEngine implements UpdateControl {
                     retryAfter=http.retryAfterSeconds;
                 } else if(failure instanceof IOException) code="IO";
                 if(network && attempts<=schedule.maxRetries) {
-                    error=code; due=clock.unixSeconds()+Math.max(Math.min(3600,retryAfter),Math.min(schedule.maxRetrySeconds,schedule.retrySeconds*(1L << Math.min(10,attempts-1))));
-                    phase=DeliveryController.Activity.WAITING_TO_RETRY;
+                    deferRetry(code,retryAfter);
                 } else fail(code);
             }
         } finally {
@@ -280,6 +292,12 @@ public final class UpdateEngine implements UpdateControl {
         }
     }
     private void fail(String code) { kind=Kind.NONE; error=code; phase=DeliveryController.Activity.ERROR; }
+    private void deferRetry(String code,long retryAfter) {
+        error=code;
+        due=clock.unixSeconds()+Math.max(Math.min(3600,retryAfter),
+            Math.min(schedule.maxRetrySeconds,schedule.retrySeconds*(1L << Math.min(10,Math.max(0,attempts-1)))));
+        phase=DeliveryController.Activity.WAITING_TO_RETRY;
+    }
     private boolean persist() {
         try { save(); return true; } catch(IOException failure) { fail("PREFERENCES_IO"); return false; }
     }

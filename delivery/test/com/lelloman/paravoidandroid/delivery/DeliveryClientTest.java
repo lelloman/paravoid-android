@@ -21,6 +21,7 @@ public final class DeliveryClientTest {
         Clock clock;
         VerifiedHead last;
         Action duringStage;
+        ContractException.Code stageFailure;
         public void setCredentialScope(CredentialScope scope) { credential = scope; if (scope == null) credentialDenials++; }
         public AdmissionResult observeHead(VerifiedHead head, CredentialScope scope) throws ContractException {
             if (credential == null || !scope.id.equals(credential.id)) throw new ContractException(ContractException.Code.CREDENTIAL_CHANGED, "changed");
@@ -30,6 +31,7 @@ public final class DeliveryClientTest {
         }
         public StageResult stageDownloaded(File archive, AdmissionId admission) throws ContractException {
             check(reserved);
+            if(stageFailure!=null) throw new ContractException(stageFailure,"Injected staging failure");
             try {
                 if (duringStage != null) duringStage.run();
                 check(Arrays.equals(ARCHIVE, Files.readAllBytes(archive.toPath())));

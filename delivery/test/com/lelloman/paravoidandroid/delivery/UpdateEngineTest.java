@@ -33,6 +33,9 @@ public final class UpdateEngineTest {
         }
         localHints();
         earlyPeriodicWakeupKeepsDeadline();
+        unavailableRetriesAndSurvivesReload();
+        unavailableRetryBudgetIsBounded();
+        terminalStageFailuresIgnoreHints();
         localHintsPreserveRetries();
         policyDefaultsReachExistingInstalls();
         System.out.println("PASS update engine: push scope, duplicate suppression, consent, explicit update, check-only, disabled push, policy defaults vs durable choices");
@@ -106,6 +109,110 @@ public final class UpdateEngineTest {
                 s.cached(); e.checkNow(); worker.submit(()->{}).get();
                 check(work.get().checkDeadlineSeconds()==null);
             } finally { worker.shutdownNow(); worker.awaitTermination(5,TimeUnit.SECONDS); }
+        }
+    }
+
+    static void unavailableRetriesAndSurvivesReload() throws Exception {
+        try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {
+            ExecutorService worker=Executors.newSingleThreadExecutor();
+            try {
+                java.util.concurrent.atomic.AtomicReference<UpdateEngine.Work> work=new java.util.concurrent.atomic.AtomicReference<>();
+                java.io.File state=s.f.dir.resolve("busy-engine").toFile();
+                UpdateEngine e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                    UpdateSchedule.defaults(),null,false,work::set);
+                try(DeliveryLocks.Claim held=DeliveryLocks.tryAcquire(s.f.dir.resolve("transfer.lock"))) {
+                    check(held!=null);
+                    e.runJob(false,1,()->{}); worker.submit(()->{}).get();
+                    check(e.current().activity==DeliveryController.Activity.WAITING_TO_RETRY && s.f.requests==0);
+                    long due=work.get().dueSeconds;
+                    check(due==s.clock.wall+30 && work.get().kind==UpdateEngine.Kind.CHECK);
+                    e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                    check(work.get().dueSeconds==due);
+                    // Reproduce the old shell's terminal error record and upgrade without manual retry.
+                    java.nio.file.Path record=state.toPath().resolve("operations.properties");
+                    java.util.Properties p=new java.util.Properties();
+                    try(java.io.InputStream in=java.nio.file.Files.newInputStream(record)) { p.load(in); }
+                    p.setProperty("kind","NONE"); p.setProperty("phase","ERROR");
+                    p.setProperty("preferences.checks","false"); p.setProperty("preferences.downloads","false");
+                    p.setProperty("preferences.unmeteredOnly","true");
+                    PendingRetry.writeRecord(record,p);
+                    e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                        UpdateSchedule.defaults(),null,false,work::set);
+                    check(e.current().activity==DeliveryController.Activity.ERROR && work.get().kind==UpdateEngine.Kind.NONE);
+                    p.remove("preferences.checks"); p.remove("preferences.downloads"); p.remove("preferences.unmeteredOnly");
+                    PendingRetry.writeRecord(record,p);
+                    e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                        UpdateSchedule.defaults(),null,false,work::set);
+                    check(e.current().activity==DeliveryController.Activity.WAITING_TO_RETRY && work.get().dueSeconds==due);
+                }
+                s.clock.wall=work.get().dueSeconds;
+                s.head(); e.runJob(false,2,()->{}); worker.submit(()->{}).get();
+                check(work.get().kind==UpdateEngine.Kind.UPDATE && !work.get().explicit);
+                s.life.stageFailure=com.lelloman.paravoidandroid.contract.ContractException.Code.UNAVAILABLE;
+                s.cached(); s.f.responses.add(new Fake(200,ARCHIVE));
+                e.runJob(true,3,()->{}); worker.submit(()->{}).get();
+                check(e.current().activity==DeliveryController.Activity.WAITING_TO_RETRY && work.get().kind==UpdateEngine.Kind.UPDATE);
+                long due=work.get().dueSeconds;
+                e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                    UpdateSchedule.defaults(),null,false,work::set);
+                check(work.get().dueSeconds==due && work.get().kind==UpdateEngine.Kind.UPDATE);
+                s.life.stageFailure=null; s.clock.wall=due;
+                s.cached(); s.f.responses.add(new Fake(200,ARCHIVE));
+                e.runJob(true,4,()->{}); worker.submit(()->{}).get();
+                check(e.current().activity==DeliveryController.Activity.READY && s.life.stages==1);
+            } finally { worker.shutdownNow(); worker.awaitTermination(5,TimeUnit.SECONDS); }
+        }
+    }
+
+    static void unavailableRetryBudgetIsBounded() throws Exception {
+        try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {
+            ExecutorService worker=Executors.newSingleThreadExecutor();
+            try {
+                java.util.concurrent.atomic.AtomicReference<UpdateEngine.Work> work=new java.util.concurrent.atomic.AtomicReference<>();
+                java.io.File state=s.f.dir.resolve("busy-exhausted-engine").toFile();
+                UpdateSchedule schedule=UpdateSchedule.defaults();
+                UpdateEngine e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                    schedule,null,false,work::set);
+                try(DeliveryLocks.Claim held=DeliveryLocks.tryAcquire(s.f.dir.resolve("transfer.lock"))) {
+                    check(held!=null);
+                    for(int i=0;i<=schedule.maxRetries;i++) {
+                        if(i>0) s.clock.wall=work.get().dueSeconds;
+                        e.runJob(false,10+i,()->{}); worker.submit(()->{}).get();
+                        check(i==schedule.maxRetries ? e.current().activity==DeliveryController.Activity.ERROR
+                            : e.current().activity==DeliveryController.Activity.WAITING_TO_RETRY);
+                    }
+                    check(s.f.requests==0 && work.get().kind==UpdateEngine.Kind.NONE);
+                    e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                        schedule,null,false,work::set);
+                    check(e.current().activity==DeliveryController.Activity.ERROR && work.get().kind==UpdateEngine.Kind.NONE);
+                }
+            } finally { worker.shutdownNow(); worker.awaitTermination(5,TimeUnit.SECONDS); }
+        }
+    }
+
+    static void terminalStageFailuresIgnoreHints() throws Exception {
+        for(com.lelloman.paravoidandroid.contract.ContractException.Code code : new com.lelloman.paravoidandroid.contract.ContractException.Code[]{
+                com.lelloman.paravoidandroid.contract.ContractException.Code.INVALID_SIGNATURE,
+                com.lelloman.paravoidandroid.contract.ContractException.Code.CREDENTIAL_UNAVAILABLE,
+                com.lelloman.paravoidandroid.contract.ContractException.Code.INSUFFICIENT_STORAGE}) {
+            try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {
+                ExecutorService worker=Executors.newSingleThreadExecutor();
+                try {
+                    java.util.concurrent.atomic.AtomicReference<UpdateEngine.Work> work=new java.util.concurrent.atomic.AtomicReference<>();
+                    java.io.File state=s.f.dir.resolve("terminal-engine").toFile();
+                    UpdateEngine e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                        UpdateSchedule.defaults(),null,false,work::set);
+                    s.life.stageFailure=code;
+                    s.head(); s.f.responses.add(new Fake(200,ARCHIVE));
+                    e.updateNow(); worker.submit(()->{}).get();
+                    check(e.current().activity==DeliveryController.Activity.ERROR && e.current().errorCode.equals(code.name()));
+                    e.localHint(saved->check(saved)); worker.submit(()->{}).get();
+                    check(work.get().kind==UpdateEngine.Kind.NONE);
+                    e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                        UpdateSchedule.defaults(),null,false,work::set);
+                    check(e.current().activity==DeliveryController.Activity.ERROR && work.get().kind==UpdateEngine.Kind.NONE);
+                } finally { worker.shutdownNow(); worker.awaitTermination(5,TimeUnit.SECONDS); }
+            }
         }
     }
 
