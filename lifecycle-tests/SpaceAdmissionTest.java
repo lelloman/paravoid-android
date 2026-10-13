@@ -185,6 +185,24 @@ public final class SpaceAdmissionTest {
         try (DownloadReservation allowed = bootTwo.reserveDownload(download)) { check(allowed != null); }
         Files.write(marker, "previous-contract".getBytes("US-ASCII")); // As left by the replaced shell.
         fails(Code.UNAVAILABLE, () -> bootTwo.reserveDownload(download));
-        System.out.println("PASS update-space admission: cross-JVM exclusion/death, same-JVM lock safety, exact budget, cleanup, cancellation, credential change, preserved active generation/replay floors, bounded startup waits for another writer, update writes gated on embedded bootstrap");
+        // A replaced shell must be able to repair a quarantined selected payload even when
+        // replay admission prevents its embedded fallback from bootstrapping the new contract.
+        Path recoveryRoot = parent.resolve("embedded-recovery");
+        RuntimeLifecycle recoveryOne = embeddedLifecycle(recoveryRoot, one, free);
+        recoveryOne.initializeNew(); recoveryOne.stageEmbedded(one.source);
+        GenerationLease damaged = recoveryOne.acquireForProcess();
+        damaged.startupFailed(Code.INTEGRITY);
+        Files.write(recoveryRoot.resolve(RuntimeLifecycle.BOOTSTRAP_MARKER), "previous-contract".getBytes("US-ASCII"));
+        RuntimeLifecycle recoveryTwo = embeddedLifecycle(recoveryRoot, two, free);
+        AdmissionId repair = LifecycleTest.admit(recoveryTwo, two);
+        fails(Code.REPLAY, () -> recoveryOne.stageEmbedded(one.source));
+        check(recoveryTwo.snapshot().availability == Availability.RECOVERY);
+        try (DownloadReservation allowed = recoveryTwo.reserveDownload(repair)) {
+            check(allowed.stage(two.source).status == StageStatus.PENDING);
+        }
+        check(recoveryTwo.snapshot().pending.equals(two.release.identity));
+        check(recoveryTwo.stageDownloaded(two.source, repair).status == StageStatus.ALREADY_PENDING);
+        fails(Code.REPLAY, () -> LifecycleTest.admit(recoveryOne, one));
+        System.out.println("PASS update-space admission: cross-JVM exclusion/death, same-JVM lock safety, exact budget, cleanup, cancellation, credential change, preserved active generation/replay floors, bounded startup waits for another writer, update writes gated on embedded bootstrap with signed quarantine recovery");
     }
 }

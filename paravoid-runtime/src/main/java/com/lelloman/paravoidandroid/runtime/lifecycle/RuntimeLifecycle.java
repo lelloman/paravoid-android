@@ -103,10 +103,14 @@ public final class RuntimeLifecycle implements Lifecycle {
      * An embedded-bootstrap shell installs its first release for a contract from its own APK, in the
      * main process at launch. Until that happened, update writers (the update process after
      * MY_PACKAGE_REPLACED or boot) must not hold the update space: a download keeps it for the whole
-     * transfer, which would block or fail that launch. They get UNAVAILABLE and retry later.
+     * transfer, which would block or fail that launch. They get UNAVAILABLE and retry later. A quarantined selected generation is already in
+     * recovery: allow authenticated repair even if its embedded fallback cannot pass replay admission.
      */
     private void requireBootstrapped() throws ContractException {
-        if (policy.bootstrap == Bootstrap.EMBEDDED && !bootstrappedForInstalledContract()) throw fail(Code.UNAVAILABLE);
+        if (policy.bootstrap != Bootstrap.EMBEDDED || bootstrappedForInstalledContract()) return;
+        LifecycleSnapshot state = selection(j -> j.snapshot(0));
+        if (state.availability == Availability.RECOVERY && state.active != null) return;
+        throw fail(Code.UNAVAILABLE);
     }
     static final String BOOTSTRAP_MARKER = "bootstrapped-contract";
     @Override public StageResult stageDownloaded(File archive, AdmissionId id) throws ContractException {

@@ -59,6 +59,11 @@ these entries into a dated version section and document its exact upgrade path.
 
 ### Fixed
 
+- Embedded shells now allow signed recovery downloads when the selected payload is
+  quarantined, even if a replaced shell has not bootstrapped and its embedded
+  fallback is below the persisted replay floor. Fresh installs still defer update
+  writers until bootstrap. Rebuild and install the shell APK to receive this fix.
+
 - Complete shells no longer fail or hang their first launch after an APK update
   that changes the shell contract. The update process, started by
   `MY_PACKAGE_REPLACED`, could reserve the update space for a whole payload
