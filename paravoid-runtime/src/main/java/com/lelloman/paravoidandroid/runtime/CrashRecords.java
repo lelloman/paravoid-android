@@ -85,6 +85,22 @@ final class CrashRecords {
         }
         if (moved) syncDirectory();
     }
+    /** Marks handled the pending records written before {@code millis} (the installed APK's update time). */
+    void acknowledgeBefore(long millis) throws IOException {
+        if (millis <= 0) return;
+        boolean moved = false;
+        for (Path p:records()) {
+            String name=p.getFileName().toString();
+            if (!name.endsWith(".pending")) continue;
+            long written;
+            try { written=Long.parseLong(name.substring(0,name.indexOf('-'))); }
+            catch (NumberFormatException damaged) { continue; }
+            if (written >= millis) continue;
+            Files.move(p, p.resolveSibling(name.replace(".pending", ".handled")), StandardCopyOption.ATOMIC_MOVE);
+            moved = true;
+        }
+        if (moved) syncDirectory();
+    }
     void acknowledge() throws IOException {
         for (Path p:records()) if (p.toString().endsWith(".pending"))
             Files.move(p, p.resolveSibling(p.getFileName().toString().replace(".pending", ".handled")), StandardCopyOption.ATOMIC_MOVE);

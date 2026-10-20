@@ -35,6 +35,22 @@ public class CrashRecoveryTest {
         records.acknowledgeOthers("new-contract:p74");
         assertTrue(records.pending("anything")); // A damaged record still gates.
     }
+    @Test public void installingAShellApkAcknowledgesOlderRecords() throws Exception {
+        CrashRecords records=new CrashRecords(temporary.newFolder());
+        // Written by the previous shell (no selected payload, so the identity is unknown and gates everything).
+        Path old=records.record("unknown","main","main",new IllegalStateException("Lifecycle admission: REPLAY"));
+        long written=Long.parseLong(old.getFileName().toString().split("-")[0]);
+        records.acknowledgeBefore(0); // Unknown install time: nothing changes.
+        records.acknowledgeBefore(written); // Same millisecond: not older than the install.
+        assertTrue(records.pending("anything"));
+        records.acknowledgeBefore(written+1); // A newer APK was installed afterwards.
+        assertFalse(records.pending("anything"));
+        assertTrue(records.details().contains("REPLAY")); // Still readable as history.
+        Thread.sleep(2);
+        records.record("unknown","main","main",new IllegalStateException("after install"));
+        records.acknowledgeBefore(written+1);
+        assertTrue(records.pending("anything")); // Failures of the installed shell keep gating.
+    }
     @Test public void recordsAreBoundedAndDamagedRecordsStillGate() throws Exception {
         CrashRecords records=new CrashRecords(temporary.newFolder());
         for(int i=0;i<9;i++) records.record("a","process","thread",new RuntimeException("x".repeat(100000)));

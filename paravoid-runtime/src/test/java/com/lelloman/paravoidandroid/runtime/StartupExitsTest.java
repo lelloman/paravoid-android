@@ -29,12 +29,26 @@ public class StartupExitsTest {
     }
     @Test public void recoveryRecordNamesTheQuarantineNotTheRefusedFallback() {
         String report = "Payload r72 (version 72) is paused: 3 starts of its first run ended before the app finished starting.";
-        String message = CompleteRuntime.PayloadQuarantined.message(report, ContractException.Code.REPLAY);
+        String message = CompleteRuntime.PayloadUnavailable.message(report, ContractException.Code.REPLAY, null);
         assertTrue(message.startsWith(report));
         assertFalse(message.contains("REPLAY"));
         assertTrue(message.contains("older than one this device already accepted"));
-        assertTrue(CompleteRuntime.PayloadQuarantined.message(null, ContractException.Code.UNAVAILABLE)
+        assertTrue(CompleteRuntime.PayloadUnavailable.message(null, ContractException.Code.UNAVAILABLE, null)
             .startsWith("The selected payload is paused."));
-        assertTrue(CompleteRuntime.PayloadQuarantined.message(report, null).contains("(IO)"));
+        assertTrue(CompleteRuntime.PayloadUnavailable.message(report, null, null).contains("(IO)"));
+    }
+    @Test public void supersededEmbeddedPayloadExplainsTheUpdateNotTheReplay() {
+        // The phone incident: nothing selected, embedded 65 below the floor 72 raised by an update check.
+        String superseded = "The app's built-in payload (version 65) is older than version 72, which this device already accepted, so it cannot run.";
+        String message = CompleteRuntime.PayloadUnavailable.message(null, ContractException.Code.REPLAY, superseded);
+        assertTrue(message.startsWith(superseded));
+        assertTrue(message.endsWith("Check for updates and install the current version."));
+        assertFalse(message.contains("REPLAY") || message.contains("paused") || message.contains("Retry"));
+        assertTrue(CompleteRuntime.PayloadUnavailable.message(null, ContractException.Code.REPLAY, null)
+            .contains("older than one this device already accepted"));
+        // A paused payload keeps its own reason first, with the floor explanation as the replacement.
+        String report = "Payload r72 (version 72) is paused: its stored files failed verification.";
+        String paused = CompleteRuntime.PayloadUnavailable.message(report, ContractException.Code.REPLAY, superseded);
+        assertTrue(paused.startsWith(report + " " + superseded));
     }
 }

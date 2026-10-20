@@ -16,6 +16,10 @@ public final class LifecycleTest {
             this(directory, version, false);
         }
         Fixture(Path directory, int version, boolean reuse) throws Exception {
+            this(directory, version, reuse, "contract");
+        }
+        /** A release built for {@code contract}; verification refuses it under another installed contract. */
+        Fixture(Path directory, int version, boolean reuse, String contract) throws Exception {
             source = directory.resolve("fixture-" + version + ".zip").toFile();
             List<InventoryEntry> inventory = new ArrayList<>();
             try (ZipOutputStream zip = reuse ? null : new ZipOutputStream(new FileOutputStream(source))) {
@@ -27,13 +31,16 @@ public final class LifecycleTest {
             }
             ExpectedArchive identity = new ExpectedArchive("release-" + version, version, "a".repeat(64),
                 sha256(Files.readAllBytes(source.toPath())), source.length());
-            release = TestEvidence.release(identity, inventory);
+            release = TestEvidence.release(identity, inventory, contract);
         }
         public VerifiedRelease verifyDownloaded(File file, ShellPolicy policy, RequestScope device, ExpectedArchive expected) throws ContractException {
+            if (release.identity.equals(expected) && !release.shellContractId.equals(policy.shellContractId))
+                throw new ContractException(Code.INCOMPATIBLE, "fake contract");
             if (!release.identity.equals(expected)) throw new ContractException(Code.INTEGRITY, "fake mismatch");
             return verifyEmbedded(file, policy, device);
         }
         public VerifiedRelease verifyEmbedded(File file, ShellPolicy policy, RequestScope device) throws ContractException {
+            if (!release.shellContractId.equals(policy.shellContractId)) throw new ContractException(Code.INCOMPATIBLE, "fake contract");
             try {
                 if (!release.identity.archiveSha256.equals(sha256(Files.readAllBytes(file.toPath()))))
                     throw new ContractException(Code.INTEGRITY, "fake integrity");

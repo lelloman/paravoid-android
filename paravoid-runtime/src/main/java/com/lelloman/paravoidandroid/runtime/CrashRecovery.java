@@ -23,11 +23,17 @@ final class CrashRecovery {
     CrashRecovery(Application app, String providerClass) {
         this.app=app; this.providerClass=providerClass;
         String version="unavailable";
+        long installed=0;
         try { android.content.pm.PackageInfo info=app.getPackageManager().getPackageInfo(app.getPackageName(),0);
             version=info.versionName+" ("+info.getLongVersionCode()+")";
+            installed=info.lastUpdateTime;
         } catch (android.content.pm.PackageManager.NameNotFoundException ignored) { }
         shellDescription="App: "+app.getPackageName()+"\nShell: "+version;
         records=new CrashRecords(new File(app.getNoBackupFilesDir(),"paravoid-crash-recovery"));
+        // Installing a shell APK is itself the repair attempt: records written before it describe the
+        // previous shell (whose payload may not even be compatible) and no longer gate launches.
+        try { records.acknowledgeBefore(installed); }
+        catch (IOException | RuntimeException ignored) { /* Diagnostics only; they keep gating as before. */ }
         recoveryProcess=Application.getProcessName().equals(app.getPackageName()+CompleteRuntime.RECOVERY_SUFFIX);
         instance=this;
         app.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {

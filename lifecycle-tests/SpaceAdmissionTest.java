@@ -176,15 +176,20 @@ public final class SpaceAdmissionTest {
         RuntimeLifecycle bootTwo = embeddedLifecycle(bootRoot, two, free);
         Path marker = bootRoot.resolve(RuntimeLifecycle.BOOTSTRAP_MARKER);
         check(bootOne.stageEmbedded(one.source).status == StageStatus.PENDING); // Embedded staging is never gated.
-        AdmissionId download = LifecycleTest.admit(bootTwo, two);
-        fails(Code.UNAVAILABLE, () -> bootTwo.reserveDownload(download)); // Staged but not yet acquired.
-        fails(Code.UNAVAILABLE, () -> bootTwo.stageDownloaded(two.source, download));
+        // Head observation is gated too: it would raise the floor above the embedded payload.
+        bootTwo.setCredentialScope(CredentialScope.publicAccess());
+        byte[] security = Files.readAllBytes(bootRoot.resolve("security"));
+        fails(Code.UNAVAILABLE, () -> LifecycleTest.admit(bootTwo, two)); // Staged but not yet acquired.
+        check(java.util.Arrays.equals(security, Files.readAllBytes(bootRoot.resolve("security"))));
         check(!Files.exists(marker));
         bootOne.acquireForProcess();
         check(new String(Files.readAllBytes(marker), "US-ASCII").equals("contract"));
+        AdmissionId download = LifecycleTest.admit(bootTwo, two);
         try (DownloadReservation allowed = bootTwo.reserveDownload(download)) { check(allowed != null); }
         Files.write(marker, "previous-contract".getBytes("US-ASCII")); // As left by the replaced shell.
         fails(Code.UNAVAILABLE, () -> bootTwo.reserveDownload(download));
+        fails(Code.UNAVAILABLE, () -> bootTwo.stageDownloaded(two.source, download));
+        fails(Code.UNAVAILABLE, () -> LifecycleTest.admit(bootTwo, two));
         // A replaced shell must be able to repair a quarantined selected payload even when
         // replay admission prevents its embedded fallback from bootstrapping the new contract.
         Path recoveryRoot = parent.resolve("embedded-recovery");

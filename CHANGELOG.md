@@ -72,6 +72,23 @@ these entries into a dated version section and document its exact upgrade path.
   below the replay floor for it, which failed with `Lifecycle admission: REPLAY`
   and replaced the real cause in recovery. A higher embedded payload (repair APK)
   or a byte repair of the same release still replaces it.
+- Embedded-bootstrap shells no longer get stuck in recovery with
+  `Lifecycle admission: REPLAY` when an update check runs before the app's first
+  launch. The check (on install, boot, or a distributor trigger) observed a newer
+  head, which raised the payload floor above the embedded payload; every launch then
+  failed staging it, **Retry app** had no paused payload to retry, and **Update**
+  failed with `UNAVAILABLE` because the contract had never bootstrapped. Head
+  observation is now gated like update writes until bootstrap. If an embedded payload
+  is still below the floor (a floor raised by an older runtime or under a previous
+  contract), recovery explains it and asks for an update, and checks and downloads
+  for the installed contract are allowed so **Check again**, **Update** and
+  **Restart** recover. Shells stuck this way need a new shell APK (an embedded payload
+  at or above the floor, or this runtime); no payload can repair them.
+- Crash records written before the installed shell APK's last update are marked
+  handled when it starts, so installing a repair shell over a stuck one launches
+  the app instead of the old recovery screen.
+- A selected payload that the installed shell contract cannot load is paused as
+  incompatible (shown in recovery) instead of as failed integrity.
 - Crash records about another payload are marked handled once a different payload
   starts healthy, so a device repaired by a new shell APK no longer shows a stale
   "App recovery" record in its update controls.

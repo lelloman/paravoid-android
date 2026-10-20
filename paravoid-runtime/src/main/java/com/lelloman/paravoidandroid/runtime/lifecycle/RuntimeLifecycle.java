@@ -84,7 +84,13 @@ public final class RuntimeLifecycle implements Lifecycle {
         catch (IOException e) { throw fail(Code.CORRUPT_STATE); }
     }
     @Override public void setCredentialScope(CredentialScope scope) throws ContractException { admission.setCredentialScope(scope); }
+    /**
+     * Head observation records replay knowledge (it raises the payload floor), so an embedded-bootstrap
+     * shell refuses it, like update writes, until the installed contract has bootstrapped: a head seen
+     * before the first launch must not lift the floor above the shell's own embedded payload.
+     */
     @Override public AdmissionResult observeHead(VerifiedHead head, CredentialScope scope) throws ContractException {
+        requireBootstrapped();
         return admission.observeHead(head, scope);
     }
     @Override public ExpectedArchive deltaBaseIdentity() throws ContractException {
@@ -96,36 +102,73 @@ public final class RuntimeLifecycle implements Lifecycle {
      */
     private void markBootstrapped() throws ContractException {
         if (policy.bootstrap != Bootstrap.EMBEDDED || bootstrappedForInstalledContract()) return;
-        Path marker = root.resolve(BOOTSTRAP_MARKER);
         try {
-            Path temporary = Files.createTempFile(root, "bootstrapped-", ".tmp");
-            try {
-                Files.write(temporary, policy.shellContractId.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
-                Files.move(temporary, marker, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } finally { Files.deleteIfExists(temporary); }
+            writeMarker(BOOTSTRAP_MARKER, policy.shellContractId);
+            Files.deleteIfExists(root.resolve(SUPERSEDED_MARKER));
         } catch (IOException failure) { throw fail(Code.IO); }
     }
-    private boolean bootstrappedForInstalledContract() {
+    private void writeMarker(String name, String text) throws IOException {
+        Path temporary = Files.createTempFile(root, "marker-", ".tmp");
         try {
-            Path marker = root.resolve(BOOTSTRAP_MARKER);
-            if (!Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS) || Files.size(marker) > 256) return false;
-            return policy.shellContractId.equals(new String(Files.readAllBytes(marker), java.nio.charset.StandardCharsets.US_ASCII));
-        } catch (IOException unreadable) { return false; }
+            Files.write(temporary, text.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+            Files.move(temporary, root.resolve(name), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } finally { Files.deleteIfExists(temporary); }
+    }
+    private String[] readMarker(String name) {
+        try {
+            Path marker = root.resolve(name);
+            if (!Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS) || Files.size(marker) > 256) return null;
+            return new String(Files.readAllBytes(marker), java.nio.charset.StandardCharsets.US_ASCII).split("\n", -1);
+        } catch (IOException unreadable) { return null; }
+    }
+    private boolean bootstrappedForInstalledContract() {
+        String[] marker = readMarker(BOOTSTRAP_MARKER);
+        return marker != null && marker.length == 1 && policy.shellContractId.equals(marker[0]);
+    }
+    /**
+     * The installed shell's embedded payload was refused because it is below the payload floor (a newer
+     * release was admitted or observed earlier, possibly under a previous shell contract). Nothing older
+     * than the floor may run, so this shell can only start a release delivered for its contract: update
+     * checks and writers are allowed before bootstrap. Returns {embedded version, floor} or null.
+     */
+    private long[] supersededEmbedded() {
+        String[] marker = readMarker(SUPERSEDED_MARKER);
+        if (marker == null || marker.length != 3 || !policy.shellContractId.equals(marker[0])) return null;
+        try {
+            long embedded = Long.parseLong(marker[1]), floor = Long.parseLong(marker[2]);
+            return embedded >= 0 && floor > embedded ? new long[] {embedded, floor} : null;
+        } catch (NumberFormatException damaged) { return null; }
+    }
+    /**
+     * Plain-language reason why this shell's embedded payload cannot run, or null. Shells record it so
+     * recovery shows it instead of the replay refusal, and explains that an update is needed.
+     */
+    public String embeddedSupersededReport() {
+        if (policy.bootstrap != Bootstrap.EMBEDDED || bootstrappedForInstalledContract()) return null;
+        long[] superseded = supersededEmbedded();
+        return superseded == null ? null : "The app's built-in payload (version " + superseded[0]
+            + ") is older than version " + superseded[1] + ", which this device already accepted, so it cannot run.";
     }
     /**
      * An embedded-bootstrap shell installs its first release for a contract from its own APK, in the
      * main process at launch. Until that happened, update writers (the update process after
      * MY_PACKAGE_REPLACED or boot) must not hold the update space: a download keeps it for the whole
-     * transfer, which would block or fail that launch. They get UNAVAILABLE and retry later. A quarantined selected generation is already in
-     * recovery: allow authenticated repair even if its embedded fallback cannot pass replay admission.
+     * transfer, which would block or fail that launch. Update checks must not observe heads either: an
+     * observed head raises the payload floor, possibly above the embedded payload, which then can never
+     * start. They get UNAVAILABLE and retry later. Two states are already in recovery and need a
+     * delivered release: a quarantined selected generation, and an embedded payload refused by the
+     * floor (recorded by {@link #stageEmbedded}); there authenticated checks and repair are allowed.
      */
     private void requireBootstrapped() throws ContractException {
         if (policy.bootstrap != Bootstrap.EMBEDDED || bootstrappedForInstalledContract()) return;
         LifecycleSnapshot state = selection(j -> j.snapshot(0));
         if (state.availability == Availability.RECOVERY && state.active != null) return;
+        // The embedded payload was refused by the floor: only a delivered release can start this shell.
+        if (supersededEmbedded() != null) return;
         throw fail(Code.UNAVAILABLE);
     }
     static final String BOOTSTRAP_MARKER = "bootstrapped-contract";
+    static final String SUPERSEDED_MARKER = "embedded-superseded";
     @Override public StageResult stageDownloaded(File archive, AdmissionId id) throws ContractException {
         requireBootstrapped();
         ExpectedArchive expected = admission.resolve(id);
@@ -271,13 +314,31 @@ public final class RuntimeLifecycle implements Lifecycle {
         }
     }
     private StageResult stageEmbeddedReserved(File archive) throws ContractException {
-        return preparation(() -> {
-            cleanAbandonedStaging();
-            GenerationStore.Prepared prepared = generations.prepare(archive, null);
-            // Admission commits first. A publication interruption preserves floors and supports identical retry.
-            return admission.authorizeEmbedded(prepared.release,
-                identity -> new SelectionJournal(root).pending(generations.publish(prepared)));
-        });
+        long[] refused = {-1};
+        try {
+            return preparation(() -> {
+                cleanAbandonedStaging();
+                GenerationStore.Prepared prepared = generations.prepare(archive, null);
+                // Admission commits first. A publication interruption preserves floors and supports identical retry.
+                try {
+                    return admission.authorizeEmbedded(prepared.release,
+                        identity -> new SelectionJournal(root).pending(generations.publish(prepared)));
+                } catch (ContractException failure) {
+                    if (failure.code == Code.REPLAY) refused[0] = prepared.release.identity.payloadVersion;
+                    throw failure;
+                }
+            });
+        } catch (ContractException failure) {
+            // Below the floor: never staged, selection and replay state unchanged. Remember it so update
+            // checks and writers may fetch a release for this contract before bootstrap.
+            if (refused[0] >= 0 && policy.bootstrap == Bootstrap.EMBEDDED && !bootstrappedForInstalledContract()) {
+                try {
+                    long floor = admission.payloadFloor();
+                    if (floor > refused[0]) writeMarker(SUPERSEDED_MARKER, policy.shellContractId + "\n" + refused[0] + "\n" + floor);
+                } catch (ContractException | IOException unrecorded) { failure.addSuppressed(unrecorded); }
+            }
+            throw failure;
+        }
     }
     @Override public LifecycleSnapshot snapshot() throws ContractException {
         long bytes = storageBytes(); return selection(j -> j.snapshot(bytes));
@@ -298,7 +359,7 @@ public final class RuntimeLifecycle implements Lifecycle {
                 try { loaded = generations.load(candidate); }
                 catch (ContractException rejected) {
                     selection(j -> {
-                        j.rejectedBytes(candidate);
+                        j.rejectedBytes(candidate, rejected.code);
                         return null;
                     });
                     throw rejected;

@@ -129,7 +129,7 @@ final class CompleteRuntime {
             // boot). Let it finish, and stage the embedded payload only if nothing usable appeared.
             lifecycle.awaitIdleWriters(STARTUP_WRITER_WAIT_MILLIS);
             LifecycleSnapshot settled = lifecycle.snapshot();
-            if (settled.active == null && settled.pending == null) stageEmbedded();
+            if (settled.active == null && settled.pending == null) stageEmbeddedOrExplain(false, null);
         }
         try { lease = lifecycle.acquireForProcess(); }
         catch (ContractException error) {
@@ -168,33 +168,62 @@ final class CompleteRuntime {
              error.code == ContractException.Code.INTEGRITY);
     }
     /**
-     * Stages the embedded payload and loads it, unless the selected generation is quarantined with
-     * nothing newer pending. Then the embedded payload helps only as a forward repair (a higher
-     * version, e.g. from a repair APK) or a byte repair of the same release. An older one is below
-     * the replay floor and must never run, and its refusal (REPLAY) is not why the app cannot start:
-     * fail with the quarantine's own reason, which becomes the recovery record.
+     * Stages the embedded payload and loads it. With the selected generation quarantined and nothing
+     * newer pending, the embedded payload helps only as a forward repair (a higher version, e.g. from a
+     * repair APK) or a byte repair of the same release. Every other candidate, the retained last
+     * healthy generation included, is older than the selected one and so below the replay floor: it
+     * must never run. Any failure then reports the quarantine's own reason, which becomes the
+     * recovery record (never the resulting REPLAY).
      */
     private GenerationLease embeddedRepair() throws Exception {
         LifecycleSnapshot state = lifecycle.snapshot();
-        if (state.availability != Availability.RECOVERY || state.pending != null) {
-            stageEmbedded(); return lifecycle.acquireForProcess();
-        }
-        String report = lifecycle.quarantineReport();
-        try { stageEmbedded(); return lifecycle.acquireForProcess(); }
-        catch (ContractException | IOException refused) {
-            ContractException.Code code = refused instanceof ContractException ? ((ContractException) refused).code : null;
-            PayloadQuarantined failure = new PayloadQuarantined(report, code);
-            android.util.Log.w("ParavoidAndroid", failure.getMessage());
-            throw failure;
+        boolean paused = state.availability == Availability.RECOVERY && state.pending == null;
+        String report = paused ? lifecycle.quarantineReport() : null;
+        try { stageEmbeddedOrExplain(paused, report); return lifecycle.acquireForProcess(); }
+        catch (ContractException | IOException failure) {
+            if (!paused || failure instanceof PayloadUnavailable) throw failure;
+            throw unavailable(report, failure);
         }
     }
-    /** No runnable payload: the selected one is quarantined and nothing admissible can replace it. */
-    static final class PayloadQuarantined extends IOException {
-        PayloadQuarantined(String report, ContractException.Code embedded) { super(message(report, embedded)); }
-        static String message(String report, ContractException.Code embedded) {
-            String reason = report != null ? report : "The selected payload is paused.";
-            String replacement = embedded == ContractException.Code.REPLAY
-                ? "The app's built-in payload is older than one this device already accepted, so it is not used."
+    /**
+     * Stages the embedded payload. If it is below the payload floor (REPLAY: a newer release was
+     * admitted or observed before, for example by an update check that ran before this shell's first
+     * launch, or under a previous shell contract), no runnable payload exists until a release for this
+     * contract is downloaded: fail with that explanation instead of the bare replay refusal. The
+     * lifecycle then lets update checks and downloads run before bootstrap.
+     */
+    private void stageEmbeddedOrExplain(boolean paused, String report) throws Exception {
+        try { stageEmbedded(); }
+        catch (ContractException | IOException failure) {
+            boolean superseded = failure instanceof ContractException
+                && ((ContractException) failure).code == ContractException.Code.REPLAY;
+            if (!paused && !superseded) throw failure;
+            throw unavailable(report, failure);
+        }
+    }
+    private PayloadUnavailable unavailable(String report, Exception refused) {
+        ContractException.Code code = refused instanceof ContractException ? ((ContractException) refused).code : null;
+        PayloadUnavailable failure = new PayloadUnavailable(report, code, lifecycle.embeddedSupersededReport());
+        android.util.Log.w("ParavoidAndroid", failure.getMessage());
+        return failure;
+    }
+    /** No runnable payload: nothing admissible is selected or pending, and the embedded payload cannot start. */
+    static final class PayloadUnavailable extends IOException {
+        PayloadUnavailable(String quarantine, ContractException.Code embedded, String superseded) {
+            super(message(quarantine, embedded, superseded));
+        }
+        /**
+         * {@code quarantine}: why the selected payload is paused (null when none is paused);
+         * {@code embedded}: why the embedded payload was not used; {@code superseded}: the
+         * lifecycle's explanation of a floor refusal, if recorded.
+         */
+        static String message(String quarantine, ContractException.Code embedded, String superseded) {
+            String older = superseded != null ? superseded
+                : "The app's built-in payload is older than one this device already accepted, so it cannot run.";
+            if (quarantine == null && embedded == ContractException.Code.REPLAY)
+                return older + " Check for updates and install the current version.";
+            String reason = quarantine != null ? quarantine : "The selected payload is paused.";
+            String replacement = embedded == ContractException.Code.REPLAY ? older
                 : embedded == ContractException.Code.UNAVAILABLE ? "The app's built-in payload does not replace it."
                 : "The app's built-in payload cannot replace it (" + (embedded == null ? "IO" : embedded.name()) + ").";
             return reason + " " + replacement + " Retry the app or install an update.";

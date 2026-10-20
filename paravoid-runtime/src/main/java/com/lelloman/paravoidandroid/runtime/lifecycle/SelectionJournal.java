@@ -39,9 +39,9 @@ final class SelectionJournal {
     /** Backstop for starts killed from outside: evidence can be wrong, a start loop must still end. */
     static final int KILL_LIMIT = 8;
     static final String CAUSE_STARTUP_FAILURE = "STARTUP_FAILURE", CAUSE_STARTUP_INCOMPLETE = "STARTUP_INCOMPLETE",
-        CAUSE_STARTUP_KILLED = "STARTUP_KILLED", CAUSE_INTEGRITY = "INTEGRITY";
+        CAUSE_STARTUP_KILLED = "STARTUP_KILLED", CAUSE_INTEGRITY = "INTEGRITY", CAUSE_INCOMPATIBLE = "INCOMPATIBLE";
     private static final Set<String> CAUSES = new HashSet<>(Arrays.asList("", CAUSE_STARTUP_FAILURE,
-        CAUSE_STARTUP_INCOMPLETE, CAUSE_STARTUP_KILLED, CAUSE_INTEGRITY));
+        CAUSE_STARTUP_INCOMPLETE, CAUSE_STARTUP_KILLED, CAUSE_INTEGRITY, CAUSE_INCOMPATIBLE));
     private static final class State {
         Generation selected, pending, healthy;
         boolean trial, quarantined;
@@ -189,14 +189,23 @@ final class SelectionJournal {
         State s = forHandle(generation);
         // The first recorded cause stays (a later process may fail differently); corrupt bytes win
         // because they decide byte repair.
-        boolean keep = s.quarantined && reason != Code.INTEGRITY && !s.cause.isEmpty();
-        quarantine(s, keep ? s.cause : reason == Code.INTEGRITY ? CAUSE_INTEGRITY : CAUSE_STARTUP_FAILURE,
+        boolean loading = reason == Code.INTEGRITY || reason == Code.INCOMPATIBLE;
+        boolean keep = s.quarantined && !loading && !s.cause.isEmpty();
+        quarantine(s, keep ? s.cause : reason == Code.INTEGRITY ? CAUSE_INTEGRITY
+            : reason == Code.INCOMPATIBLE ? CAUSE_INCOMPATIBLE : CAUSE_STARTUP_FAILURE,
             keep ? s.failure : reason);
         write(s);
     }
-    void rejectedBytes(Generation generation) throws ContractException {
+    void rejectedBytes(Generation generation) throws ContractException { rejectedBytes(generation, Code.INTEGRITY); }
+    /**
+     * Load-time rejection. A selected generation that no longer fits the installed shell (INCOMPATIBLE,
+     * e.g. after a contract-changing APK update) is paused with that cause; anything else is treated as
+     * failed integrity, which permits a byte repair of the same release.
+     */
+    void rejectedBytes(Generation generation, Code code) throws ContractException {
         State s = read();
-        if (s.selected != null && same(s.selected, generation)) failed(generation, Code.INTEGRITY);
+        if (s.selected != null && same(s.selected, generation))
+            failed(generation, code == Code.INCOMPATIBLE ? Code.INCOMPATIBLE : Code.INTEGRITY);
         else rejectPending(generation);
     }
     private static void quarantine(State s, String cause, Code failure) {
@@ -275,6 +284,7 @@ final class SelectionJournal {
             case CAUSE_STARTUP_KILLED: reason = KILL_LIMIT + " starts in a row of its first run were stopped before the app"
                 + " finished starting"; break;
             case CAUSE_INTEGRITY: reason = "its stored files failed verification"; break;
+            case CAUSE_INCOMPATIBLE: reason = "it does not fit the installed app version (built for another shell)"; break;
             default: reason = "an earlier app version paused it after its first starts failed (cause not recorded)";
         }
         return "Payload " + s.selected.identity.releaseId + " (version " + s.selected.identity.payloadVersion

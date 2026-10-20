@@ -1,5 +1,18 @@
 # Track C lifecycle handoff
 
+## Embedded payload below the floor (2026-10-20)
+
+`EmbeddedFloorTest` (in `run.sh`) reproduces the downstream phone state behind the
+same incident: shell 65 installed and never launched, an update check observed 72
+(floor 72), nothing selected. Head observation before bootstrap is now refused
+without touching security state. In the recreated state every launch refuses the
+embedded 65 with REPLAY without changing selection or security bytes and records an
+explanation; retry has nothing to retry; checks and downloads are then allowed and
+72 (or a higher 73) stages, starts and bootstraps. A new shell contract whose
+embedded 74 is above the floor starts over that state; a contract change whose
+embedded payload is below the selected one pauses the old selection as incompatible
+and recovers by download; damaged or foreign markers are ignored.
+
 ## Trial exit evidence regression (2026-10-20)
 
 `TrialEvidenceTest` (in `run.sh`) reproduces a downstream incident: embedded payload

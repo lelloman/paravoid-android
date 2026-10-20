@@ -184,6 +184,11 @@ final class AdmissionStore {
         });
     }
 
+    /** The lineage-wide payload floor: no release below it is admitted, embedded ones included. */
+    long payloadFloor() throws ContractException {
+        return transaction(state -> Math.max(policy.trust.minimumPayloadVersion, state.payloadFloor));
+    }
+
     private void checkCredential(State state, CredentialScope credential) throws ContractException {
         if (!policy.updatesEnabled || credential == null || state.credential == null
                 || credential.authentication != policy.authentication) throw failure(Code.CREDENTIAL_UNAVAILABLE);

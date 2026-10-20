@@ -51,6 +51,13 @@ embedded payload is never run and its replay refusal is not shown as the cause.
 The paused release itself is not offered as an update. When a different payload
 later renders its first healthy frame (for example the embedded payload of a repair
 shell APK), unacknowledged records about other payloads are marked handled.
+Records written before the installed shell APK was last updated are marked handled
+when the new APK starts: installing a shell is itself the repair attempt.
+If the shell's embedded payload is older than a release this device already accepted
+(for example because an update check ran before the app's first launch) and nothing
+else is selected, the record says so and asks for an update; **Check again** and
+**Update** then download the current release, and **Restart** starts it. **Retry app**
+cannot help there: there is no paused payload to retry.
 **Retry app** explicitly permits another attempt at the same quarantined generation
 when no repair is pending; it does not roll back or clear application data. Another
 failure creates a new record and returns to recovery.
