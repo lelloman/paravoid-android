@@ -23,6 +23,7 @@ public final class RuntimeLifecycle implements Lifecycle {
     private final InstalledStateSource installed;
     private final java.util.function.LongSupplier usableSpace;
     private final AtomicRecord.Fault publicationFault;
+    private final StartupExits exits;
 
     /** Opens established state. Missing/damaged state never triggers initialization. Use Android no-backup storage. */
     public RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
@@ -31,7 +32,12 @@ public final class RuntimeLifecycle implements Lifecycle {
     }
     public RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
             Clock clock, boolean mainProcess, InstalledStateSource installed) throws ContractException {
-        this(root, policy, device, verifier, clock, mainProcess, installed, root::getUsableSpace);
+        this(root, policy, device, verifier, clock, mainProcess, installed, StartupExits.NONE);
+    }
+    /** {@code exits} tells starts killed from outside apart from failed ones during a trial. */
+    public RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
+            Clock clock, boolean mainProcess, InstalledStateSource installed, StartupExits exits) throws ContractException {
+        this(root, policy, device, verifier, clock, mainProcess, installed, root::getUsableSpace, boundary -> {}, exits);
     }
     /** Package-private disk-capacity seam for host fault tests, never a shell configuration option. */
     RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
@@ -43,6 +49,13 @@ public final class RuntimeLifecycle implements Lifecycle {
     RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
             Clock clock, boolean mainProcess, InstalledStateSource installed,
             java.util.function.LongSupplier usableSpace, AtomicRecord.Fault publicationFault) throws ContractException {
+        this(root, policy, device, verifier, clock, mainProcess, installed, usableSpace, publicationFault, StartupExits.NONE);
+    }
+    private RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
+            Clock clock, boolean mainProcess, InstalledStateSource installed,
+            java.util.function.LongSupplier usableSpace, AtomicRecord.Fault publicationFault,
+            StartupExits exits) throws ContractException {
+        this.exits = Objects.requireNonNull(exits);
         this.root = root.toPath().toAbsolutePath().normalize(); this.mainProcess = mainProcess;
         this.policy = policy; this.installed = installed;
         this.usableSpace = Objects.requireNonNull(usableSpace);
@@ -277,8 +290,9 @@ public final class RuntimeLifecycle implements Lifecycle {
                 if (!policy.shellContractId.equals(existing.release().shellContractId)) throw fail(Code.INCOMPATIBLE);
                 existing.beforeUserCode(); return existing;
             }
+            SelectionJournal.Attempt attempt = startAttempt();
             // Staging may supersede a candidate while its bytes are verified. Bound local retries, never load stale paths.
-            for (int attempt = 0; attempt < 3; attempt++) {
+            for (int retry = 0; retry < 3; retry++) {
                 SelectionJournal.Generation candidate = selection(SelectionJournal::candidate);
                 GenerationStore.Loaded loaded;
                 try { loaded = generations.load(candidate); }
@@ -292,7 +306,7 @@ public final class RuntimeLifecycle implements Lifecycle {
                 try {
                     SelectionJournal.Generation acquired = selection(j -> {
                         if (current != null && !installed.isCurrent(current)) throw fail(Code.CREDENTIAL_CHANGED);
-                        return j.acquire(candidate);
+                        return j.acquire(candidate, attempt);
                     });
                     Lease handle = new Lease(acquired, loaded); PROCESS_HANDLES.put(root, handle);
                     markBootstrapped(); return handle;
@@ -302,6 +316,24 @@ public final class RuntimeLifecycle implements Lifecycle {
             }
             throw fail(Code.UNAVAILABLE);
         }
+    }
+    /** Platform queries stay outside the selection lock; the journal applies the evidence only to that exact attempt. */
+    private SelectionJournal.Attempt startAttempt() throws ContractException {
+        long[] previous = selection(SelectionJournal::previousAttempt);
+        StartupExits.Exit exit = null;
+        if (previous != null) {
+            try { exit = exits.exit((int) previous[0], previous[1]); }
+            catch (RuntimeException unavailable) { exit = StartupExits.Exit.UNKNOWN; }
+        }
+        return new SelectionJournal.Attempt(exits.currentPid(), exits.currentMillis(),
+            previous == null ? 0 : (int) previous[0], previous == null ? 0 : previous[1], exit);
+    }
+    /**
+     * Why the selected generation is quarantined, in plain language (null when it is not). Shells
+     * record it so recovery shows the original reason rather than a later consequence.
+     */
+    public String quarantineReport() throws ContractException {
+        return selection(SelectionJournal::quarantineReport);
     }
     @Override public void retryQuarantined(ExpectedArchive release) throws ContractException {
         InstalledStateSource.Snapshot current = currentInstalled();

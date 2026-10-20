@@ -68,6 +68,23 @@ final class CrashRecords {
         try { List<Path> all=records(); return all.isEmpty() ? "No crash report recorded." : read(all.get(all.size()-1)); }
         catch (IOException error) { return "Crash details could not be read."; }
     }
+    /**
+     * A different payload started healthy: records about other payloads (for example one written
+     * by an older shell for a payload no longer selected) no longer describe this app. Records of
+     * this payload and damaged/unknown ones stay for the user to acknowledge.
+     */
+    void acknowledgeOthers(String identity) throws IOException {
+        if (identity.equals("unknown")) return;
+        boolean moved = false;
+        for (Path p:records()) if (p.toString().endsWith(".pending")) {
+            String text=read(p); int end=text.indexOf('\n');
+            String id=end<0 ? "unknown" : text.substring(0,end);
+            if (id.equals("unknown") || id.equals(identity)) continue;
+            Files.move(p, p.resolveSibling(p.getFileName().toString().replace(".pending", ".handled")), StandardCopyOption.ATOMIC_MOVE);
+            moved = true;
+        }
+        if (moved) syncDirectory();
+    }
     void acknowledge() throws IOException {
         for (Path p:records()) if (p.toString().endsWith(".pending"))
             Files.move(p, p.resolveSibling(p.getFileName().toString().replace(".pending", ".handled")), StandardCopyOption.ATOMIC_MOVE);

@@ -98,6 +98,22 @@ public final class DeliveryClient {
         this.directory = directory; this.connections = connections; this.storage = storage;
     }
 
+    /**
+     * Whether a verified offer is an update for this install. The release already selected is not,
+     * including a quarantined one: downloading it again cannot change anything, and offering it
+     * would present the paused release as a fix. The one exception is a byte repair of a selected
+     * release whose stored files failed verification.
+     */
+    public static boolean offerable(ExpectedArchive offer, LifecycleSnapshot life) {
+        if (offer == null) return false;
+        if (life == null || !offer.equals(life.active)) return true;
+        return life.availability == Availability.RECOVERY && life.error == ContractException.Code.INTEGRITY;
+    }
+    private LifecycleSnapshot lifecycleSnapshot() {
+        try { return lifecycle.snapshot(); }
+        catch (ContractException unavailable) { return null; }
+    }
+
     /** At process startup/APK replacement. Null is valid only for public mode. No asset fallback. */
     public synchronized void installedCredential(byte[] grantEnvelope) throws ContractException, IOException {
         invalidateCredential();
@@ -255,6 +271,8 @@ public final class DeliveryClient {
             // Controller cancellation takes its operation lock before the client
             // monitor. Never invoke its checkpoint while holding this monitor.
             checkpoint.check();
+            if (admission.release != null && !offerable(admission.release, lifecycleSnapshot()))
+                return new Result(admission.status, null, null); // Nothing to download: it is the selected release.
             if (!download || admission.status != HeadStatus.AVAILABLE || !permission.allowed()
                     || offered != null && !offered.equals(admission.release))
                 return new Result(admission.status, admission.release, null);

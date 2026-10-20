@@ -45,6 +45,11 @@ final class CrashRecovery {
         identity=release==null ? "unknown" : contract+":"+release.releaseId+":"+release.payloadVersion+":"+release.manifestSha256;
     }
     boolean blocked() throws IOException { return records.pending(identity); }
+    /** The current payload rendered its first healthy frame. */
+    void healthy() {
+        try { records.acknowledgeOthers(identity); }
+        catch (IOException | RuntimeException ignored) { /* Diagnostics only; never fail a healthy start. */ }
+    }
     void install() {
         if (recoveryProcess) return; // A broken provider must not recursively launch recovery.
         Thread main=Looper.getMainLooper().getThread();

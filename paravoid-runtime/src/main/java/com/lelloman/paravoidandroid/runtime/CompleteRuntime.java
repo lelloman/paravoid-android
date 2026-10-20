@@ -46,7 +46,7 @@ final class CompleteRuntime {
         mainProcess = environment.mainProcess();
         RequestScope scope = environment.scope(policy);
         lifecycle = new RuntimeLifecycle(new File(app.getNoBackupFilesDir(), "paravoid-v1"), policy, scope,
-            new CompleteVpkVerifier(), environment, mainProcess, source);
+            new CompleteVpkVerifier(), environment, mainProcess, source, new AndroidStartupExits(app));
         lifecycle.openOrInitialize();
         try { LegacyDeliveryCleanup.reclaim(app.getNoBackupFilesDir(), app.getPackageName()); }
         catch (IOException ignored) { /* Old partials are disposable; retry cleanup on next start. */ }
@@ -100,7 +100,10 @@ final class CompleteRuntime {
                         view.post(() -> {
                             if (view.getViewTreeObserver().isAlive()) view.getViewTreeObserver().removeOnDrawListener(this);
                             if (activity.isFinishing() || activity.isDestroyed() || uiHealthy) return;
-                            try { lease.firstFrameRendered(); uiHealthy = true; }
+                            try {
+                                lease.firstFrameRendered(); uiHealthy = true;
+                                if (CrashRecovery.instance != null) CrashRecovery.instance.healthy();
+                            }
                             catch (ContractException error) { safeLog(error.code); }
                         });
                     }
@@ -141,7 +144,7 @@ final class CompleteRuntime {
                 try { settled = lifecycle.acquireForProcess(); }
                 catch (ContractException again) { if (!embeddedRepairable(again)) throw again; }
             }
-            if (settled == null) { stageEmbedded(); settled = lifecycle.acquireForProcess(); }
+            if (settled == null) settled = embeddedRepair();
             lease = settled;
         }
         installStartupObserver();
@@ -163,6 +166,39 @@ final class CompleteRuntime {
             (error.code == ContractException.Code.INCOMPATIBLE ||
              error.code == ContractException.Code.UNAVAILABLE ||
              error.code == ContractException.Code.INTEGRITY);
+    }
+    /**
+     * Stages the embedded payload and loads it, unless the selected generation is quarantined with
+     * nothing newer pending. Then the embedded payload helps only as a forward repair (a higher
+     * version, e.g. from a repair APK) or a byte repair of the same release. An older one is below
+     * the replay floor and must never run, and its refusal (REPLAY) is not why the app cannot start:
+     * fail with the quarantine's own reason, which becomes the recovery record.
+     */
+    private GenerationLease embeddedRepair() throws Exception {
+        LifecycleSnapshot state = lifecycle.snapshot();
+        if (state.availability != Availability.RECOVERY || state.pending != null) {
+            stageEmbedded(); return lifecycle.acquireForProcess();
+        }
+        String report = lifecycle.quarantineReport();
+        try { stageEmbedded(); return lifecycle.acquireForProcess(); }
+        catch (ContractException | IOException refused) {
+            ContractException.Code code = refused instanceof ContractException ? ((ContractException) refused).code : null;
+            PayloadQuarantined failure = new PayloadQuarantined(report, code);
+            android.util.Log.w("ParavoidAndroid", failure.getMessage());
+            throw failure;
+        }
+    }
+    /** No runnable payload: the selected one is quarantined and nothing admissible can replace it. */
+    static final class PayloadQuarantined extends IOException {
+        PayloadQuarantined(String report, ContractException.Code embedded) { super(message(report, embedded)); }
+        static String message(String report, ContractException.Code embedded) {
+            String reason = report != null ? report : "The selected payload is paused.";
+            String replacement = embedded == ContractException.Code.REPLAY
+                ? "The app's built-in payload is older than one this device already accepted, so it is not used."
+                : embedded == ContractException.Code.UNAVAILABLE ? "The app's built-in payload does not replace it."
+                : "The app's built-in payload cannot replace it (" + (embedded == null ? "IO" : embedded.name()) + ").";
+            return reason + " " + replacement + " Retry the app or install an update.";
+        }
     }
     private void stageEmbedded() throws Exception {
         try (ZipFile apk = new ZipFile(environment.currentBaseApk())) {

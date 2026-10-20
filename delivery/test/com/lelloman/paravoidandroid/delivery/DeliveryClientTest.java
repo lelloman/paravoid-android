@@ -22,6 +22,7 @@ public final class DeliveryClientTest {
         VerifiedHead last;
         Action duringStage;
         ContractException.Code stageFailure;
+        LifecycleSnapshot fixed;
         public void setCredentialScope(CredentialScope scope) { credential = scope; if (scope == null) credentialDenials++; }
         public AdmissionResult observeHead(VerifiedHead head, CredentialScope scope) throws ContractException {
             if (credential == null || !scope.id.equals(credential.id)) throw new ContractException(ContractException.Code.CREDENTIAL_CHANGED, "changed");
@@ -48,6 +49,7 @@ public final class DeliveryClientTest {
         }
         public StageResult stageEmbedded(File archive) { throw new AssertionError("delivery must not stage embedded"); }
         public LifecycleSnapshot snapshot() {
+            if (fixed != null) return fixed;
             return new LifecycleSnapshot(Availability.RUNNABLE, null, stages == 0 ? null : last.release,
                     null, stages > 0, 1, 0, null);
         }
@@ -248,6 +250,27 @@ public final class DeliveryClientTest {
             check(s.life.snapshot().availability == Availability.RUNNABLE);
             check(s.life.reservations == 1 && s.life.releasedReservations == 1 && !s.life.reserved);
         }
+        // The selected release is never an update, quarantined or not; only corrupt selected bytes
+        // may be downloaded again (byte repair). A lower selected release keeps the offer.
+        ExpectedArchive older = new ExpectedArchive("r0", 0, "c".repeat(64), "d".repeat(64), 1);
+        for (Object[] row : new Object[][] {
+                {Availability.RUNNABLE, null, true, false}, {Availability.TRIAL, null, true, false},
+                {Availability.RECOVERY, ContractException.Code.UNAVAILABLE, true, false},
+                {Availability.RECOVERY, ContractException.Code.INTEGRITY, true, true},
+                {Availability.RECOVERY, ContractException.Code.UNAVAILABLE, false, true}}) try (Setup s = new Setup(false)) {
+            boolean selected = (Boolean) row[2], offered = (Boolean) row[3];
+            s.life.fixed = new LifecycleSnapshot((Availability) row[0], selected ? s.metadata.archive : older, null, older,
+                false, 1, 0, (ContractException.Code) row[1]);
+            check(DeliveryClient.offerable(s.metadata.archive, s.life.fixed) == offered);
+            s.head();
+            if (offered) s.f.responses.add(new Fake(200, ARCHIVE));
+            DeliveryClient.Result result = s.client.check(s.scope, true, false);
+            check(offered ? s.metadata.archive.equals(result.available) && result.stage != null
+                : result.available == null && result.stage == null);
+            check(s.life.stages == (offered ? 1 : 0) && s.f.requests == (offered ? 2 : 1) && s.f.responses.isEmpty());
+            check(s.life.observations == 1); // Head observation (replay knowledge) still happened.
+        }
+        check(!DeliveryClient.offerable(null, null) && DeliveryClient.offerable(older, null));
         System.out.println("DeliveryClientTest: " + TransportTest.assertions + " assertions passed");
     }
 }

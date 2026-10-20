@@ -320,6 +320,11 @@ public final class UpdateEngine implements UpdateControl {
     private void publish(boolean scheduling) {
         LifecycleSnapshot life=null;
         try { life=lifecycle.snapshot(); } catch(ContractException failure) { error=failure.code.name(); }
+        // An offer saved before its release became the selected one (or quarantined) is no longer an update.
+        if(available!=null && life!=null && !DeliveryClient.offerable(available,life)) {
+            available=null;
+            if(phase==DeliveryController.Activity.AVAILABLE) phase=DeliveryController.Activity.IDLE;
+        }
         snapshot=new DeliveryController.Snapshot(life,new DeliveryPreferences(schedule.checks,schedule.downloads,schedule.downloadUnmetered),
             phase,available,error,schedule,bytes,total,lastCheck,kind==Kind.NONE ? nextCheck : due,
             promptUpdates && available!=null && !available.equals(declined) && (phase==DeliveryController.Activity.AVAILABLE || "OFFER_CHANGED".equals(error))

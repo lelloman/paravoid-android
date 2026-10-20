@@ -59,6 +59,31 @@ these entries into a dated version section and document its exact upgrade path.
 
 ### Fixed
 
+- A downloaded payload on its first-run trial is no longer quarantined because its
+  app process was killed during startup (a swipe, a force stop, an OEM task killer,
+  low memory). The runtime records each trial start's process and, at the next cold
+  start, reads Android's exit reason for it: kills no longer count, while crashes,
+  native crashes, ANRs and unknown ends keep the existing two-attempt budget (eight
+  consecutive kills still pause the trial, as a backstop). Previously two killed
+  starts silently quarantined a healthy payload.
+- A quarantined payload with nothing newer to replace it now opens recovery with the
+  quarantine's cause (unfinished starts and how they ended, or failed integrity)
+  as the crash record. The runtime no longer stages the shell's embedded payload
+  below the replay floor for it, which failed with `Lifecycle admission: REPLAY`
+  and replaced the real cause in recovery. A higher embedded payload (repair APK)
+  or a byte repair of the same release still replaces it.
+- Crash records about another payload are marked handled once a different payload
+  starts healthy, so a device repaired by a new shell APK no longer shows a stale
+  "App recovery" record in its update controls.
+- The selected release, quarantined or not, is no longer reported as an available
+  update (`ParavoidUpdates` `available`, recovery's "Update available: N") and is
+  not downloaded again, except to repair a selected release with corrupt files.
+- The selection journal format is now version 3; version 2 journals are read and
+  upgraded on the next write. Shells built with this runtime cannot be replaced by
+  an older shell build without clearing app data (Android forbids that downgrade
+  anyway). Rebuild and install the shell APK to receive these fixes: the runtime is
+  part of the shell, so no payload can deliver them.
+
 - Embedded shells now allow signed recovery downloads when the selected payload is
   quarantined, even if a replaced shell has not bootstrapped and its embedded
   fallback is below the persisted replay floor. Fresh installs still defer update

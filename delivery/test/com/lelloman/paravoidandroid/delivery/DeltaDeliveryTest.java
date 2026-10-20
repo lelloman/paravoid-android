@@ -58,7 +58,8 @@ public final class DeltaDeliveryTest {
             stages++;return new StageResult(StageStatus.PENDING,target);
         }
         public StageResult stageEmbedded(File archive){throw new AssertionError();}
-        public LifecycleSnapshot snapshot(){throw new AssertionError("Delta transfer must not select code");}
+        // Read-only status: the client compares offers with the selected release, never selects code.
+        public LifecycleSnapshot snapshot(){return new LifecycleSnapshot(Availability.RUNNABLE,base,null,base,false,1,0,null);}
         public GenerationLease acquireForProcess(){throw new AssertionError("Delta transfer must not execute code");}
         public void retryQuarantined(ExpectedArchive release){throw new AssertionError();}
         public void setRetainedPrevious(int count){throw new AssertionError();}

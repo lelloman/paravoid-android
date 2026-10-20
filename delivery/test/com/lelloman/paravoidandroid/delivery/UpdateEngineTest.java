@@ -40,7 +40,32 @@ public final class UpdateEngineTest {
         terminalStageFailuresIgnoreHints();
         localHintsPreserveRetries();
         policyDefaultsReachExistingInstalls();
-        System.out.println("PASS update engine: push scope, duplicate suppression, consent, explicit update, check-only, disabled push, policy defaults vs durable choices");
+        savedOfferOfSelectedReleaseIsNotAvailable();
+        System.out.println("PASS update engine: push scope, duplicate suppression, consent, explicit update, check-only, disabled push, policy defaults vs durable choices, no stale offer of the selected/quarantined release");
+    }
+    /** An offer saved before its release was selected and then quarantined must not be shown as an update. */
+    static void savedOfferOfSelectedReleaseIsNotAvailable() throws Exception {
+        try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {
+            ExecutorService worker=Executors.newSingleThreadExecutor();
+            try {
+                java.io.File state=s.f.dir.resolve("quarantine-engine").toFile();
+                UpdateEngine e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                    UpdateSchedule.defaults().preferences(true,false,false),null,false,work->{});
+                s.head(); e.runJob(false,1,()->{}); worker.submit(()->{}).get();
+                check(s.metadata.archive.equals(e.current().available) && e.current().activity==DeliveryController.Activity.AVAILABLE);
+                s.life.fixed=new com.lelloman.paravoidandroid.contract.Protocol.LifecycleSnapshot(
+                    com.lelloman.paravoidandroid.contract.Protocol.Availability.RECOVERY,s.metadata.archive,null,null,false,1,0,
+                    com.lelloman.paravoidandroid.contract.ContractException.Code.UNAVAILABLE);
+                e.refreshSnapshot(); worker.submit(()->{}).get();
+                check(e.current().available==null && e.current().activity==DeliveryController.Activity.IDLE);
+                e=new UpdateEngine(s.client,s.life,s.scope,s.clock,state,worker,Runnable::run,
+                    UpdateSchedule.defaults().preferences(true,false,false),null,false,work->{});
+                e.refreshSnapshot(); worker.submit(()->{}).get();
+                check(e.current().available==null); // Nor after a reload of the saved state.
+                s.cached(); e.checkNow(); worker.submit(()->{}).get();
+                check(e.current().available==null && s.life.stages==0 && s.f.responses.isEmpty());
+            } finally { worker.shutdownNow(); check(worker.awaitTermination(5,TimeUnit.SECONDS)); }
+        }
     }
     static void localHints() throws Exception {
         try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {

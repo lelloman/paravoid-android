@@ -42,6 +42,15 @@ screen and uses the selected updater.
 
 Crashes after the first frame, background-thread exceptions, and named-process
 exceptions are included. The existing startup-trial quarantine remains active.
+When a trial is paused without an exception to record (its first starts kept ending
+before the app finished starting, or its stored files failed verification), the
+shell records that cause instead, including how the unfinished starts ended. Starts
+killed by the user or the system (Android exit reasons) do not count toward that
+pause. If the paused release cannot be replaced, the record says so; an older
+embedded payload is never run and its replay refusal is not shown as the cause.
+The paused release itself is not offered as an update. When a different payload
+later renders its first healthy frame (for example the embedded payload of a repair
+shell APK), unacknowledged records about other payloads are marked handled.
 **Retry app** explicitly permits another attempt at the same quarantined generation
 when no repair is pending; it does not roll back or clear application data. Another
 failure creates a new record and returns to recovery.

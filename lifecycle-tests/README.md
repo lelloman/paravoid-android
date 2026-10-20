@@ -1,5 +1,20 @@
 # Track C lifecycle handoff
 
+## Trial exit evidence regression (2026-10-20)
+
+`TrialEvidenceTest` (in `run.sh`) reproduces a downstream incident: embedded payload
+65 healthy, payload 72 admitted (replay floor 72) and selected for its trial, and
+its first starts killed before `Application.onCreate` returned. Each cold start is a
+child JVM with injected exit evidence (Android reads `ApplicationExitInfo`). Killed
+starts keep 72 on trial and it becomes healthy; crash/unknown ends keep the
+two-attempt budget and quarantine with a recorded cause; eight consecutive kills
+pause too, and a finished `onCreate` resets the counts. In every case the embedded
+65 is refused with REPLAY without changing selection or security bytes, evidence for
+another attempt is ignored, an INTEGRITY cause is kept for byte repair, and a
+version-2 journal (older runtimes) still opens and is rewritten as version 3. The
+shell's handling of the refusal (recovery record with the quarantine cause instead
+of REPLAY) is Android code, checked by `StartupExitsTest` and on an emulator.
+
 ## Restart decision regression (2026-09-23)
 
 `RestartProcessGateTest` runs in `run.sh` against the production restart decision

@@ -20,6 +20,21 @@ public class CrashRecoveryTest {
         assertFalse(records.pending("generation-a"));
         assertTrue(records.details().contains("saved data"));
     }
+    @Test public void healthyPayloadAcknowledgesOnlyOtherPayloadsRecords() throws Exception {
+        CrashRecords records=new CrashRecords(temporary.newFolder());
+        records.record("old-contract:p72","main","main",new IllegalStateException("Lifecycle admission: REPLAY"));
+        records.record("new-contract:p74","main","main",new IllegalStateException("own crash"));
+        records.acknowledgeOthers("unknown"); // Unknown current identity never clears anything.
+        assertTrue(records.pending("old-contract:p72"));
+        records.acknowledgeOthers("new-contract:p74");
+        assertFalse(records.pending("old-contract:p72"));
+        assertTrue(records.pending("new-contract:p74"));
+        records.acknowledge();
+        Path damaged=records.record("old-contract:p72","main","main",new IllegalStateException("again"));
+        Files.write(damaged,"broken".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        records.acknowledgeOthers("new-contract:p74");
+        assertTrue(records.pending("anything")); // A damaged record still gates.
+    }
     @Test public void recordsAreBoundedAndDamagedRecordsStillGate() throws Exception {
         CrashRecords records=new CrashRecords(temporary.newFolder());
         for(int i=0;i<9;i++) records.record("a","process","thread",new RuntimeException("x".repeat(100000)));
