@@ -12,7 +12,9 @@ import com.lelloman.paravoidandroid.contract.Protocol.*;
 import com.lelloman.paravoidandroid.delivery.*;
 import com.lelloman.paravoidandroid.runtime.lifecycle.RuntimeLifecycle;
 import java.io.*;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /** Android identity/clock boundary. No network, cached ApplicationInfo or payload class loading. */
 final class AndroidLifecycleEnvironment implements ApkInstalledStateSource.Location,
@@ -43,6 +45,16 @@ final class AndroidLifecycleEnvironment implements ApkInstalledStateSource.Locat
     RequestScope scope(ShellPolicy policy) {
         String[] abis = android.os.Process.is64Bit() ? Build.SUPPORTED_64_BIT_ABIS : Build.SUPPORTED_32_BIT_ABIS;
         return new RequestScope(policy.applicationId, policy.shellContractId, policy.channel, Build.VERSION.SDK_INT,
-            Arrays.asList(abis), Protocol.RUNTIME_ABI);
+            supportedAbis(abis), Protocol.RUNTIME_ABI);
+    }
+
+    /**
+     * The device's ABIs that the protocol knows, in the device's order. 32-bit ARM devices also
+     * list the legacy `armeabi`, which no payload can target and the metadata verifier rejects.
+     */
+    static List<String> supportedAbis(String[] deviceAbis) {
+        List<String> result = new ArrayList<>();
+        for (String abi : deviceAbis) if (Protocol.ABIS.contains(abi) && !result.contains(abi)) result.add(abi);
+        return result;
     }
 }
