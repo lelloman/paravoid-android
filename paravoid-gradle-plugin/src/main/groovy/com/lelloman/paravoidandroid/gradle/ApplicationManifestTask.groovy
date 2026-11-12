@@ -25,9 +25,10 @@ abstract class ApplicationManifestTask extends DefaultTask {
     @Input abstract Property<Boolean> getComplete()
     @Input abstract Property<Boolean> getDebugHttpAllowed()
     @Input abstract Property<Boolean> getControlsLauncher()
+    @Input abstract org.gradle.api.provider.ListProperty<String> getBusyReportStores()
     @Input abstract Property<Boolean> getCrashRecoveryEnabled()
     @Input abstract Property<String> getRecoveryProvider()
-    ApplicationManifestTask() { localTriggerPackages.convention([]); pushBackgroundConnection.convention(false); pushComponents.convention([]); pushEnabled.convention(false); updatesEnabled.convention(false); complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false); crashRecoveryEnabled.convention(false); recoveryProvider.convention('') }
+    ApplicationManifestTask() { localTriggerPackages.convention([]); pushBackgroundConnection.convention(false); pushComponents.convention([]); pushEnabled.convention(false); updatesEnabled.convention(false); complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false); busyReportStores.convention([]); crashRecoveryEnabled.convention(false); recoveryProvider.convention('') }
 
     @TaskAction void rewrite() {
         def factory = DocumentBuilderFactory.newInstance()
@@ -181,6 +182,16 @@ abstract class ApplicationManifestTask extends DefaultTask {
             if(queries==null) { queries=document.createElement('queries'); document.documentElement.insertBefore(queries,app) }
             localTriggerPackages.get().each { name ->
                 def node=document.createElement('package'); node.setAttributeNS(ANDROID,'android:name',name); queries.appendChild(node)
+            }
+        }
+        if (complete.get() && !busyReportStores.get().empty) {
+            def meta=document.createElement('meta-data')
+            meta.setAttributeNS(ANDROID,'android:name','paravoid.busyReportStores')
+            meta.setAttributeNS(ANDROID,'android:value',busyReportStores.get().join(';')); app.appendChild(meta)
+            def queries=document.getElementsByTagName('queries').item(0)
+            if(queries==null) { queries=document.createElement('queries'); document.documentElement.insertBefore(queries,app) }
+            busyReportStores.get().each { name ->
+                def node=document.createElement('provider'); node.setAttributeNS(ANDROID,'android:authorities',name+'.update-consent'); queries.appendChild(node)
             }
         }
         if (complete.get() && updatesEnabled.get()) {

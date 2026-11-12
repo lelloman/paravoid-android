@@ -408,7 +408,11 @@ private ParavoidUpdates.Subscription updatesSubscription;
 Use `ParavoidUpdates.get().checkNow()` to discover updates without downloading.
 Use `updateNow()` to check and stage the latest release, or `updateNow(state.available)`
 to install only the offer shown to the user. Use `openControls(activity)` to show the shell recovery screen for restart and
-advanced controls. The state also exposes current, available and pending releases,
+advanced controls. Call `setBusy(true)` while a restart would interrupt something, such
+as playback, and `setBusy(false)` afterwards: automatic restarts and restart prompts wait
+for it, and so can a store installing shell updates (see
+[restart policy](delivery/UPDATES.md#holding-restarts-while-the-app-is-busy)).
+The state also exposes current, available and pending releases,
 an error code, and automatic-update preferences. `current()` reads the latest
 state without subscribing. The singleton is active in the main app process of a
 complete shell with updates enabled; in other processes it reports `UNAVAILABLE`.

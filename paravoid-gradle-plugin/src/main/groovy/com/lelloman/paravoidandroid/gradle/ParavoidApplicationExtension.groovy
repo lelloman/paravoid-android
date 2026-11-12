@@ -19,6 +19,7 @@ abstract class ParavoidApplicationExtension {
         bootstrap.convention('embedded')
         packaging.convention('dexOnly')
         controlsLauncher.convention(false)
+        busyReportStores.convention([])
         minifyPayload.convention(false)
         releaseId.convention(payloadVersion.map { 'p' + it })
     }
@@ -26,6 +27,11 @@ abstract class ParavoidApplicationExtension {
     abstract Property<String> getPackaging()
     /** Complete-profile shell launcher entry independent of dynamic shortcut support. */
     abstract Property<Boolean> getControlsLauncher()
+    /**
+     * Store packages told when the app reports busy or idle through ParavoidUpdates.setBusy, so
+     * they hold installing a shell APK update while the app is busy. Complete packaging only.
+     */
+    abstract ListProperty<String> getBusyReportStores()
     /** Opt in to R8 shrinking and obfuscation of the separated payload DEX. */
     abstract Property<Boolean> getMinifyPayload()
     /** Extra R8 rules for reflection and dependency-specific entry points. */

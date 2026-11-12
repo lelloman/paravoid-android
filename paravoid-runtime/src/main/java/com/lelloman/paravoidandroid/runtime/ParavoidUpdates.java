@@ -57,6 +57,8 @@ public final class ParavoidUpdates {
     private final CopyOnWriteArraySet<Registration> observers = new CopyOnWriteArraySet<>();
     private volatile State state = new State(Phase.UNAVAILABLE, null, null, null, null, false, false, false);
     private volatile UpdateControl controller;
+    private volatile boolean busy;
+    private final CopyOnWriteArraySet<BusyListener> busyListeners = new CopyOnWriteArraySet<>();
 
     private ParavoidUpdates() {}
     public static ParavoidUpdates get() { return INSTANCE; }
@@ -117,6 +119,20 @@ public final class ParavoidUpdates {
         activity.startActivity(new Intent(activity,RestartActivity.class).putExtra("confirmation",confirmation));
         return true;
     }
+    /**
+     * Tells the shell whether restarting the app now would interrupt something, such as playback.
+     * While the app is busy, the shell holds automatic restarts and restart prompts for a staged
+     * update, for at most 24 hours, and the prompt asking to download a new release. Reporting
+     * idle lets a held restart go ahead at once. {@link #restart(Activity)} is never held. Stores
+     * listed in {@code busyReportStores} are told too, and hold shell APK installs. Call it from
+     * the main app process; the state resets to idle when that process dies.
+     */
+    public synchronized void setBusy(boolean busy) {
+        if (this.busy == busy) return;
+        this.busy = busy;
+        for (BusyListener listener : busyListeners) listener.changed(busy);
+    }
+    public boolean isBusy() { return busy; }
     /** Optional shell controls for confirmed restart and recovery. The app chooses its own entry point. */
     public boolean openControls(Activity activity) {
         Objects.requireNonNull(activity);
@@ -124,6 +140,10 @@ public final class ParavoidUpdates {
         activity.startActivity(new Intent(activity, ShellUpdatesActivity.class));
         return true;
     }
+
+    /** Called on the reporting thread, in order, each time the busy state changes. */
+    interface BusyListener { void changed(boolean busy); }
+    static void listenBusy(BusyListener listener) { INSTANCE.busyListeners.add(listener); }
 
     static void install(UpdateControl value) {
         INSTANCE.controller = value;

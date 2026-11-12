@@ -133,6 +133,46 @@ background Activity launch. A normal cold start can activate the pending update 
 Policy-driven prompts/attempts are remembered per archive to avoid repeated prompts or
 restart loops if activation fails. Explicit restart remains available to retry.
 
+### Holding restarts while the app is busy
+
+A `prompt` or `automatic` restart stops whatever the app is doing. An app can hold
+both while a restart would interrupt something, such as a film playing:
+
+```java
+ParavoidUpdates.get().setBusy(true);  // playback started
+ParavoidUpdates.get().setBusy(false); // playback paused or ended
+```
+
+While the app is busy, a staged update waits, and the shell neither restarts nor shows
+its restart confirmation. With `prompt`, it also does not show the dialog asking to
+download a newly found release; the notification still appears, and the dialog shows
+the next time the app is idle with an Activity visible. Reporting idle lets a held restart go ahead at once, if an app
+Activity is still visible; otherwise it happens the next time one is. A held restart
+goes ahead anyway after 24 hours of being held, so a forgotten paused player cannot keep
+an update from activating forever.
+
+The state lives in the main app process. It starts as idle, and resets when that process
+dies; a later cold start activates the update anyway. Report it from the main app
+process only. Explicit `ParavoidUpdates.get().restart(...)` calls and the shell's
+restart controls are never held: the person asked for them. `manual` has nothing to
+hold. An app that never calls `setBusy` restarts as before.
+
+Replacing the shell APK stops the app too. A store that installs shell updates can hold
+them while the app is busy if it implements the update-consent provider
+(`content://<store package>.update-consent`, as LelloStore does). List it in the build:
+
+```groovy
+paravoid {
+    packaging = 'complete'
+    busyReportStores = ['com.lelloman.store']
+}
+```
+
+Each change of `setBusy` is then also reported to those stores, off the main thread,
+with a token that lets the store forget the report when the app process dies. A store
+that is not installed, or does not take reports, is skipped. The build adds the
+`<queries>` entry Android needs for the shell to reach the store.
+
 For entirely app-owned behavior, use `manual`, observe pending updates, and call:
 
 ```java

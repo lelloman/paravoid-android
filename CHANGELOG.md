@@ -15,6 +15,14 @@ these entries into a dated version section and document its exact upgrade path.
 
 ### Added
 
+- `ParavoidUpdates.get().setBusy(boolean)` lets an app hold automatic restarts and
+  restart prompts while restarting would interrupt something, such as playback. A
+  held restart goes ahead as soon as the app reports idle, or after 24 hours.
+  Explicit `restart(...)` calls are never held. With `prompt`, the dialog asking to
+  download a new release also waits. Apps that never call it are unaffected.
+- `paravoid { busyReportStores = [...] }` forwards `setBusy` to stores that implement
+  the update-consent provider, such as LelloStore, so they hold shell APK installs while
+  the app is busy. Empty by default.
 - Optional DVPK delivery in the built-in HTTP v1 updater, with bounded streaming
   reconstruction, authenticated base/patch/target hashes and full-VPK fallback.
   A new shell APK is required to enable it. Distributors negotiate discovery

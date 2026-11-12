@@ -55,6 +55,19 @@ class ApplicationManifestTest {
         assertFalse(ProjectBuilder.builder().withProjectDir(temporary.newFolder()).build().objects.newInstance(ParavoidApplicationExtension).updates.push.backgroundConnection.get())
     }
 
+    @Test void busyReportStoresAreOptInAndVisibleToTheShell() {
+        def disabled=fixture(''); disabled.complete.set(true); disabled.rewrite()
+        assertFalse(disabled.outputManifest.get().asFile.text.contains('busyReportStores'))
+        def task=fixture(''); task.complete.set(true); task.busyReportStores.set(['com.a','com.lelloman.store']); task.rewrite()
+        def factory=javax.xml.parsers.DocumentBuilderFactory.newInstance(); factory.namespaceAware=true
+        def document=factory.newDocumentBuilder().parse(task.outputManifest.get().asFile)
+        def meta=document.getElementsByTagName('meta-data').find { it.getAttributeNS(ApplicationManifestTask.ANDROID,'name')=='paravoid.busyReportStores' }
+        assertEquals('com.a;com.lelloman.store',meta.getAttributeNS(ApplicationManifestTask.ANDROID,'value'))
+        def providers=document.getElementsByTagName('queries').item(0).getElementsByTagName('provider')
+        assertEquals(['com.a.update-consent','com.lelloman.store.update-consent'],
+            (0..<providers.length).collect { providers.item(it).getAttributeNS(ApplicationManifestTask.ANDROID,'authorities') })
+    }
+
     @Test void pushIsOptInAndRoutesAdapterWithoutPayloadStartup() {
         def disabled=fixture(''); disabled.complete.set(true); disabled.updatesEnabled.set(true); disabled.rewrite()
         assertFalse(disabled.outputManifest.get().asFile.text.contains('UpdatePromptActivity'))

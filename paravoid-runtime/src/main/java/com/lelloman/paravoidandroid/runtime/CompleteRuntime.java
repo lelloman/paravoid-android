@@ -32,6 +32,10 @@ final class CompleteRuntime {
     private Activity resumedActivity;
     private ExpectedArchive promptedOffer;
     private ExpectedArchive handledRestart;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final RestartHold restartHold = new RestartHold();
+    private final Runnable recheckRestart = () -> offer();
+    private DeliveryController.Snapshot latest;
 
     void suspendUpdates() { ((RemoteUpdates)controller).suspend(); }
     void resumeUpdates() { ((RemoteUpdates)controller).resume(); }
@@ -51,26 +55,13 @@ final class CompleteRuntime {
         try { LegacyDeliveryCleanup.reclaim(app.getNoBackupFilesDir(), app.getPackageName()); }
         catch (IOException ignored) { /* Old partials are disposable; retry cleanup on next start. */ }
         controller = new RemoteUpdates(app);
+        if(mainProcess && !shellOnly) {
+            if(policy.updatesEnabled) ParavoidUpdates.listenBusy(busy-> { if(!busy) main.post(recheckRestart); });
+            StoreBusyReports.install(app);
+        }
         if(policy.updatesEnabled && (mainProcess || shellOnly)) controller.listen(snapshot-> {
-            if(mainProcess && resumedActivity!=null && !(resumedActivity instanceof LauncherActivity) && snapshot.lifecycle!=null) {
-                ExpectedArchive pending=snapshot.lifecycle.pending;
-                String configured=policy.updates.getOrDefault("restartBehavior","manual");
-                String behavior=RestartPolicy.effectiveBehavior(configured,
-                    AutoRestartPreference.read(app,configured.equals("automatic")));
-                String previous=app.getSharedPreferences(RestartActivity.PREFERENCES,0).getString("handled","");
-                if(RestartPolicy.shouldOffer(behavior,pending,handledRestart,previous)) {
-                    handledRestart=pending;
-                    resumedActivity.startActivity(new android.content.Intent(resumedActivity,RestartActivity.class)
-                        .putExtra("offer",UpdateWire.offer(pending)).putExtra("confirmation",behavior.equals("prompt"))
-                        .putExtra("policy",true));
-                    return;
-                }
-            }
-            if(resumedActivity!=null && snapshot.promptRequired && !snapshot.available.equals(promptedOffer)) {
-                promptedOffer=snapshot.available;
-                resumedActivity.startActivity(new android.content.Intent(resumedActivity,UpdatePromptActivity.class)
-                    .putExtra("offer",UpdateWire.offer(snapshot.available)));
-            }
+            latest=snapshot;
+            offer();
         });
         if (policy.updatesEnabled && (mainProcess || shellOnly)) ParavoidUpdates.install(controller);
         if (shellOnly) {
@@ -117,6 +108,47 @@ final class CompleteRuntime {
             public void onActivityDestroyed(Activity activity) {}
         });
     }
+    /** Shows what the latest snapshot calls for: a restart, or a prompt to download. Main thread. */
+    private void offer() {
+        DeliveryController.Snapshot snapshot=latest;
+        if(snapshot==null || offerRestart()) return;
+        // A busy app is not interrupted by a question either; the notification stays available.
+        if(resumedActivity!=null && snapshot.promptRequired && !snapshot.available.equals(promptedOffer)
+                && !ParavoidUpdates.get().isBusy()) {
+            promptedOffer=snapshot.available;
+            resumedActivity.startActivity(new android.content.Intent(resumedActivity,UpdatePromptActivity.class)
+                .putExtra("offer",UpdateWire.offer(snapshot.available)));
+        }
+    }
+
+    /** Starts a policy-driven restart or restart prompt, unless the app is busy. Main thread. */
+    private boolean offerRestart() {
+        DeliveryController.Snapshot snapshot=latest;
+        if(!mainProcess || resumedActivity==null || resumedActivity instanceof LauncherActivity
+            || snapshot==null || snapshot.lifecycle==null) return false;
+        ExpectedArchive pending=snapshot.lifecycle.pending;
+        String configured=policy.updates.getOrDefault("restartBehavior","manual");
+        String behavior=RestartPolicy.effectiveBehavior(configured,
+            AutoRestartPreference.read(app,configured.equals("automatic")));
+        String previous=app.getSharedPreferences(RestartActivity.PREFERENCES,0).getString("handled","");
+        if(!RestartPolicy.shouldOffer(behavior,pending,handledRestart,previous)) return false;
+        boolean busy=ParavoidUpdates.get().isBusy();
+        long remaining=restartHold.remaining(pending,busy,SystemClock.elapsedRealtime());
+        main.removeCallbacks(recheckRestart);
+        if(remaining>0) {
+            // Checked again when the app reports idle, when an Activity resumes, and when the wait runs out.
+            main.postDelayed(recheckRestart,remaining);
+            android.util.Log.i("ParavoidAndroid","Restart held: the app is busy");
+            return false;
+        }
+        if(busy) android.util.Log.w("ParavoidAndroid","Restart no longer held: the app was busy for too long");
+        handledRestart=pending;
+        resumedActivity.startActivity(new android.content.Intent(resumedActivity,RestartActivity.class)
+            .putExtra("offer",UpdateWire.offer(pending)).putExtra("confirmation",behavior.equals("prompt"))
+            .putExtra("policy",true));
+        return true;
+    }
+
     ClassLoader load(ClassLoader parent) throws Exception {
         if (shellOnly) throw new IllegalStateException("Recovery process cannot load payload code");
         LifecycleSnapshot state = lifecycle.snapshot();
