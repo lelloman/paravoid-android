@@ -143,7 +143,8 @@ plugin generates that theme, `Theme.Paravoid.Restart`, and its strings for compl
 shells with updates enabled only.
 
 To restyle it, define a theme inheriting `Base.Theme.Paravoid.Restart` in the app's own
-resources (`src/main/res` works: the base theme is generated for the normal flavor too)
+resources (`src/main/res` works: setting `restartTheme` generates the base theme for every variant,
+whatever the packaging)
 and select it:
 
 ```xml

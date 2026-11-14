@@ -18,7 +18,6 @@ abstract class ParavoidUpdatesExtension {
         checkerClass.convention(''); updaterClass.convention(''); policyClass.convention(''); jobIdBase.convention(0x50560000)
         enabled.convention(false); baseUrl.convention(''); channel.convention('stable')
         authentication.convention('public'); debugHttpAllowed.convention(false)
-        restartTheme.convention('@style/Theme.Paravoid.Restart')
     }
     void localTriggers(Action<ParavoidLocalTriggersExtension> action) { action.execute(localTriggers) }
     void push(Action<? super ParavoidUpdatePushExtension> action) { action.execute(push) }
@@ -48,8 +47,10 @@ abstract class ParavoidUpdatesExtension {
     abstract Property<Boolean> getDebugHttpAllowed()
     abstract RegularFileProperty getTrustPolicyFile()
     /**
-     * Theme of the shell restart screen. Inherit Base.Theme.Paravoid.Restart to keep the default
-     * layout colors and texts while overriding framework colors and paravoidRestart* attributes.
+     * Theme of the shell restart screen, Theme.Paravoid.Restart when unset. Inherit
+     * Base.Theme.Paravoid.Restart to keep the default colors and texts while overriding framework
+     * colors and paravoidRestart* attributes. Setting it generates the base theme for every
+     * variant, so an app theme in src/main links whatever the packaging.
      */
     abstract Property<String> getRestartTheme()
 }

@@ -585,6 +585,14 @@ class ApplicationPackagingTest {
         assertEquals([[name: 'string/old', id: '0x7f010000', removed: true]], retired.entries)
     }
 
+    @Test void configuredRestartThemeLinksWithoutCompleteUpdates() {
+        File root = fixture()
+        new File(root, 'app/build.gradle') << "\nparavoid { updates { restartTheme = '@style/Theme.App.Restart' } }\n"
+        write(root, 'app/src/main/res/values/themes.xml', '<resources><style name="Theme.App.Restart" parent="Base.Theme.Paravoid.Restart">' +
+            '<item name="paravoidRestartConfirmTitle">Branded</item></style></resources>')
+        run(root, ':app:assembleNormalDebug', ':app:assembleParavoidAndroidDebug').build()
+    }
+
     @Test void producesTwoModesAndTransformsOnlyPayloadApplication() {
         File root = fixture()
         run(root, ':app:assembleNormalDebug', ':app:assembleParavoidAndroidDebug', ':app:bundleNormalRelease', ':app:bundleParavoidAndroidRelease').build()
