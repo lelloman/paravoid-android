@@ -46,4 +46,11 @@ abstract class ParavoidUpdatesExtension {
     abstract Property<String> getAuthentication()
     abstract Property<Boolean> getDebugHttpAllowed()
     abstract RegularFileProperty getTrustPolicyFile()
+    /**
+     * Theme of the shell restart screen, Theme.Paravoid.Restart when unset. Inherit
+     * Base.Theme.Paravoid.Restart to keep the default colors and texts while overriding framework
+     * colors and paravoidRestart* attributes. Setting it generates the base theme for every
+     * variant, so an app theme in src/main links whatever the packaging.
+     */
+    abstract Property<String> getRestartTheme()
 }

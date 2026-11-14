@@ -38,6 +38,12 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             }
         }
         def components = project.extensions.getByName('androidComponents')
+        // An app-provided restart theme in src/main inherits the generated base theme, so every
+        // variant needs the same resources to link; outside the shell they are unused resources.
+        components.onVariants(components.selector().withFlavor('paravoidPackaging', 'normal')) { variant ->
+            if (extension.updates.restartTheme.present || (extension.packaging.get() == 'complete' && extension.updates.enabled.get()))
+                addRestartResources(project, variant)
+        }
         components.onVariants(components.selector().withFlavor('paravoidPackaging', 'paravoidAndroid')) { variant ->
             if (variant.minSdk.apiLevel < 28) throw new GradleException('ParavoidAndroid application packaging requires minSdk >= 28 for AppComponentFactory.')
             if (android.buildTypes.getByName(variant.buildType).minifyEnabled) throw new GradleException('ParavoidAndroid application packaging does not yet support shrinking.')
@@ -61,6 +67,9 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 throw new GradleException('busyReportStores requires complete packaging.')
             if(extension.busyReportStores.get().any { !(it ==~ /[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+/) })
                 throw new GradleException('busyReportStores must list package names.')
+            if(extension.updates.restartTheme.present && !(extension.updates.restartTheme.get() ==~ /@(android:)?style\/[A-Za-z_][A-Za-z0-9_.]*/))
+                throw new GradleException('updates.restartTheme must be a style reference such as @style/Theme.App.Restart.')
+            if (extension.updates.restartTheme.present || (complete && extension.updates.enabled.get())) addRestartResources(project, variant)
             if(extension.updates.push.enabled.get() && (!complete || !extension.updates.enabled.get()))
                 throw new GradleException('Push requires complete packaging and updates.enabled = true.')
             if (extension.crashRecovery.providerClass.get() && (extension.updates.checkerClass.get() || extension.updates.updaterClass.get()))
@@ -153,6 +162,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 busyReportStores.set(extension.busyReportStores.map { it.toSorted().unique() })
                 crashRecoveryEnabled.set(extension.crashRecovery.enabled)
                 recoveryProvider.set(extension.crashRecovery.providerClass)
+                restartTheme.set(extension.updates.restartTheme.orElse('@style/Theme.Paravoid.Restart'))
                 debugHttpAllowed.set(complete ? extension.updates.debugHttpAllowed : project.providers.provider { false })
                 outputManifest.set(project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/AndroidManifest.xml"))
                 payloadMetadata.set(project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/payload.properties"))
@@ -373,5 +383,12 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                 shellApk.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/resource-shell.apk"))
             }
         }
+    }
+
+    private static void addRestartResources(Project project, variant) {
+        def task = project.tasks.register("generate${variant.name.capitalize()}ParavoidRestartResources", GenerateRestartResourcesTask) {
+            outputDirectory.set(project.layout.buildDirectory.dir("generated/paravoid/${variant.name}/restart-res"))
+        }
+        variant.sources.res.addGeneratedSourceDirectory(task, { it.outputDirectory })
     }
 }
