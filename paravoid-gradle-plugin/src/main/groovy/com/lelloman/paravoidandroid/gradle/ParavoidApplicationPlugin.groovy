@@ -159,6 +159,21 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
             }
             variant.artifacts.use(manifest).wiredWithFiles({ it.inputManifest }, { it.outputManifest })
                 .toTransform(SingleArtifact.MERGED_MANIFEST.INSTANCE)
+            // Layouts and other resources create classes by name (AppCompat's abc_screen_simple
+            // inflates FitWindowsLinearLayout). Paravoid variants cannot enable AGP minify, so AAPT2
+            // writes no keep rules for them unless asked; without them payload R8 strips the
+            // classes and the first AppCompat Activity crashes.
+            def resourceRules = project.files()
+            if (extension.minifyPayload.get()) {
+                def rulesFile = project.layout.buildDirectory.file("intermediates/paravoid/${variant.name}/aapt-resource-rules.pro")
+                variant.androidResources.aaptAdditionalParameters.addAll(rulesFile.map { ['--proguard', it.asFile.absolutePath] })
+                def linkTasks = project.tasks.matching { it.name == "process${cap}Resources" }
+                linkTasks.configureEach { link ->
+                    link.outputs.file(rulesFile)
+                    link.doFirst { rulesFile.get().asFile.parentFile.mkdirs() }
+                }
+                resourceRules = project.files(rulesFile).builtBy(linkTasks)
+            }
             def pack = project.tasks.register("package${cap}ParavoidApplication", PackageApplicationTask) {
                 dependsOn(nativeValidation)
                 if (complete && extension.updates.enabled.get()) updateJars.from(updateLibraries)
@@ -177,6 +192,7 @@ class ParavoidApplicationPlugin implements Plugin<Project> {
                         attributes.attribute(org.gradle.api.artifacts.type.ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
                             'android-consumer-proguard-rules')
                     }.files)
+                    resourceProguardRules.from(resourceRules)
                 }
                 consumerRulesFile.set(project.layout.buildDirectory.file("outputs/paravoid/${variant.name}/payload-consumer-rules.pro"))
                 if (extension.crashRecovery.enabled.get() && extension.crashRecovery.updater.get() == 'custom') recoveryJars.from(recoveryLibraries)
