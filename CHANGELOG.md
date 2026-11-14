@@ -22,6 +22,8 @@ these entries into a dated version section and document its exact upgrade path.
   base theme available to every variant. Complete shells
   with updates enabled gain the generated `Theme.Paravoid.Restart` theme, its
   `paravoidRestart*` attributes and `paravoid_restart_*` strings; that requires a new shell.
+  The progress page stays up at least one second before processes stop, and on Android 13+
+  the relaunch asks for the icon splash screen instead of a blank solid-colour one.
 - `ParavoidUpdates.get().setBusy(boolean)` lets an app hold automatic restarts and
   restart prompts while restarting would interrupt something, such as playback. A
   held restart goes ahead as soon as the app reports idle, or after 24 hours.

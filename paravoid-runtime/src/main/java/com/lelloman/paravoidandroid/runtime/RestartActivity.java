@@ -21,6 +21,8 @@ import com.lelloman.paravoidandroid.contract.Protocol.ExpectedArchive;
  */
 public final class RestartActivity extends Activity {
     static final String PREFERENCES="paravoid-restart-v1";
+    /** Keeps the progress page readable before stopping processes, which hands over to the relaunch. */
+    static final long MIN_PROGRESS_MILLIS=1000;
     private enum Screen { CONFIRM, RESTARTING, FAILED }
     private boolean started;
     private ExpectedArchive offer;
@@ -29,6 +31,8 @@ public final class RestartActivity extends Activity {
     private ProgressBar progress;
     private LinearLayout actions;
     private CharSequence label;
+    private long progressShown;
+    private final Runnable stopProcesses=this::stopProcesses;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -46,6 +50,11 @@ public final class RestartActivity extends Activity {
                 && offer.archiveSha256.equals(getSharedPreferences(PREFERENCES,0).getString("handled",""))) { finish(); return; }
         if(screen!=Screen.CONFIRM) restart();
     }
+    @Override protected void onDestroy() {
+        // A recreated instance restarts on its own; never stop processes for a destroyed page.
+        if(title!=null) title.removeCallbacks(stopProcesses);
+        super.onDestroy();
+    }
     @Override public void onBackPressed() {
         // Stopping processes is already under way; leaving would only hide its outcome.
         if(screen==Screen.RESTARTING) return;
@@ -60,7 +69,12 @@ public final class RestartActivity extends Activity {
         if(offer!=null && !ShellApplication.requireInstance().pendingUpdateMatches(offer)) { finish(); return; }
         // Persist before stopping processes so a failed activation cannot form an automatic restart loop.
         if(!remember()) { failed(); return; }
-        show(Screen.RESTARTING);
+        if(screen!=Screen.RESTARTING) show(Screen.RESTARTING);
+        long remaining=MIN_PROGRESS_MILLIS-(android.os.SystemClock.uptimeMillis()-progressShown);
+        if(remaining>0) title.postDelayed(stopProcesses,remaining); else stopProcesses();
+    }
+    private void stopProcesses() {
+        if(isFinishing() || isDestroyed()) return;
         java.util.function.Consumer<Boolean> result=success-> { if(success) finish(); else failed(); };
         if(CrashRecovery.instance!=null) CrashRecovery.instance.restart(result);
         else ShellRestart.restart(getApplication(),result);
@@ -132,6 +146,7 @@ public final class RestartActivity extends Activity {
                 action(text("paravoidRestartConfirmButton","Restart"),true,v -> restart());
                 break;
             case RESTARTING:
+                progressShown=android.os.SystemClock.uptimeMillis();
                 title.setText(text("paravoidRestartProgressTitle","Restarting %1$s"));
                 message.setText(text("paravoidRestartProgressMessage","This only takes a moment."));
                 progress.setVisibility(View.VISIBLE);
