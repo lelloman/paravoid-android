@@ -133,6 +133,44 @@ background Activity launch. A normal cold start can activate the pending update 
 Policy-driven prompts/attempts are remembered per archive to avoid repeated prompts or
 restart loops if activation fails. Explicit restart remains available to retry.
 
+### Restart screen
+
+The confirmation, the "restarting" progress and a restart failure are one full-screen
+shell page: the app icon, a title, a message, and the action buttons, following the
+system light/dark mode. It runs in the payload-free recovery process, so it uses only
+framework widgets and resources pinned in the shell through its manifest theme. The
+plugin generates that theme, `Theme.Paravoid.Restart`, and its strings for complete
+shells with updates enabled only.
+
+To restyle it, define a theme inheriting `Base.Theme.Paravoid.Restart` in the app's own
+resources (`src/main/res` works: the base theme is generated for the normal flavor too)
+and select it:
+
+```xml
+<style name="Theme.App.Restart" parent="Base.Theme.Paravoid.Restart">
+    <item name="android:colorBackground">@color/brand_surface</item>
+    <item name="android:colorAccent">@color/brand_primary</item>
+    <item name="paravoidRestartIcon">@drawable/brand_logo</item>
+    <item name="paravoidRestartConfirmTitle">@string/restart_title</item>
+</style>
+```
+
+```groovy
+paravoid { updates { restartTheme = '@style/Theme.App.Restart' } }
+```
+
+Text attributes are `paravoidRestartConfirmTitle`, `…ConfirmMessage`, `…ConfirmButton`,
+`…DismissButton`, `…ProgressTitle`, `…ProgressMessage`, `…FailedTitle`,
+`…FailedMessage` and `…CloseButton`; `%1$s` is replaced with the app label. Point them
+at your own string resources to translate them. Add a `values-night` variant of your
+theme for dark-mode colors. Every resource the theme references becomes pinned, so
+changing it requires a new shell.
+
+`restartTheme` may also name the app's existing theme. Missing `paravoidRestart*`
+attributes then fall back to built-in English texts and the launcher icon. Prefer a
+small dedicated theme: the whole referenced theme, including its AppCompat or Material
+parents, is pinned, so later edits to it or upgrades of those libraries need a new shell.
+
 ### Holding restarts while the app is busy
 
 A `prompt` or `automatic` restart stops whatever the app is doing. An app can hold

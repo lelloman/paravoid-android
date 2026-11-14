@@ -28,7 +28,8 @@ abstract class ApplicationManifestTask extends DefaultTask {
     @Input abstract org.gradle.api.provider.ListProperty<String> getBusyReportStores()
     @Input abstract Property<Boolean> getCrashRecoveryEnabled()
     @Input abstract Property<String> getRecoveryProvider()
-    ApplicationManifestTask() { localTriggerPackages.convention([]); pushBackgroundConnection.convention(false); pushComponents.convention([]); pushEnabled.convention(false); updatesEnabled.convention(false); complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false); busyReportStores.convention([]); crashRecoveryEnabled.convention(false); recoveryProvider.convention('') }
+    @Input abstract Property<String> getRestartTheme()
+    ApplicationManifestTask() { localTriggerPackages.convention([]); pushBackgroundConnection.convention(false); pushComponents.convention([]); pushEnabled.convention(false); updatesEnabled.convention(false); complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false); busyReportStores.convention([]); crashRecoveryEnabled.convention(false); recoveryProvider.convention(''); restartTheme.convention('@style/Theme.Paravoid.Restart') }
 
     @TaskAction void rewrite() {
         def factory = DocumentBuilderFactory.newInstance()
@@ -199,7 +200,8 @@ abstract class ApplicationManifestTask extends DefaultTask {
             restart.setAttributeNS(ANDROID,'android:name','com.lelloman.paravoidandroid.runtime.RestartActivity')
             restart.setAttributeNS(ANDROID,'android:process',':paravoid_recovery')
             restart.setAttributeNS(ANDROID,'android:exported','false')
-            restart.setAttributeNS(ANDROID,'android:theme','@android:style/Theme.Material.Light.Dialog.Alert')
+            // Plugin-generated theme by default; paravoid.updates.restartTheme restyles the screen.
+            restart.setAttributeNS(ANDROID,'android:theme',restartTheme.get())
             app.appendChild(restart)
             ['android.permission.INTERNET','android.permission.ACCESS_NETWORK_STATE','android.permission.RECEIVE_BOOT_COMPLETED'].each { permission ->
                 def nodes=document.getElementsByTagName('uses-permission')

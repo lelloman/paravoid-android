@@ -15,6 +15,12 @@ these entries into a dated version section and document its exact upgrade path.
 
 ### Added
 
+- The shell restart screen is now a full-screen page with the app icon, progress and
+  inline buttons that follows light/dark mode, replacing the blank page with a dialog.
+  `paravoid { updates { restartTheme = '@style/...' } }` selects an app theme inheriting
+  `Base.Theme.Paravoid.Restart` to change its colors, icon and texts. Complete shells
+  with updates enabled gain the generated `Theme.Paravoid.Restart` theme, its
+  `paravoidRestart*` attributes and `paravoid_restart_*` strings; that requires a new shell.
 - `ParavoidUpdates.get().setBusy(boolean)` lets an app hold automatic restarts and
   restart prompts while restarting would interrupt something, such as playback. A
   held restart goes ahead as soon as the app reports idle, or after 24 hours.

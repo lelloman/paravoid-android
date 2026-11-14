@@ -115,11 +115,15 @@ class ApplicationPackagingTest {
         build << '''
             paravoid {
                 packaging = 'complete'; payloadVersion = 1L
-                updates { enabled = true; baseUrl = 'https://updates.example/'; trustPolicyFile = layout.projectDirectory.file('trust.json') }
+                updates { enabled = true; baseUrl = 'https://updates.example/'; trustPolicyFile = layout.projectDirectory.file('trust.json'); restartTheme = '@style/Theme.App.Restart' }
                 signing { keyId = 'release'; privateKeyFile = layout.projectDirectory.file('release.der') }
             }
         '''
-        write(root, 'app/src/main/res/values/strings.xml', '<resources><string name="movable">Payload</string><string name="pinned">Shell label</string></resources>')
+        // An app-provided restart theme in src/main must also link in the normal flavor.
+        write(root, 'app/src/main/res/values/strings.xml', '<resources><string name="movable">Payload</string><string name="pinned">Shell label</string>' +
+            '<string name="restart_title">Branded restart</string>' +
+            '<style name="Theme.App.Restart" parent="Base.Theme.Paravoid.Restart"><item name="android:colorAccent">#ff6200ee</item>' +
+            '<item name="paravoidRestartConfirmTitle">@string/restart_title</item></style></resources>')
         File sourceManifest = new File(root, 'app/src/main/AndroidManifest.xml')
         sourceManifest.text = sourceManifest.text.replace('<application ', '<application android:label="@string/pinned" ')
         write(root, 'app/src/main/assets/content.txt', 'payload asset')
@@ -147,6 +151,11 @@ class ApplicationPackagingTest {
             assertTrue(dexText(zip).contains('CompleteGenerationLoader'))
         }
         assertFalse(dumpResources(root, shell).contains('string/movable'))
+        // The generated restart screen theme and its texts stay in the payload-free shell.
+        ['style/Theme.App.Restart', 'style/Base.Theme.Paravoid.Restart', 'string/restart_title', 'string/paravoid_restart_confirm_title'].each { name ->
+            assertTrue(name, report.ownership.shell.pinnedResources.any { it.name == name })
+            assertTrue(name, dumpResources(root, shell).contains(name))
+        }
         File normal = new File(root, 'app/build/outputs/apk/normal/debug/app-normal-debug.apk')
         byte[] normalBefore = normal.bytes
         long embeddedSize = shell.length()

@@ -18,6 +18,7 @@ abstract class ParavoidUpdatesExtension {
         checkerClass.convention(''); updaterClass.convention(''); policyClass.convention(''); jobIdBase.convention(0x50560000)
         enabled.convention(false); baseUrl.convention(''); channel.convention('stable')
         authentication.convention('public'); debugHttpAllowed.convention(false)
+        restartTheme.convention('@style/Theme.Paravoid.Restart')
     }
     void localTriggers(Action<ParavoidLocalTriggersExtension> action) { action.execute(localTriggers) }
     void push(Action<? super ParavoidUpdatePushExtension> action) { action.execute(push) }
@@ -46,4 +47,9 @@ abstract class ParavoidUpdatesExtension {
     abstract Property<String> getAuthentication()
     abstract Property<Boolean> getDebugHttpAllowed()
     abstract RegularFileProperty getTrustPolicyFile()
+    /**
+     * Theme of the shell restart screen. Inherit Base.Theme.Paravoid.Restart to keep the default
+     * layout colors and texts while overriding framework colors and paravoidRestart* attributes.
+     */
+    abstract Property<String> getRestartTheme()
 }

@@ -68,6 +68,19 @@ class ApplicationManifestTest {
             (0..<providers.length).collect { providers.item(it).getAttributeNS(ApplicationManifestTask.ANDROID,'authorities') })
     }
 
+    @Test void restartScreenUsesGeneratedOrConfiguredTheme() {
+        def factory=javax.xml.parsers.DocumentBuilderFactory.newInstance(); factory.namespaceAware=true
+        def theme={ task ->
+            task.complete.set(true); task.updatesEnabled.set(true); task.rewrite()
+            def document=factory.newDocumentBuilder().parse(task.outputManifest.get().asFile)
+            document.getElementsByTagName('activity').find { it.getAttributeNS(ApplicationManifestTask.ANDROID,'name')=='com.lelloman.paravoidandroid.runtime.RestartActivity' }
+                .getAttributeNS(ApplicationManifestTask.ANDROID,'theme')
+        }
+        assertEquals('@style/Theme.Paravoid.Restart',theme(fixture('')))
+        def custom=fixture(''); custom.restartTheme.set('@style/Theme.App.Restart')
+        assertEquals('@style/Theme.App.Restart',theme(custom))
+    }
+
     @Test void pushIsOptInAndRoutesAdapterWithoutPayloadStartup() {
         def disabled=fixture(''); disabled.complete.set(true); disabled.updatesEnabled.set(true); disabled.rewrite()
         assertFalse(disabled.outputManifest.get().asFile.text.contains('UpdatePromptActivity'))
