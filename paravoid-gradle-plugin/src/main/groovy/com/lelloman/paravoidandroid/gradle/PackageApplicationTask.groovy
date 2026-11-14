@@ -28,6 +28,8 @@ abstract class PackageApplicationTask extends DefaultTask {
     @Input abstract Property<Boolean> getMinifyPayload()
     @InputFiles @PathSensitive(PathSensitivity.RELATIVE) abstract ConfigurableFileCollection getPayloadProguardFiles()
     @InputFiles @PathSensitive(PathSensitivity.RELATIVE) abstract ConfigurableFileCollection getDependencyProguardRules()
+    /** AAPT2's keep rules for classes resources name, such as views inflated from XML layouts. */
+    @InputFiles @PathSensitive(PathSensitivity.NONE) abstract ConfigurableFileCollection getResourceProguardRules()
     @Optional @OutputFile abstract RegularFileProperty getConsumerRulesFile()
     @Classpath abstract ConfigurableFileCollection getRecoveryJars()
     @Input abstract Property<String> getRecoveryProvider()
@@ -145,6 +147,7 @@ abstract class PackageApplicationTask extends DefaultTask {
                 args '--release', '--min-api', minSdk.get().toString(), '--lib', androidJar.get().asFile.absolutePath,
                     '--classpath', shell.absolutePath, '--output', dexZip.absolutePath,
                     '--pg-conf', rules.absolutePath, '--pg-conf', consumer.absolutePath, '--pg-map-output', mapping.absolutePath
+                resourceProguardRules.files.findAll { it.isFile() }.each { args '--pg-conf', it.absolutePath }
                 payloadProguardFiles.files.each { args '--pg-conf', it.absolutePath }
                 args payload.absolutePath
             }.assertNormalExitValue()
