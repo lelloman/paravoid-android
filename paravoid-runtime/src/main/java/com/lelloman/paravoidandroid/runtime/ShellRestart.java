@@ -55,7 +55,7 @@ final class ShellRestart {
                 if (ready && gate.readyToLaunch()) try {
                     app.startActivity(new Intent(app, LauncherActivity.class)
                         .setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK), launchOptions());
                     launched = true;
                 } catch (Exception unavailable) { /* Keep recovery screen available. */ }
                 running.set(false);
@@ -63,5 +63,15 @@ final class ShellRestart {
                 result.accept(launched);
             });
         }, "paravoid-explicit-restart").start();
+    }
+
+    /**
+     * Android 12+ shows a launch started by the app itself as a solid-colour splash, which looks
+     * like a blank page; on API 33+ ask for the launcher-style splash with the app icon instead.
+     */
+    private static android.os.Bundle launchOptions() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return null;
+        return android.app.ActivityOptions.makeBasic()
+            .setSplashScreenStyle(android.window.SplashScreen.SPLASH_SCREEN_STYLE_ICON).toBundle();
     }
 }
