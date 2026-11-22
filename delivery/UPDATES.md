@@ -162,13 +162,15 @@ paravoid { updates { restartTheme = '@style/Theme.App.Restart' } }
 
 Text attributes are `paravoidRestartConfirmTitle`, `…ConfirmMessage`, `…ConfirmButton`,
 `…DismissButton`, `…ProgressTitle`, `…ProgressMessage`, `…FailedTitle`,
-`…FailedMessage` and `…CloseButton`; `%1$s` is replaced with the app label. Point them
-at your own string resources to translate them. Add a `values-night` variant of your
+`…FailedMessage` and `…CloseButton`; `%1$s` is replaced with the app label. The generated
+strings are in English and Italian; point the attributes at your own string resources to
+change or translate them further. Add a `values-night` variant of your
 theme for dark-mode colors. Every resource the theme references becomes pinned, so
 changing it requires a new shell.
 
 `restartTheme` may also name the app's existing theme. Missing `paravoidRestart*`
-attributes then fall back to built-in English texts and the launcher icon. Prefer a
+attributes then fall back to built-in texts (English, or Italian on Italian devices) and
+the launcher icon. Prefer a
 small dedicated theme: the whole referenced theme, including its AppCompat or Material
 parents, is pinned, so later edits to it or upgrades of those libraries need a new shell.
 

@@ -17,7 +17,7 @@ import com.lelloman.paravoidandroid.contract.Protocol.ExpectedArchive;
  * <p>Full-screen, framework-only UI: it runs in the payload-free recovery process. Its look comes
  * from its manifest theme: the plugin-generated {@code Theme.Paravoid.Restart}, or the app theme
  * selected with {@code paravoid.updates.restartTheme}. Texts and icon come from paravoidRestart*
- * theme attributes, with built-in English fallbacks if a theme does not define them.
+ * theme attributes, with built-in {@link ShellText} fallbacks if a theme does not define them.
  */
 public final class RestartActivity extends Activity {
     static final String PREFERENCES="paravoid-restart-v1";
@@ -178,8 +178,9 @@ public final class RestartActivity extends Activity {
             TypedArray array=getTheme().obtainStyledAttributes(new int[] { id });
             try { value=array.getText(0); } finally { array.recycle(); }
         }
-        String template=value==null ? fallback : value.toString();
-        if(!template.contains("%1$s")) return value==null ? fallback : value;
+        if(value==null) value=ShellText.tr(this,fallback);
+        String template=value.toString();
+        if(!template.contains("%1$s")) return value;
         try { return String.format(template,label); }
         catch(java.util.IllegalFormatException invalid) { return template; }
     }

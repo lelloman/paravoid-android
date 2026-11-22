@@ -36,11 +36,11 @@ public final class UnavailableComponents {
                     String channel = "paravoid-unavailable";
                     NotificationManager notifications = getSystemService(NotificationManager.class);
                     notifications.createNotificationChannel(new NotificationChannel(channel,
-                        "App recovery", NotificationManager.IMPORTANCE_LOW));
+                        ShellText.tr(this, "App recovery"), NotificationManager.IMPORTANCE_LOW));
                     Notification notification = new Notification.Builder(this, channel)
                         .setSmallIcon(android.R.drawable.stat_notify_error)
-                        .setContentTitle("App unavailable")
-                        .setContentText("Open the app to recover.").build();
+                        .setContentTitle(ShellText.tr(this, "App unavailable"))
+                        .setContentText(ShellText.tr(this, "Open the app to recover.")).build();
                     startForeground(0x5056, notification, foregroundType);
                     stopForeground(STOP_FOREGROUND_REMOVE);
                 }

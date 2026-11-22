@@ -16,6 +16,7 @@ import android.widget.*;
 import com.lelloman.paravoidandroid.contract.Protocol.*;
 import com.lelloman.paravoidandroid.runtime.AutoRestartPreference;
 import com.lelloman.paravoidandroid.runtime.ParavoidPush;
+import com.lelloman.paravoidandroid.runtime.ShellText;
 
 /** Framework-only update controls, usable without loading the downstream payload. */
 public final class ShellUpdatesActivity extends Activity {
@@ -33,6 +34,7 @@ public final class ShellUpdatesActivity extends Activity {
     private boolean rendering, restarting, expanded;
     private LifecycleSnapshot lastLifecycle;
     private int foreground, secondary, accent;
+    private boolean checkAction;
     private final DeliveryController.Listener listener = snapshot -> runOnUiThread(() -> render(snapshot));
 
     /** Shell bootstrap installs these controls in the recovery process. */
@@ -42,7 +44,7 @@ public final class ShellUpdatesActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        setTitle("App updates");
+        setTitle(tr("App updates"));
         if(getActionBar()!=null) getActionBar().hide();
         foreground=color(android.R.attr.textColorPrimary);
         secondary=color(android.R.attr.textColorSecondary);
@@ -63,16 +65,16 @@ public final class ShellUpdatesActivity extends Activity {
         View decor=getWindow().getDecorView();
         decor.setSystemUiVisibility(Color.luminance(color(android.R.attr.colorBackground))>0.5f
             ? decor.getSystemUiVisibility()|lightBars : decor.getSystemUiVisibility()&~lightBars);
-        Button back=button(content,"‹ Back",view->finish()); back.setContentDescription("Back");
+        Button back=button(content,tr("‹ Back"),view->finish()); back.setContentDescription(tr("Back"));
         back.setLayoutParams(new LinearLayout.LayoutParams(-2,-2));
-        text(content,"App updates",28,true);
-        TextView intro=text(content,"Manage downloads and choose when to apply an update.",15,false);
+        text(content,tr("App updates"),28,true);
+        TextView intro=text(content,tr("Manage downloads and choose when to apply an update."),15,false);
         intro.setPadding(0,dp(4),0,dp(24));
 
         LinearLayout summary=card();
-        status=text(summary,"Loading update status…",23,true);
+        status=text(summary,tr("Loading update status…"),23,true);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        description=text(summary,"Connecting to update controls.",15,false);
+        description=text(summary,tr("Connecting to update controls."),15,false);
         description.setPadding(0,dp(8),0,dp(16));
         versions=text(summary,"",15,false);
         progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
@@ -81,31 +83,31 @@ public final class ShellUpdatesActivity extends Activity {
         summary.addView(progress,track);
         progressLabel=text(summary,"",14,false); progressLabel.setVisibility(View.GONE);
         timing=text(summary,"",13,false); timing.setPadding(0,dp(12),0,dp(12));
-        primary=button(summary,"Check for updates",view->controller.checkNow()); primary.setEnabled(false);
+        primary=button(summary,tr("Check for updates"),view->controller.checkNow()); primary.setEnabled(false);
         GradientDrawable primarySurface=new GradientDrawable(); primarySurface.setCornerRadius(dp(12)); primarySurface.setColor(Color.WHITE);
         primary.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33ffffff),primarySurface,null));
         primary.setBackgroundTintList(new ColorStateList(new int[][]{new int[]{-android.R.attr.state_enabled},new int[]{}},
             new int[]{(foreground&0x00ffffff)|0x18000000,accent}));
         primary.setTextColor(new ColorStateList(new int[][]{new int[]{-android.R.attr.state_enabled},new int[]{}},
             new int[]{secondary,Color.luminance(accent)>0.179f ? Color.BLACK : Color.WHITE}));
-        checkNow=button(summary,"Check again",view->controller.checkNow()); checkNow.setVisibility(View.GONE);
-        cancel=button(summary,"Cancel download",view->controller.cancelDownload()); cancel.setVisibility(View.GONE);
+        checkNow=button(summary,tr("Check again"),view->controller.checkNow()); checkNow.setVisibility(View.GONE);
+        cancel=button(summary,tr("Cancel download"),view->controller.cancelDownload()); cancel.setVisibility(View.GONE);
 
         controller=installedController;
         if(controller==null) {
-            status.setText("Updates unavailable");
-            description.setText("Close and reopen the app to try again. If this continues, get a replacement app installer from your distributor.");
+            status.setText(tr("Updates unavailable"));
+            description.setText(tr("Close and reopen the app to try again. If this continues, get a replacement app installer from your distributor."));
             primary.setVisibility(View.GONE); return;
         }
         LinearLayout preferences=card();
-        text(preferences,"Automatic updates",19,true);
-        text(preferences,"These preferences apply to background updates. You can always check or download manually.",14,false);
-        checks=toggle(preferences,"Check for updates automatically");
-        downloads=toggle(preferences,"Allow automatic downloads");
-        unmetered=toggle(preferences,"Download only on unmetered networks");
-        text(preferences,"Unmetered networks usually include Wi-Fi.",13,false);
+        text(preferences,tr("Automatic updates"),19,true);
+        text(preferences,tr("These preferences apply to background updates. You can always check or download manually."),14,false);
+        checks=toggle(preferences,tr("Check for updates automatically"));
+        downloads=toggle(preferences,tr("Allow automatic downloads"));
+        unmetered=toggle(preferences,tr("Download only on unmetered networks"));
+        text(preferences,tr("Unmetered networks usually include Wi-Fi."),13,false);
         if(ParavoidPush.backgroundAvailable(this)) {
-            backgroundPush=new Switch(this); backgroundPush.setText("Keep update connection in background"); backgroundPush.setTextSize(15);
+            backgroundPush=new Switch(this); backgroundPush.setText(tr("Keep update connection in background")); backgroundPush.setTextSize(15);
             backgroundPush.setTextColor(foreground); backgroundPush.setMinimumHeight(dp(56));
             backgroundPush.setPadding(0,dp(8),0,dp(8)); backgroundPush.setSwitchPadding(dp(16));
             preferences.addView(backgroundPush,new LinearLayout.LayoutParams(-1,-2));
@@ -114,12 +116,12 @@ public final class ShellUpdatesActivity extends Activity {
                 if(rendering) return;
                 if(!ParavoidPush.backgroundEnabled(this,checked)) {
                     refreshBackgroundPush();
-                    Toast.makeText(this,"Could not change background update connection",Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this,tr("Could not change background update connection"),Toast.LENGTH_SHORT).show();
                 }
             });
-            text(preferences,"Keep listening for updates when the app is not open. Shows an ongoing notification. Off by default.",13,false);
+            text(preferences,tr("Keep listening for updates when the app is not open. Shows an ongoing notification. Off by default."),13,false);
         }
-        autoRestart=new Switch(this); autoRestart.setText("Auto restart app"); autoRestart.setTextSize(15);
+        autoRestart=new Switch(this); autoRestart.setText(tr("Auto restart app")); autoRestart.setTextSize(15);
         autoRestart.setTextColor(foreground); autoRestart.setMinimumHeight(dp(56));
         autoRestart.setPadding(0,dp(8),0,dp(8)); autoRestart.setSwitchPadding(dp(16));
         preferences.addView(autoRestart,new LinearLayout.LayoutParams(-1,-2));
@@ -130,22 +132,22 @@ public final class ShellUpdatesActivity extends Activity {
                 rendering=true;
                 autoRestart.setChecked(!checked);
                 rendering=false;
-                Toast.makeText(this,"Could not save auto restart setting",Toast.LENGTH_SHORT).show();
+                Toast.makeText(this,tr("Could not save auto restart setting"),Toast.LENGTH_SHORT).show();
             }
         });
-        text(preferences,"When enabled, a downloaded update restarts the app while it is open. Ongoing work may stop and unsaved changes may be lost.",13,false);
+        text(preferences,tr("When enabled, a downloaded update restarts the app while it is open. Ongoing work may stop and unsaved changes may be lost."),13,false);
         checks.setEnabled(false); downloads.setEnabled(false); unmetered.setEnabled(false);
 
-        detailsToggle=button(content,"Show advanced details",view->setExpanded(!expanded));
+        detailsToggle=button(content,tr("Show advanced details"),view->setExpanded(!expanded));
         details=new LinearLayout(this); details.setOrientation(LinearLayout.VERTICAL);
         details.setPadding(dp(16),dp(8),dp(16),dp(16)); content.addView(details);
         diagnostics=text(details,"",13,false); diagnostics.setTextIsSelectable(true);
-        text(details,"Saved previous versions",17,true);
-        text(details,"Keep previous downloads for troubleshooting. This does not enable rollback or restore app data.",14,false);
+        text(details,tr("Saved previous versions"),17,true);
+        text(details,tr("Keep previous downloads for troubleshooting. This does not enable rollback or restore app data."),14,false);
         retention=new Spinner(this);
-        retention.setContentDescription("Number of previous versions to keep");
+        retention.setContentDescription(tr("Number of previous versions to keep"));
         retention.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,
-            new String[]{"Keep none","Keep 1 version","Keep 2 versions","Keep 3 versions"}));
+            new String[]{tr("Keep none"),tr("Keep 1 version"),tr("Keep 2 versions"),tr("Keep 3 versions")}));
         retention.setMinimumHeight(dp(48)); details.addView(retention); retention.setEnabled(false);
         retention.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onItemSelected(AdapterView<?> parent,View view,int position,long id) {
@@ -153,9 +155,9 @@ public final class ShellUpdatesActivity extends Activity {
             }
             public void onNothingSelected(AdapterView<?> parent) {}
         });
-        restart=button(details,"Restart app…",view->confirmRestart());
+        restart=button(details,tr("Restart app…"),view->confirmRestart());
         restart.setVisibility(installedRestart==null ? View.GONE : View.VISIBLE); restart.setEnabled(false);
-        retryGeneration=button(details,"Retry failed app version…",view->confirmGenerationRetry());
+        retryGeneration=button(details,tr("Retry failed app version…"),view->confirmGenerationRetry());
         retryGeneration.setVisibility(View.GONE);
         setExpanded(state!=null && state.getBoolean("detailsExpanded"));
     }
@@ -167,7 +169,7 @@ public final class ShellUpdatesActivity extends Activity {
     }
     private void setExpanded(boolean value) {
         expanded=value; details.setVisibility(value ? View.VISIBLE : View.GONE);
-        detailsToggle.setText(value ? "Hide advanced details" : "Show advanced details");
+        detailsToggle.setText(tr(value ? "Hide advanced details" : "Show advanced details"));
     }
     private void refreshBackgroundPush() {
         if(backgroundPush==null) return;
@@ -176,6 +178,7 @@ public final class ShellUpdatesActivity extends Activity {
         backgroundPush.setEnabled(!restarting);
         rendering=previous;
     }
+    private String tr(String english,Object... args) { return ShellText.tr(this,english,args); }
     private int dp(int value) { return Math.round(value*getResources().getDisplayMetrics().density); }
     private int color(int attribute) {
         TypedValue value=new TypedValue(); getTheme().resolveAttribute(attribute,value,true);
@@ -232,43 +235,43 @@ public final class ShellUpdatesActivity extends Activity {
             boolean busy=checking || downloading || staging;
             ExpectedArchive pending=lastLifecycle==null ? null : lastLifecycle.pending;
             ExpectedArchive active=lastLifecycle==null ? null : lastLifecycle.active;
-            String title, message, action="Check for updates";
+            String title, message, action=tr("Check for updates"); checkAction=true;
             View.OnClickListener command=view-> { primary.setEnabled(false); controller.checkNow(); };
-            if(checking) { title="Checking for updates"; message="Looking for a compatible version of this app."; action="Checking…"; }
-            else if(downloading) { title="Downloading update"; message="You can keep using the app while the download finishes."; action="Downloading…"; }
-            else if(staging) { title="Preparing update"; message="Verifying the download and getting it ready to use."; action="Preparing…"; }
+            if(checking) { title=tr("Checking for updates"); message=tr("Looking for a compatible version of this app."); action=tr("Checking…"); checkAction=false; }
+            else if(downloading) { title=tr("Downloading update"); message=tr("You can keep using the app while the download finishes."); action=tr("Downloading…"); checkAction=false; }
+            else if(staging) { title=tr("Preparing update"); message=tr("Verifying the download and getting it ready to use."); action=tr("Preparing…"); checkAction=false; }
             else if(pending!=null) {
-                title="Ready to restart"; message="Version "+pending.payloadVersion+" is downloaded. Restart the app to start using it.";
-                action="Restart to apply update"; command=view->confirmRestart();
-                if(installedRestart==null) { action="Check for updates"; command=view->controller.checkNow(); message="Version "+pending.payloadVersion+" is ready. It will be applied the next time the app starts."; }
+                title=tr("Ready to restart"); message=tr("Version %1$s is downloaded. Restart the app to start using it.",pending.payloadVersion);
+                action=tr("Restart to apply update"); checkAction=false; command=view->confirmRestart();
+                if(installedRestart==null) { action=tr("Check for updates"); checkAction=true; command=view->controller.checkNow(); message=tr("Version %1$s is ready. It will be applied the next time the app starts.",pending.payloadVersion); }
             } else if(snapshot.activity==DeliveryController.Activity.WAITING_TO_RETRY) {
-                title="Waiting to retry"; message="The last attempt could not finish. The app will try again when the scheduled retry can run.";
-                action="Retry now"; command=view-> { primary.setEnabled(false); controller.retry(); };
+                title=tr("Waiting to retry"); message=tr("The last attempt could not finish. The app will try again when the scheduled retry can run.");
+                action=tr("Retry now"); checkAction=false; command=view-> { primary.setEnabled(false); controller.retry(); };
             } else if(snapshot.errorCode!=null || snapshot.activity==DeliveryController.Activity.ERROR) {
-                title="Update couldn’t finish"; message=errorMessage(snapshot.errorCode);
-                action="Try again"; command=view-> { primary.setEnabled(false); controller.retry(); };
+                title=tr("Update couldn’t finish"); message=errorMessage(snapshot.errorCode);
+                action=tr("Try again"); checkAction=false; command=view-> { primary.setEnabled(false); controller.retry(); };
                 if("OFFER_CHANGED".equals(snapshot.errorCode) || "NO_COMPATIBLE_RELEASE".equals(snapshot.errorCode)
                         || "SHELL_UPDATE_REQUIRED".equals(snapshot.errorCode)) {
-                    action="Check again"; command=view-> { primary.setEnabled(false); controller.checkNow(); };
+                    action=tr("Check again"); checkAction=true; command=view-> { primary.setEnabled(false); controller.checkNow(); };
                 }
             } else if(snapshot.available!=null) {
-                title="Update available"; message="Version "+snapshot.available.payloadVersion+" is available to download.";
-                action="Download update"; ExpectedArchive offer=snapshot.available;
+                title=tr("Update available"); message=tr("Version %1$s is available to download.",snapshot.available.payloadVersion);
+                action=tr("Download update"); checkAction=false; ExpectedArchive offer=snapshot.available;
                 command=view-> { primary.setEnabled(false); controller.updateNow(offer); };
             } else if(snapshot.activity==DeliveryController.Activity.CANCELLED) {
-                title="Update cancelled"; message="Check again whenever you’re ready to continue.";
+                title=tr("Update cancelled"); message=tr("Check again whenever you’re ready to continue.");
             } else if(lastLifecycle!=null && lastLifecycle.availability==Availability.EMPTY) {
-                title="Download the app to begin"; message="Check for an available version to get started.";
+                title=tr("Download the app to begin"); message=tr("Check for an available version to get started.");
             } else if(lastLifecycle!=null && lastLifecycle.availability==Availability.RECOVERY) {
-                title="An app repair is needed"; message="Check for a newer version. If none is available, contact your distributor for a replacement installer.";
-            } else { title=snapshot.lastCheckSeconds>0 ? "No update available" : "Ready to check"; message="Check for the latest compatible version of this app."; }
-            status.setText(restarting ? "Restarting app…" : title);
-            description.setText(restarting ? "Stopping app work and opening the app again." : message);
-            versions.setText("Installed version   "+(lastLifecycle==null ? "Unavailable" : active==null ? "Not installed" : Long.toString(active.payloadVersion))
-                +(pending==null ? "" : "\nReady to install      "+pending.payloadVersion));
-            timing.setText(snapshot.lastCheckSeconds==0 ? "Not checked yet" : "Last checked "+relative(snapshot.lastCheckSeconds));
+                title=tr("An app repair is needed"); message=tr("Check for a newer version. If none is available, contact your distributor for a replacement installer.");
+            } else { title=tr(snapshot.lastCheckSeconds>0 ? "No update available" : "Ready to check"); message=tr("Check for the latest compatible version of this app."); }
+            status.setText(restarting ? tr("Restarting app…") : title);
+            description.setText(restarting ? tr("Stopping app work and opening the app again.") : message);
+            versions.setText(tr("Installed version   %1$s",lastLifecycle==null ? tr("Unavailable") : active==null ? tr("Not installed") : Long.toString(active.payloadVersion))
+                +(pending==null ? "" : "\n"+tr("Ready to install      %1$s",pending.payloadVersion)));
+            timing.setText(snapshot.lastCheckSeconds==0 ? tr("Not checked yet") : tr("Last checked %1$s",relative(snapshot.lastCheckSeconds)));
             if(snapshot.activity==DeliveryController.Activity.WAITING_TO_RETRY && snapshot.nextDueSeconds>0)
-                timing.append("\nNext attempt "+relative(snapshot.nextDueSeconds));
+                timing.append("\n"+tr("Next attempt %1$s",relative(snapshot.nextDueSeconds)));
             progress.setVisibility(busy ? View.VISIBLE : View.GONE);
             progress.setIndeterminate(!downloading || snapshot.totalBytes<=0);
             progressLabel.setVisibility(downloading ? View.VISIBLE : View.GONE);
@@ -277,16 +280,16 @@ public final class ShellUpdatesActivity extends Activity {
                 if(snapshot.totalBytes>0) {
                     int amount=(int)Math.min(1000,Math.max(0,(double)snapshot.bytes/snapshot.totalBytes*1000));
                     progress.setProgress(amount);
-                    progressLabel.setText(transferred+" of "+Formatter.formatShortFileSize(this,snapshot.totalBytes)+" · "+amount/10+"%");
-                } else progressLabel.setText(transferred+" downloaded");
+                    progressLabel.setText(tr("%1$s of %2$s · %3$d%%",transferred,Formatter.formatShortFileSize(this,snapshot.totalBytes),amount/10));
+                } else progressLabel.setText(tr("%1$s downloaded",transferred));
             }
             primary.setVisibility(busy ? View.GONE : View.VISIBLE);
             primary.setText(action); primary.setOnClickListener(command); primary.setEnabled(!busy && !restarting);
-            checkNow.setVisibility(!busy && !action.equals("Check again") && !action.equals("Check for updates")
+            checkNow.setVisibility(!busy && !checkAction
                 && (snapshot.available!=null || pending!=null || snapshot.errorCode!=null) ? View.VISIBLE : View.GONE);
             checkNow.setEnabled(!restarting);
             cancel.setVisibility(checking || downloading || snapshot.activity==DeliveryController.Activity.WAITING_TO_RETRY ? View.VISIBLE : View.GONE);
-            cancel.setText(checking ? "Cancel check" : downloading ? "Cancel download" : "Cancel retry"); cancel.setEnabled(!restarting);
+            cancel.setText(tr(checking ? "Cancel check" : downloading ? "Cancel download" : "Cancel retry")); cancel.setEnabled(!restarting);
             checks.setChecked(snapshot.preferences.automaticChecks); checks.setEnabled(!restarting);
             downloads.setChecked(snapshot.preferences.automaticDownloads); downloads.setEnabled(checks.isChecked() && !restarting);
             unmetered.setChecked(snapshot.preferences.unmeteredOnly); unmetered.setEnabled(checks.isChecked() && downloads.isChecked() && !restarting);
@@ -296,12 +299,12 @@ public final class ShellUpdatesActivity extends Activity {
             restart.setEnabled(!busy && !restarting);
             retention.setEnabled(lastLifecycle!=null && !busy && !restarting);
             if(lastLifecycle!=null) retention.setSelection(lastLifecycle.retainedPrevious);
-            diagnostics.setText("Installed release: "+identity(active)+"\nAvailable release: "+identity(snapshot.available)
-                +"\nPending release: "+identity(pending)
-                +(lastLifecycle==null ? "\nApp state unavailable" : "\nApp state: "+lastLifecycle.availability.name()
-                    +"\nUpdate storage: "+Formatter.formatShortFileSize(this,lastLifecycle.storageBytes)
-                    +(lastLifecycle.error==null ? "" : "\nApp state error: "+lastLifecycle.error.name()))
-                +(snapshot.errorCode==null ? "" : "\nUpdate error: "+snapshot.errorCode));
+            diagnostics.setText(tr("Installed release: %1$s",identity(active))+"\n"+tr("Available release: %1$s",identity(snapshot.available))
+                +"\n"+tr("Pending release: %1$s",identity(pending))
+                +(lastLifecycle==null ? "\n"+tr("App state unavailable") : "\n"+tr("App state: %1$s",lastLifecycle.availability.name())
+                    +"\n"+tr("Update storage: %1$s",Formatter.formatShortFileSize(this,lastLifecycle.storageBytes))
+                    +(lastLifecycle.error==null ? "" : "\n"+tr("App state error: %1$s",lastLifecycle.error.name())))
+                +(snapshot.errorCode==null ? "" : "\n"+tr("Update error: %1$s",snapshot.errorCode)));
             retryGeneration.setVisibility(RecoveryActions.canOfferGenerationRetry(lastLifecycle) ? View.VISIBLE : View.GONE);
             retryGeneration.setEnabled(!busy && !restarting);
         } finally { rendering=false; }
@@ -310,32 +313,32 @@ public final class ShellUpdatesActivity extends Activity {
         return DateUtils.getRelativeTimeSpanString(seconds*1000,System.currentTimeMillis(),DateUtils.MINUTE_IN_MILLIS);
     }
     private String errorMessage(String code) {
-        if("CREDENTIAL_UNAVAILABLE".equals(code)) return "Update access is unavailable. Try again, or get a newly authorized installer from your distributor. Your installed app remains available offline.";
-        if("CLOCK_INVALID".equals(code)) return "Check the device’s date and time, then try again.";
-        if("INSUFFICIENT_STORAGE".equals(code)) return "Free up some space on this device, then try again.";
-        if("OFFER_CHANGED".equals(code)) return "The available version changed. Check again before downloading.";
-        if("SHELL_UPDATE_REQUIRED".equals(code)) return "Get a new app installer from your distributor to continue receiving updates.";
-        if("NO_COMPATIBLE_RELEASE".equals(code)) return "No compatible version is currently available for this app.";
-        return "The update could not be completed. Try again, or open advanced details if the problem continues.";
+        if("CREDENTIAL_UNAVAILABLE".equals(code)) return tr("Update access is unavailable. Try again, or get a newly authorized installer from your distributor. Your installed app remains available offline.");
+        if("CLOCK_INVALID".equals(code)) return tr("Check the device’s date and time, then try again.");
+        if("INSUFFICIENT_STORAGE".equals(code)) return tr("Free up some space on this device, then try again.");
+        if("OFFER_CHANGED".equals(code)) return tr("The available version changed. Check again before downloading.");
+        if("SHELL_UPDATE_REQUIRED".equals(code)) return tr("Get a new app installer from your distributor to continue receiving updates.");
+        if("NO_COMPATIBLE_RELEASE".equals(code)) return tr("No compatible version is currently available for this app.");
+        return tr("The update could not be completed. Try again, or open advanced details if the problem continues.");
     }
     private void confirmRestart() {
         if(installedRestart==null || restarting) return;
-        new AlertDialog.Builder(this).setTitle("Restart app now?")
-            .setMessage("This stops ongoing app work, including playback and jobs. Unsaved changes may be lost. A downloaded update will be applied when the app opens again.")
-            .setNegativeButton("Not now",null).setPositiveButton("Restart",(dialog,which)-> {
+        new AlertDialog.Builder(this).setTitle(tr("Restart app now?"))
+            .setMessage(tr("This stops ongoing app work, including playback and jobs. Unsaved changes may be lost. A downloaded update will be applied when the app opens again."))
+            .setNegativeButton(tr("Not now"),null).setPositiveButton(tr("Restart"),(dialog,which)-> {
                 restarting=true; primary.setEnabled(false); restart.setEnabled(false); checkNow.setEnabled(false);
                 checks.setEnabled(false); downloads.setEnabled(false); unmetered.setEnabled(false); autoRestart.setEnabled(false);
                 if(backgroundPush!=null) backgroundPush.setEnabled(false);
                 cancel.setEnabled(false); retention.setEnabled(false); retryGeneration.setEnabled(false);
-                status.setText("Restarting app…"); description.setText("Stopping app work and opening the app again.");
+                status.setText(tr("Restarting app…")); description.setText(tr("Stopping app work and opening the app again."));
                 installedRestart.restart(success->runOnUiThread(()-> {
                     if(isFinishing() || isDestroyed()) return;
                     if(success) finish();
                     else {
                         restarting=false; controller.refreshSnapshot();
-                        new AlertDialog.Builder(this).setTitle("Couldn’t restart the app")
-                            .setMessage("Stop any ongoing app work and try again. You can also close the app from Android settings and reopen it.")
-                            .setPositiveButton("OK",null).show();
+                        new AlertDialog.Builder(this).setTitle(tr("Couldn’t restart the app"))
+                            .setMessage(tr("Stop any ongoing app work and try again. You can also close the app from Android settings and reopen it."))
+                            .setPositiveButton(tr("OK"),null).show();
                     }
                 }));
             }).show();
@@ -343,11 +346,11 @@ public final class ShellUpdatesActivity extends Activity {
     private void confirmGenerationRetry() {
         if(!RecoveryActions.canOfferGenerationRetry(lastLifecycle)) return;
         ExpectedArchive captured=lastLifecycle.active;
-        new AlertDialog.Builder(this).setTitle("Retry failed app version?")
-            .setMessage("Retry version "+captured.payloadVersion+" the next time the app starts? It previously failed to start and may fail again. This does not restore older app data.")
-            .setNegativeButton("Cancel",null).setPositiveButton("Retry version",(dialog,which)->controller.retryQuarantinedAfterConfirmation(captured)).show();
+        new AlertDialog.Builder(this).setTitle(tr("Retry failed app version?"))
+            .setMessage(tr("Retry version %1$s the next time the app starts? It previously failed to start and may fail again. This does not restore older app data.",captured.payloadVersion))
+            .setNegativeButton(tr("Cancel"),null).setPositiveButton(tr("Retry version"),(dialog,which)->controller.retryQuarantinedAfterConfirmation(captured)).show();
     }
-    private static String identity(ExpectedArchive release) {
-        return release==null ? "None" : release.releaseId+" (version "+release.payloadVersion+")";
+    private String identity(ExpectedArchive release) {
+        return release==null ? tr("None") : tr("%1$s (version %2$s)",release.releaseId,release.payloadVersion);
     }
 }

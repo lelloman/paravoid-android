@@ -15,6 +15,16 @@ these entries into a dated version section and document its exact upgrade path.
 
 ### Added
 
+- Shell UI is available in Italian: crash recovery, update controls, update prompts and
+  notifications, the controls shortcut and the restart page follow the device language,
+  falling back to English. The generated restart strings gain a `values-it` translation,
+  which changes the shell's pinned resources, so it ships with the next shell APK.
+- `paravoid { crashRecovery { actionsClass = '...' } }` adds app buttons, such as "Report
+  bug", to the crash recovery screen. The class implements the new
+  `RecoveryActionProvider` from `paravoid-recovery-api`, is packaged through
+  `paravoidRecoveryImplementation` like a custom recovery provider, and can show a
+  message, open a URI (`mailto:` or a web form) or share text. It works with the default
+  updater and requires a new shell APK. See [crash recovery](docs/crash-recovery.md).
 - The shell restart screen is now a full-screen page with the app icon, progress and
   inline buttons that follows light/dark mode, replacing the blank page with a dialog.
   `paravoid { updates { restartTheme = '@style/...' } }` selects an app theme inheriting

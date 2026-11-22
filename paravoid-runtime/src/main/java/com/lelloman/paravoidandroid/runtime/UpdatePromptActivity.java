@@ -10,10 +10,10 @@ public final class UpdatePromptActivity extends Activity {
         super.onCreate(state);
         ExpectedArchive offer=UpdateWire.offer(getIntent().getBundleExtra("offer"));
         if(offer==null) { finish(); return; }
-        new AlertDialog.Builder(this).setTitle("Update available")
-            .setMessage("Install version "+offer.payloadVersion+"? It will be used the next time the app starts.")
-            .setPositiveButton("Install",(dialog,which)-> { UpdateRuntime.engine(this).thenAccept(engine->engine.updateNow(offer)); finish(); })
-            .setNegativeButton("Not now",(dialog,which)-> { UpdateRuntime.engine(this).thenAccept(engine->engine.dismiss(offer)); finish(); })
+        new AlertDialog.Builder(this).setTitle(ShellText.tr(this,"Update available"))
+            .setMessage(ShellText.tr(this,"Install version %1$s? It will be used the next time the app starts.",offer.payloadVersion))
+            .setPositiveButton(ShellText.tr(this,"Install"),(dialog,which)-> { UpdateRuntime.engine(this).thenAccept(engine->engine.updateNow(offer)); finish(); })
+            .setNegativeButton(ShellText.tr(this,"Not now"),(dialog,which)-> { UpdateRuntime.engine(this).thenAccept(engine->engine.dismiss(offer)); finish(); })
             .setOnCancelListener(dialog->finish()).show();
     }
 }

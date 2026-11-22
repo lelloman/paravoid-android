@@ -33,6 +33,7 @@ abstract class PackageApplicationTask extends DefaultTask {
     @Optional @OutputFile abstract RegularFileProperty getConsumerRulesFile()
     @Classpath abstract ConfigurableFileCollection getRecoveryJars()
     @Input abstract Property<String> getRecoveryProvider()
+    @Input abstract Property<String> getRecoveryActions()
     @Classpath abstract ConfigurableFileCollection getUpdateJars()
     @Input abstract org.gradle.api.provider.ListProperty<String> getPushComponents()
     @Input abstract org.gradle.api.provider.MapProperty<String,String> getUpdateProviders()
@@ -42,7 +43,7 @@ abstract class PackageApplicationTask extends DefaultTask {
     @Optional @OutputFile abstract RegularFileProperty getMappingFile()
     @Inject abstract ExecOperations getExecOperations()
 
-    PackageApplicationTask() { payloadTransformers.convention([]); minifyPayload.convention(false); recoveryProvider.convention(''); pushComponents.convention([]); updateProviders.convention([:]) }
+    PackageApplicationTask() { payloadTransformers.convention([]); minifyPayload.convention(false); recoveryProvider.convention(''); recoveryActions.convention(''); pushComponents.convention([]); updateProviders.convention([:]) }
 
     @TaskAction void pack() {
         Properties info = new Properties()
@@ -85,6 +86,8 @@ abstract class PackageApplicationTask extends DefaultTask {
         payloadTransformers.get().each { it.transform(classes) }
         if (!recoveryNames.empty || recoveryProvider.get())
             RecoveryPackaging.validate(recoveryNames, classes, androidJar.get().asFile, recoveryProvider.get())
+        if (recoveryActions.get())
+            RecoveryPackaging.validate(recoveryNames, classes, androidJar.get().asFile, recoveryActions.get(), RecoveryPackaging.ACTIONS_API)
         pushComponents.get().each { name ->
             if(!updateNames.contains(name.replace('.','/'))) throw new GradleException('Push component must be packaged in paravoidUpdateImplementation: '+name)
         }

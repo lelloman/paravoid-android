@@ -6,6 +6,7 @@ import org.objectweb.asm.commons.*
 import java.util.zip.ZipFile
 
 final class RecoveryPackaging {
+    static final String ACTIONS_API = 'com/lelloman/paravoidandroid/recovery/RecoveryActionProvider'
     static Set<String> collect(Collection<File> jars, Map<String, byte[]> classes) {
         Set<String> names = new TreeSet<>()
         jars.each { file ->
@@ -34,7 +35,7 @@ final class RecoveryPackaging {
     }
     static void validate(Set<String> names, Map<String, byte[]> classes, File androidJar, String provider, String api) {
         if (provider && !names.contains(provider.replace('.', '/')))
-            throw new GradleException('Recovery provider must be supplied by paravoidRecoveryImplementation: ' + provider)
+            throw new GradleException((api == ACTIONS_API ? 'Recovery actions class' : 'Recovery provider') + ' must be supplied by paravoidRecoveryImplementation: ' + provider)
         Set<String> allowed = new HashSet<>(names)
         // D8 lowers these Java compiler bootstrap methods to Android-compatible bytecode.
         allowed.addAll(['java/lang/invoke/StringConcatFactory', 'java/lang/invoke/LambdaMetafactory'])

@@ -13,11 +13,11 @@ final class UpdatePrompts implements DeliveryController.Listener {
     public void changed(DeliveryController.Snapshot snapshot) {
         NotificationManager manager=context.getSystemService(NotificationManager.class);
         if(!snapshot.promptRequired) { manager.cancel(ID); return; }
-        manager.createNotificationChannel(new NotificationChannel(CHANNEL,"App updates",NotificationManager.IMPORTANCE_DEFAULT));
+        manager.createNotificationChannel(new NotificationChannel(CHANNEL,ShellText.tr(context,"App updates"),NotificationManager.IMPORTANCE_DEFAULT));
         Intent intent=new Intent(context,UpdatePromptActivity.class).putExtra("offer",UpdateWire.offer(snapshot.available));
         PendingIntent action=PendingIntent.getActivity(context,ID,intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Notification notification=new Notification.Builder(context,CHANNEL).setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setContentTitle("Update available").setContentText("Install version "+snapshot.available.payloadVersion+"?")
+            .setContentTitle(ShellText.tr(context,"Update available")).setContentText(ShellText.tr(context,"Install version %1$s?",snapshot.available.payloadVersion))
             .setContentIntent(action).setAutoCancel(true).build();
         try { manager.notify(ID,notification); } catch(SecurityException permissionUnavailable) { /* Offer remains visible through update controls. */ }
     }
