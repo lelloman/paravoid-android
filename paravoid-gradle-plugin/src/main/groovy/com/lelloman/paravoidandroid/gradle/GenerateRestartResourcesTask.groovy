@@ -12,7 +12,7 @@ import org.gradle.api.tasks.TaskAction
  */
 @CacheableTask
 abstract class GenerateRestartResourcesTask extends DefaultTask {
-    static final List<String> FILES = ['values/paravoid_restart.xml', 'values-night/paravoid_restart.xml']
+    static final List<String> FILES = ['values/paravoid_restart.xml', 'values-it/paravoid_restart.xml', 'values-night/paravoid_restart.xml']
     @OutputDirectory abstract DirectoryProperty getOutputDirectory()
 
     @TaskAction void generate() {

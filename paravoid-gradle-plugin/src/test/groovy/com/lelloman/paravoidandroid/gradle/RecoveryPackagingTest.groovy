@@ -10,10 +10,10 @@ import static org.junit.Assert.*
 
 class RecoveryPackagingTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder()
-    static byte[] provider(boolean publicConstructor=true, String reference=null) {
+    static byte[] provider(boolean publicConstructor=true, String reference=null,
+            String name='example/Provider', String api='com/lelloman/paravoidandroid/recovery/RecoveryUpdateProvider') {
         def writer=new ClassWriter(0)
-        writer.visit(Opcodes.V11,Opcodes.ACC_PUBLIC,'example/Provider',null,'java/lang/Object',
-            ['com/lelloman/paravoidandroid/recovery/RecoveryUpdateProvider'] as String[])
+        writer.visit(Opcodes.V11,Opcodes.ACC_PUBLIC,name,null,'java/lang/Object',[api] as String[])
         writer.visitMethod(publicConstructor ? Opcodes.ACC_PUBLIC : Opcodes.ACC_PRIVATE,'<init>','()V',null,null).visitEnd()
         if(reference) writer.visitField(Opcodes.ACC_PUBLIC,'dependency','L'+reference+';',null,null).visitEnd()
         writer.visitEnd(); writer.toByteArray()
@@ -38,6 +38,15 @@ class RecoveryPackagingTest {
         classes['example/Provider.class']=provider(false)
         fails('public no-argument') { RecoveryPackaging.validate(names,classes,android,'example.Provider') }
         fails('must be supplied') { RecoveryPackaging.validate(names,classes,android,'example.Missing') }
+    }
+    @Test void validatesRecoveryActionsAgainstTheirOwnApi() {
+        File android=jar(['java/lang/Object.class':new byte[0]])
+        def classes=['com/lelloman/paravoidandroid/recovery/RecoveryActionProvider.class':new byte[0]]
+        def names=RecoveryPackaging.collect([jar(['example/Actions.class':provider(true,null,'example/Actions',RecoveryPackaging.ACTIONS_API),
+            'example/Plain.class':provider(true,null,'example/Plain','java/lang/Object')])],classes)
+        RecoveryPackaging.validate(names,classes,android,'example.Actions',RecoveryPackaging.ACTIONS_API)
+        fails('must implement RecoveryActionProvider') { RecoveryPackaging.validate(names,classes,android,'example.Plain',RecoveryPackaging.ACTIONS_API) }
+        fails('Recovery actions class must be supplied') { RecoveryPackaging.validate(names,classes,android,'example.Missing',RecoveryPackaging.ACTIONS_API) }
     }
     @Test void rejectsResourcesAndConflictingClasses() {
         fails('runtime resources') { RecoveryPackaging.collect([jar(['lib/x86_64/libnative.so':new byte[0]])],[:]) }

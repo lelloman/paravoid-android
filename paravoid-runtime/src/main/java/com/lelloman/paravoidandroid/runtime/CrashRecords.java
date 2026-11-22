@@ -65,8 +65,12 @@ final class CrashRecords {
         return false;
     }
     String details() {
-        try { List<Path> all=records(); return all.isEmpty() ? "No crash report recorded." : read(all.get(all.size()-1)); }
+        try { String latest=latest(); return latest==null ? "No crash report recorded." : latest; }
         catch (IOException error) { return "Crash details could not be read."; }
+    }
+    /** The newest record's text, or null when there is none. */
+    String latest() throws IOException {
+        List<Path> all=records(); return all.isEmpty() ? null : read(all.get(all.size()-1));
     }
     /**
      * A different payload started healthy: records about other payloads (for example one written

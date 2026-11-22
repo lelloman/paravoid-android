@@ -25,7 +25,7 @@ public final class LauncherActivity extends Activity {
                 return;
             }
             TextView error = new TextView(this);
-            error.setText("Unable to initialize application: " + failure.getMessage());
+            error.setText(ShellText.tr(this, "Unable to initialize application: %1$s", failure.getMessage()));
             setContentView(error);
         }
     }

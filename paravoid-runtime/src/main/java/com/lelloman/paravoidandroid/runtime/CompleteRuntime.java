@@ -67,7 +67,7 @@ final class CompleteRuntime {
         if (shellOnly) {
             ShellUpdatesActivity.installController(controller);
             if (CrashRecovery.instance != null) {
-                CrashRecovery.instance.coordinator = new RecoveryCoordinator(controller, CrashRecovery.instance.records);
+                CrashRecovery.instance.coordinator = new RecoveryCoordinator(app, controller, CrashRecovery.instance.records);
             }
             ShellUpdatesActivity.installRestartAction(result -> ShellRestart.restart(app, result));
             ShellUpdatesActivity.installAutoRestartDefault("automatic".equals(policy.updates.get("restartBehavior")));

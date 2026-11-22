@@ -110,6 +110,19 @@ class ApplicationManifestTest {
         assertTrue(task.payloadMetadata.get().asFile.text.contains('complete=true'))
     }
 
+    @Test void recoveryActionsMetadataIsAddedOnlyWhenConfigured() {
+        def plain = fixture(''); plain.complete.set(true); plain.crashRecoveryEnabled.set(true); plain.rewrite()
+        String output = plain.outputManifest.get().asFile.text
+        assertTrue(output.contains('paravoid.crashRecovery'))
+        assertFalse(output.contains('paravoid.recoveryActions'))
+        def task = fixture(''); task.complete.set(true); task.crashRecoveryEnabled.set(true)
+        task.recoveryActions.set('example.recovery.BugReport'); task.rewrite()
+        def factory = javax.xml.parsers.DocumentBuilderFactory.newInstance(); factory.namespaceAware = true
+        def doc = factory.newDocumentBuilder().parse(task.outputManifest.get().asFile)
+        def meta = doc.getElementsByTagName('meta-data').find { it.getAttributeNS(ApplicationManifestTask.ANDROID,'name') == 'paravoid.recoveryActions' }
+        assertEquals('example.recovery.BugReport', meta.getAttributeNS(ApplicationManifestTask.ANDROID,'value'))
+    }
+
     @Test void completeProfileRejectsReservedMetadataAndProcess() {
         [ '<meta-data android:name="paravoid.complete" android:value="false" />',
           '<service android:name="example.Work" android:process=":paravoid_recovery" />'].each { source ->

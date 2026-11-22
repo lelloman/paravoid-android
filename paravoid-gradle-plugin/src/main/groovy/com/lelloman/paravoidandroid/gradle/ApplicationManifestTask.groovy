@@ -28,8 +28,9 @@ abstract class ApplicationManifestTask extends DefaultTask {
     @Input abstract org.gradle.api.provider.ListProperty<String> getBusyReportStores()
     @Input abstract Property<Boolean> getCrashRecoveryEnabled()
     @Input abstract Property<String> getRecoveryProvider()
+    @Input abstract Property<String> getRecoveryActions()
     @Input abstract Property<String> getRestartTheme()
-    ApplicationManifestTask() { localTriggerPackages.convention([]); pushBackgroundConnection.convention(false); pushComponents.convention([]); pushEnabled.convention(false); updatesEnabled.convention(false); complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false); busyReportStores.convention([]); crashRecoveryEnabled.convention(false); recoveryProvider.convention(''); restartTheme.convention('@style/Theme.Paravoid.Restart') }
+    ApplicationManifestTask() { localTriggerPackages.convention([]); pushBackgroundConnection.convention(false); pushComponents.convention([]); pushEnabled.convention(false); updatesEnabled.convention(false); complete.convention(false); debugHttpAllowed.convention(false); controlsLauncher.convention(false); busyReportStores.convention([]); crashRecoveryEnabled.convention(false); recoveryProvider.convention(''); recoveryActions.convention(''); restartTheme.convention('@style/Theme.Paravoid.Restart') }
 
     @TaskAction void rewrite() {
         def factory = DocumentBuilderFactory.newInstance()
@@ -241,7 +242,10 @@ abstract class ApplicationManifestTask extends DefaultTask {
                 crash.setAttributeNS(ANDROID, 'android:exported', 'false')
                 crash.setAttributeNS(ANDROID, 'android:theme', '@android:style/Theme.Material.Light.NoActionBar')
                 app.appendChild(crash)
-                ['paravoid.crashRecovery': 'true', 'paravoid.recoveryProvider': recoveryProvider.get()].each { key, value ->
+                def recoveryMetadata = ['paravoid.crashRecovery': 'true', 'paravoid.recoveryProvider': recoveryProvider.get()]
+                // Only shells using recovery actions gain this entry; other installed manifests stay unchanged.
+                if (recoveryActions.get()) recoveryMetadata['paravoid.recoveryActions'] = recoveryActions.get()
+                recoveryMetadata.each { key, value ->
                     def meta = document.createElement('meta-data')
                     meta.setAttributeNS(ANDROID, 'android:name', key); meta.setAttributeNS(ANDROID, 'android:value', value)
                     app.appendChild(meta)

@@ -63,7 +63,9 @@ when no repair is pending; it does not roll back or clear application data. Anot
 failure creates a new record and returns to recovery.
 
 The screen offers crash details with Copy, Check again, Update, Cancel, Restart or
-Retry app, and Close. Leaving it cancels cancellable network work. Activity
+Retry app, and Close, plus any [app actions](#app-actions-such-as-report-bug).
+Shell screens, notifications and the restart page are shown in English or Italian,
+following the device language; crash records themselves stay in English. Leaving it cancels cancellable network work. Activity
 recreation attaches to the existing operation. Verification/staging is a short,
 non-cancellable boundary. An already staged update remains restartable offline.
 
@@ -177,6 +179,67 @@ Enabling/disabling recovery, changing the provider or any of its dependencies,
 and changing installed update policy require a **new shell APK**. Subsequent
 compatible payload repairs can be distributed as VPKs. A currently installed
 shell without this feature cannot acquire it through a payload update.
+
+## App actions, such as "Report bug"
+
+An app can add its own buttons to the recovery screen. They run in the payload-free
+recovery process, so they keep working when the app crashes on startup. Package a
+`RecoveryActionProvider` in a code-only module exactly like a custom updater (see the
+provider requirements above), then select it:
+
+```groovy
+dependencies {
+    paravoidRecoveryImplementation project(':recovery-actions')
+}
+paravoid {
+    packaging = 'complete'
+    crashRecovery {
+        enabled = true
+        actionsClass = 'example.recovery.BugReportActions'
+        // updater may stay 'default'; actions do not require a custom updater.
+    }
+}
+```
+
+```java
+public final class BugReportActions implements RecoveryActionProvider {
+    public BugReportActions() {}
+
+    @Override public List<RecoveryAction> actions(RecoveryReport report) {
+        if (!report.crashed) return Collections.emptyList();
+        boolean it = "it".equals(report.locale.getLanguage());
+        return Collections.singletonList(new RecoveryAction("report",
+            it ? "Segnala un bug" : "Report bug",
+            it ? "Invia i dettagli dell'arresto anomalo agli sviluppatori?"
+               : "Send the crash details to the developers?"));
+    }
+
+    @Override public RecoveryActionResult perform(String id, RecoveryReport report,
+            Cancellation cancel) throws Exception {
+        // Either upload it yourself (bounded timeouts, honour cancel) and return
+        // RecoveryActionResult.message("Thanks!"), or hand it to another app:
+        return RecoveryActionResult.openUri("mailto:bugs@example.com?subject="
+            + URLEncoder.encode("Crash in " + report.shellVersion, "UTF-8")
+            + "&body=" + URLEncoder.encode(report.crashDetails, "UTF-8"));
+    }
+}
+```
+
+- `actions(report)` runs on the main thread each time the screen opens: return quickly,
+  without I/O. Labels are shown as given; use `report.locale` to pick a language and
+  `report.crashed` to hide actions when the screen was opened from update controls.
+- A non-null `confirmation` makes the shell ask the user before performing the action.
+  Crash details may contain app data from exception messages: confirm before sending them.
+- `perform` runs on a worker thread; one action runs at a time and leaving the screen
+  cancels it. Results: `none()`, `message(text)`, `openUri(uri)` (`mailto:` uses
+  `ACTION_SENDTO`, other schemes `ACTION_VIEW`) or `shareText(subject, text)`. A thrown
+  exception shows a generic retryable error; a provider that fails to load or list its
+  actions shows no buttons and never blocks recovery.
+- `report.privateDirectory` is a private, non-backed-up directory for the provider, for
+  example to queue reports while offline.
+
+Adding, removing or changing the actions class or its dependencies requires a new shell
+APK, like the recovery provider.
 
 ## Validation
 

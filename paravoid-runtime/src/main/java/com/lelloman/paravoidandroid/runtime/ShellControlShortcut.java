@@ -16,8 +16,8 @@ final class ShellControlShortcut {
             ShortcutManager shortcuts = app.getSystemService(ShortcutManager.class);
             if (shortcuts == null) return;
             ShortcutInfo shortcut = new ShortcutInfo.Builder(app, ID)
-                .setShortLabel("App updates")
-                .setLongLabel("Paravoid app updates")
+                .setShortLabel(ShellText.tr(app, "App updates"))
+                .setLongLabel(ShellText.tr(app, "Paravoid app updates"))
                 .setIcon(Icon.createWithResource(app, android.R.drawable.ic_menu_manage))
                 .setActivity(new ComponentName(app, LauncherActivity.class))
                 .setIntent(new Intent(Intent.ACTION_VIEW)

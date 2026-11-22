@@ -14,7 +14,7 @@ final class CrashRecovery {
     final CrashRecords records;
     final boolean recoveryProcess;
     final String providerClass;
-    final String shellDescription;
+    final String shellDescription, shellVersion;
     volatile RecoveryCoordinator coordinator;
     volatile CompleteRuntime runtime;
     private volatile String identity="unknown";
@@ -28,6 +28,7 @@ final class CrashRecovery {
             version=info.versionName+" ("+info.getLongVersionCode()+")";
             installed=info.lastUpdateTime;
         } catch (android.content.pm.PackageManager.NameNotFoundException ignored) { }
+        shellVersion=version;
         shellDescription="App: "+app.getPackageName()+"\nShell: "+version;
         records=new CrashRecords(new File(app.getNoBackupFilesDir(),"paravoid-crash-recovery"));
         // Installing a shell APK is itself the repair attempt: records written before it describe the
