@@ -313,6 +313,14 @@ the built-in WebSocket sends the installed bearer only to the configured deliver
 (same HTTPS/WSS host and path prefix). Redirects are not followed. Credentials never go
 in event bodies, query strings or logs.
 
+The built-in WebSocket ignores response headers it does not validate, so proxies may repeat
+`Server`, `Alt-Svc` or `Via`; the validated WebSocket headers must appear once. Failed
+connections retry after 1, 2, 4 … up to 60 seconds; a connection that stays up 30 seconds
+resets the delay. Each distinct failure reason is logged once (tag `ParavoidAndroid`) until
+a connection stays up again: the exception type, plus for the built-in transport its I/O
+reason (a fixed text, the HTTP status code or a socket error such as an unknown host name).
+Adapter and authentication exception messages are not logged.
+
 ## Store-neutral wire protocol
 
 WebSocket subprotocol: `paravoid.updates.v1`. The shell sends one UTF-8 JSON subscription:

@@ -3,6 +3,7 @@ package com.lelloman.paravoidandroid.runtime;
 import com.lelloman.paravoidandroid.delivery.*;
 import com.lelloman.paravoidandroid.updates.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.*;
 import java.io.IOException;
 
@@ -18,24 +19,38 @@ final class PushConnection {
     }
     void start() {
         Thread thread=new Thread(()-> {
-            long delay=1000;
+            PushRetry retry=new PushRetry();
+            // Built-in transport failures carry fixed texts, HTTP status codes or JDK socket errors; app adapters may not.
+            boolean trustedMessages=transport instanceof WebSocketPushTransport;
             while(!signal.cancelled) {
+                AtomicReference<Long> connectedAt=new AtomicReference<>();
+                String phase="authentication";
                 try {
                     Map<String,String> headers=authentication==null ? request.headers : authentication.headers(request);
                     PushRequest authenticated=new PushRequest(request.applicationId,request.shellContractId,request.channel,
                         request.endpoint,request.privateDirectory,headers);
+                    phase="connection";
                     transport.run(authenticated,new PushTransport.Listener() {
                         public void received(byte[] event) { engine.pushEvent(event); }
-                        public void connected() { }
+                        public void connected() { connectedAt.compareAndSet(null,System.nanoTime()); }
                     },signal);
-                } catch(Exception | LinkageError failure) { /* Retry without logging credentials or server data. */ }
+                    retry.finished(connectedMillis(connectedAt));
+                } catch(Exception | LinkageError failure) {
+                    retry.finished(connectedMillis(connectedAt));
+                    // Retry without logging credentials or server data: type, phase and trusted fixed texts only.
+                    String line=signal.cancelled ? null : retry.report(phase,failure,trustedMessages && "connection".equals(phase));
+                    if(line!=null) android.util.Log.w("ParavoidAndroid",line);
+                }
+                long delay=retry.nextDelay();
                 synchronized(signal) {
                     if(signal.cancelled) break;
                     try { signal.wait(delay); } catch(InterruptedException interrupted) { Thread.currentThread().interrupt(); break; }
                 }
-                delay=Math.min(60000,delay*2);
             }
         },"paravoid-push"); thread.setDaemon(true); thread.start();
+    }
+    private static long connectedMillis(AtomicReference<Long> connectedAt) {
+        Long start=connectedAt.get(); return start==null ? -1 : TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-start);
     }
     void stop() { signal.cancel(); }
     private static final class Signal implements Cancellation {

@@ -66,19 +66,31 @@ public final class WebSocketPushTransport implements PushTransport {
             previous=(previous<<8)|b; if(previous==0x0d0a0d0a) break;
         }
         if(previous!=0x0d0a0d0a) throw new IOException("Push headers too large");
-        String[] lines=response.toString("US-ASCII").split("\r\n");
-        if(!lines[0].matches("HTTP/1\\.[01] 101(?: .*)?")) throw new IOException("Push handshake rejected");
+        validateResponse(response.toString("US-ASCII"),key);
+    }
+    /** Validated response headers; each must appear at most once. Others, such as Server or Alt-Svc repeated by chained proxies, are ignored. */
+    private static final List<String> SINGLE=Arrays.asList("sec-websocket-accept","upgrade","sec-websocket-protocol","sec-websocket-extensions");
+    private static final java.util.regex.Pattern STATUS=java.util.regex.Pattern.compile("HTTP/1\\.[01] (\\d{3})(?: .*)?");
+    /** Checks a response head ending in CRLFCRLF. Failure messages name headers and the status code, never values. */
+    static void validateResponse(String head,String key) throws Exception {
+        String[] lines=head.split("\r\n");
+        java.util.regex.Matcher status=STATUS.matcher(lines[0]);
+        if(!status.matches()) throw new IOException("Invalid push handshake status");
+        if(!"101".equals(status.group(1))) throw new IOException("Push handshake rejected (HTTP "+status.group(1)+")");
         Map<String,String> received=new HashMap<>();
+        List<String> connection=new ArrayList<>();
         for(int i=1;i<lines.length;i++) {
             int colon=lines[i].indexOf(':'); if(colon<1) throw new IOException("Invalid push handshake");
-            String name=lines[i].substring(0,colon).toLowerCase(Locale.ROOT);
-            if(received.put(name,lines[i].substring(colon+1).trim())!=null) throw new IOException("Duplicate push header");
+            String name=lines[i].substring(0,colon).toLowerCase(Locale.ROOT),value=lines[i].substring(colon+1).trim();
+            // Connection is a token list (RFC 6455 4.1, RFC 9110 5.3): repeated fields combine.
+            if("connection".equals(name)) connection.addAll(Arrays.asList(value.toLowerCase(Locale.ROOT).split("\\s*,\\s*")));
+            else if(SINGLE.contains(name) && received.put(name,value)!=null) throw new IOException("Duplicate push header "+name);
         }
         String expected=Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-1").digest((key+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").getBytes(StandardCharsets.US_ASCII)));
-        if(!expected.equals(received.get("sec-websocket-accept")) || !"websocket".equalsIgnoreCase(received.get("upgrade"))
-            || !Arrays.asList(received.getOrDefault("connection","").toLowerCase(Locale.ROOT).split("\\s*,\\s*")).contains("upgrade")
-            || !"paravoid.updates.v1".equals(received.get("sec-websocket-protocol")) || received.containsKey("sec-websocket-extensions"))
-            throw new IOException("Invalid push handshake");
+        if(!expected.equals(received.get("sec-websocket-accept"))) throw new IOException("Invalid push handshake accept");
+        if(!"websocket".equalsIgnoreCase(received.get("upgrade")) || !connection.contains("upgrade")) throw new IOException("Invalid push handshake upgrade");
+        if(!"paravoid.updates.v1".equals(received.get("sec-websocket-protocol")) || received.containsKey("sec-websocket-extensions"))
+            throw new IOException("Invalid push handshake protocol");
     }
     static void receive(InputStream input,OutputStream output,Listener listener,Cancellation cancellation) throws Exception {
         ByteArrayOutputStream message=null;

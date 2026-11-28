@@ -86,6 +86,16 @@ these entries into a dated version section and document its exact upgrade path.
 
 ### Fixed
 
+- Built-in WebSocket push now connects through chained reverse proxies. The handshake
+  rejected any repeated response header, so a server behind two proxies that each add
+  `Server` or `Alt-Svc` never received the subscription. Unvalidated headers may now
+  repeat; a repeated `Sec-WebSocket-Accept`, `Upgrade`, `Sec-WebSocket-Protocol` or
+  `Sec-WebSocket-Extensions` is still rejected, and repeated `Connection` fields combine
+  as one token list. Push reconnect backoff now returns to one second after a connection
+  stays up 30 seconds instead of staying at 60 seconds for the process lifetime, and push
+  connection failures are logged once per distinct reason under the `ParavoidAndroid` tag
+  (exception type and a short reason, never headers, endpoint paths, credentials or server
+  data). These are shell runtime changes, so they ship with the next shell APK.
 - A downloaded payload on its first-run trial is no longer quarantined because its
   app process was killed during startup (a swipe, a force stop, an OEM task killer,
   low memory). The runtime records each trial start's process and, at the next cold
