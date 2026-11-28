@@ -56,6 +56,14 @@ public final class DeliveryClientTest {
         public GenerationLease acquireForProcess() { throw new AssertionError("delivery must never select or execute"); }
         public void retryQuarantined(ExpectedArchive release) { throw new AssertionError("not a download action"); }
         public void setRetainedPrevious(int count) { throw new AssertionError("not used"); }
+        ExpectedArchive relaunched;
+        ContractException.Code relaunchFailure;
+        int holdsCleared;
+        public void relaunchRetained(ExpectedArchive release) throws ContractException {
+            if (relaunchFailure != null) throw new ContractException(relaunchFailure, "Injected relaunch refusal");
+            relaunched = release;
+        }
+        public void clearRollbackHold() { holdsCleared++; }
     }
     static final class Setup implements AutoCloseable {
         final Fixture f = new Fixture();
@@ -271,6 +279,20 @@ public final class DeliveryClientTest {
             check(s.life.observations == 1); // Head observation (replay knowledge) still happened.
         }
         check(!DeliveryClient.offerable(null, null) && DeliveryClient.offerable(older, null));
+        // A rollback hold: nothing at or below the version the user left is offered or downloaded,
+        // even explicitly; a strictly higher version is. The head is still observed.
+        for (long held : new long[] {1, 2, 0}) try (Setup s = new Setup(false)) {
+            boolean offered = s.metadata.archive.payloadVersion > held;
+            ExpectedArchive left = new ExpectedArchive("left", held, "e".repeat(64), "f".repeat(64), 1);
+            s.life.fixed = new LifecycleSnapshot(Availability.RUNNABLE, older, null, older, false, 1, 0, null,
+                Collections.emptyList(), left, false);
+            check(DeliveryClient.offerable(s.metadata.archive, s.life.fixed) == offered);
+            s.head();
+            if (offered) s.f.responses.add(new Fake(200, ARCHIVE));
+            DeliveryClient.Result result = s.client.check(s.scope, true, true);
+            check(offered ? result.stage != null : result.available == null && result.stage == null);
+            check(s.life.stages == (offered ? 1 : 0) && s.f.responses.isEmpty() && s.life.observations == 1);
+        }
         System.out.println("DeliveryClientTest: " + TransportTest.assertions + " assertions passed");
     }
 }

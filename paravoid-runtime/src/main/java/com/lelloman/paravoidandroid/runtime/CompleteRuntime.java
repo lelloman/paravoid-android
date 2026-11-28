@@ -153,7 +153,10 @@ final class CompleteRuntime {
         if (shellOnly) throw new IllegalStateException("Recovery process cannot load payload code");
         LifecycleSnapshot state = lifecycle.snapshot();
         if (CrashRecovery.instance != null) {
-            CrashRecovery.instance.identity(policy.shellContractId, state.active);
+            // A user-confirmed relaunch of another retained version (for example back to the newer
+            // one after the relaunched version crashed) starts that version: a crash recorded for
+            // the current one must not hold it in recovery.
+            CrashRecovery.instance.identity(policy.shellContractId, state.relaunchPending ? state.pending : state.active);
             if (CrashRecovery.instance.blocked()) throw new CrashRecovery.Required();
         }
         if (policy.bootstrap == Bootstrap.EMBEDDED && state.active == null && state.pending == null) {

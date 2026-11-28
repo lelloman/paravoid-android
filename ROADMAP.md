@@ -219,7 +219,9 @@ controls and their defaults; visual design may follow during implementation:
 - Current payload identity and compatibility/diagnostic information.
 - Older-package retention, storage limits and cleanup.
 - Forward repair, explicit retry and actionable recovery status. Retained versions
-  are not a generic rollback feature; v1 never infers persistent-data compatibility.
+  can be relaunched only by an explicit, warned user choice with a rollback hold
+  against automatic reinstall (V1.md); there is no automatic rollback and v1 never
+  infers persistent-data compatibility.
 
 **Exit:** users can understand and control package management without downstream
 apps implementing the shell's management UI. Cleanup cannot remove versions still

@@ -55,6 +55,19 @@ final class SelectionJournal {
         String cause = "", exits = "";
         final List<Generation> history = new ArrayList<>();
         final Set<String> rejected = new LinkedHashSet<>();
+        // Version 4: the newest generation a manual relaunch left (the rollback hold), whether the
+        // pending generation is such a relaunch, and per-directory facts for the retained list.
+        Generation hold;
+        boolean manual;
+        final Map<String, Meta> meta = new TreeMap<>();
+    }
+    /** What is known about a stored generation: the contract it was verified for, its last first frame. */
+    private static final class Meta {
+        String contract = ""; // "" when not recorded
+        long healthy; // Unix seconds, 0 when not recorded
+    }
+    private static Meta meta(State s, Generation generation) {
+        return s.meta.computeIfAbsent(generation.directory, directory -> new Meta());
     }
     private final Path root;
     private final AtomicRecord record;
@@ -80,7 +93,9 @@ final class SelectionJournal {
         catch (IOException e) { throw fail(Code.IO); }
     }
 
-    StageResult pending(Generation generation) throws ContractException {
+    StageResult pending(Generation generation) throws ContractException { return pending(generation, ""); }
+    /** {@code contract}: the shell contract the generation was verified for ("" when unknown). */
+    StageResult pending(Generation generation, String contract) throws ContractException {
         State s = read();
         boolean byteRepair = s.selected != null && s.selected.identity.equals(generation.identity)
             && s.quarantined && s.failure == Code.INTEGRITY;
@@ -88,10 +103,17 @@ final class SelectionJournal {
             return new StageResult(StageStatus.ALREADY_SELECTED, generation.identity);
         if (s.pending != null && s.pending.identity.equals(generation.identity))
             return new StageResult(StageStatus.ALREADY_PENDING, generation.identity);
+        // A confirmed relaunch waits for its cold start; a delivery retries later instead of replacing it.
+        if (s.manual) throw fail(Code.UNAVAILABLE);
         // Defense in depth. Durable admission is responsible for lineage-wide floors.
         if (!byteRepair && s.selected != null && generation.identity.payloadVersion <= s.selected.identity.payloadVersion)
             throw fail(Code.REPLAY);
+        // The rollback hold: nothing up to the version the user left is installed again (delivery
+        // does not offer it either). Not REPLAY: replay floors are unchanged by a relaunch.
+        if (!byteRepair && s.hold != null && generation.identity.payloadVersion <= s.hold.identity.payloadVersion)
+            throw fail(Code.UNAVAILABLE);
         s.pending = generation;
+        if (contract != null && !contract.isEmpty()) meta(s, generation).contract = contract;
         write(s);
         return new StageResult(StageStatus.PENDING, generation.identity);
     }
@@ -111,7 +133,8 @@ final class SelectionJournal {
     void rejectPending(Generation generation) throws ContractException {
         State s = read();
         if (s.pending != null && same(s.pending, generation)) {
-            s.rejected.add(generation.directory); s.pending = null;
+            s.rejected.add(generation.directory); s.pending = null; s.manual = false;
+            settleHold(s);
             while (s.rejected.size() > 64) s.rejected.remove(s.rejected.iterator().next());
             write(s);
         }
@@ -143,8 +166,9 @@ final class SelectionJournal {
                 // No selected process remains, so the next higher candidate can replace even quarantine.
                 Generation candidate = s.pending;
                 if (!ProcessLocks.ifUnleased(lease(candidate), () -> null)) throw fail(Code.UNAVAILABLE);
-                s.selected = candidate; s.pending = null; s.trial = true; s.quarantined = false;
+                s.selected = candidate; s.pending = null; s.manual = false; s.trial = true; s.quarantined = false;
                 s.failure = Code.UNAVAILABLE; s.cause = ""; s.exits = ""; resetAttempts(s);
+                settleHold(s);
             }
             if (s.selected == null || s.quarantined) throw fail(Code.UNAVAILABLE);
             if (s.trial) {
@@ -173,13 +197,19 @@ final class SelectionJournal {
         if (s.quarantined) return; // A later success cannot undo another process's caught failure.
         resetAttempts(s); write(s);
     }
-    void healthy(Generation generation) throws ContractException {
+    void healthy(Generation generation) throws ContractException { healthy(generation, 0); }
+    /** {@code seconds}: wall time of this first frame, shown in the retained list (0 when unknown). */
+    void healthy(Generation generation, long seconds) throws ContractException {
         State s = forHandle(generation);
         if (s.quarantined) return;
         // Caller must establish main-process onCreate + resumed Activity first-frame ordering.
         if (s.healthy != null && !s.healthy.identity.equals(generation.identity)) s.history.add(0, s.healthy);
         s.healthy = generation; s.trial = false; resetAttempts(s); s.exits = "";
+        // A relaunched generation may already be in the history: keep each generation once.
+        Set<String> seen = new HashSet<>(Collections.singleton(generation.directory));
+        s.history.removeIf(previous -> !seen.add(previous.directory));
         while (s.history.size() > 3) s.history.remove(s.history.size() - 1);
+        if (seconds > 0) meta(s, generation).healthy = seconds;
         write(s);
     }
     void failed(Generation generation) throws ContractException {
@@ -253,15 +283,87 @@ final class SelectionJournal {
         State s = read(); Set<String> result = new HashSet<>();
         if (s.selected != null) result.add(s.selected.directory);
         if (s.pending != null) result.add(s.pending.directory);
-        // Last healthy may differ from selected during a trial: it is the first previous generation.
-        int remaining = s.retained;
-        if (remaining > 0 && s.healthy != null && (s.selected == null || !s.healthy.directory.equals(s.selected.directory))) {
-            result.add(s.healthy.directory); remaining--;
-        }
-        for (Generation generation : s.history) if (remaining-- > 0) result.add(generation.directory);
+        for (Generation generation : retained(s)) result.add(generation.directory);
         return result;
     }
-    LifecycleSnapshot snapshot(long storageBytes) throws ContractException {
+    /**
+     * Previous generations kept on disk, newest payload version first: the last healthy one (it
+     * differs from selected during a trial) and the history, up to the retention count, plus the
+     * generation a rollback hold protects regardless of that count. Never the selected or pending one.
+     */
+    private static List<Generation> retained(State s) {
+        Set<String> seen = new HashSet<>();
+        if (s.selected != null) seen.add(s.selected.directory);
+        if (s.pending != null) seen.add(s.pending.directory);
+        List<Generation> ordered = new ArrayList<>(), result = new ArrayList<>();
+        if (s.healthy != null) ordered.add(s.healthy);
+        ordered.addAll(s.history);
+        int remaining = s.retained;
+        for (Generation generation : ordered) {
+            if (remaining <= 0) break;
+            if (seen.add(generation.directory)) { result.add(generation); remaining--; }
+        }
+        if (s.hold != null && seen.add(s.hold.directory)) result.add(s.hold);
+        result.sort((a, b) -> Long.compare(b.identity.payloadVersion, a.identity.payloadVersion));
+        return result;
+    }
+    private static Generation retained(State s, ExpectedArchive identity) {
+        for (Generation generation : retained(s)) if (generation.identity.equals(identity)) return generation;
+        return null;
+    }
+    /** The hold ends once a generation at or above the version the user left is selected. */
+    private static void settleHold(State s) {
+        if (s.hold != null && !s.manual && s.selected != null
+                && s.selected.identity.payloadVersion >= s.hold.identity.payloadVersion) s.hold = null;
+    }
+    /**
+     * Snapshot a retained generation for an explicit relaunch; the facade verifies its bytes outside
+     * selection before {@link #relaunch}. A delivered update waiting for its restart must apply first.
+     */
+    Generation retainedForRelaunch(ExpectedArchive identity, String contract, long minimumPayload) throws ContractException {
+        State s = read();
+        Generation generation = retained(s, identity);
+        if (generation == null || (s.pending != null && !s.manual)) throw fail(Code.UNAVAILABLE);
+        String recorded = s.meta.containsKey(generation.directory) ? s.meta.get(generation.directory).contract : "";
+        if (!recorded.isEmpty() && contract != null && !recorded.equals(contract)) throw fail(Code.INCOMPATIBLE);
+        if (identity.payloadVersion < minimumPayload) throw fail(Code.REPLAY);
+        return generation;
+    }
+    /**
+     * Facade verified the bytes and has explicit user confirmation. Makes the generation pending, like
+     * a staged download: it is selected only by the next cold start with no process left on the
+     * current one, then runs a normal trial. Replay floors are untouched; leaving a newer generation
+     * sets the rollback hold to the newest one left.
+     */
+    void relaunch(Generation candidate) throws ContractException {
+        State s = read();
+        Generation generation = retained(s, candidate.identity);
+        if (generation == null || !same(generation, candidate) || (s.pending != null && !s.manual)) throw fail(Code.UNAVAILABLE);
+        if (!Files.isDirectory(root.resolve("generations").resolve(generation.directory), LinkOption.NOFOLLOW_LINKS))
+            throw fail(Code.UNAVAILABLE);
+        try {
+            // A process still running these bytes (never expected) must exit first, as for a retry.
+            if (!ProcessLocks.ifUnleased(lease(generation), () -> null)) throw fail(Code.UNAVAILABLE);
+        } catch (IOException e) { throw fail(Code.IO); }
+        long left = s.selected == null ? -1 : s.selected.identity.payloadVersion;
+        if (left > generation.identity.payloadVersion && (s.hold == null || left > s.hold.identity.payloadVersion))
+            s.hold = s.selected;
+        s.pending = generation; s.manual = true; s.rejected.remove(generation.directory);
+        write(s);
+    }
+    void clearHold() throws ContractException {
+        State s = read();
+        if (s.hold == null) return;
+        s.hold = null; write(s);
+    }
+    LifecycleSnapshot snapshot(long storageBytes) throws ContractException { return snapshot(storageBytes, null, 0, g -> null); }
+    /**
+     * {@code contract}/{@code minimumPayload}: the installed shell's, to mark retained generations it
+     * cannot run (null contract: not compared). {@code unrecorded} supplies a display-only contract
+     * for generations kept before contracts were recorded, or null.
+     */
+    LifecycleSnapshot snapshot(long storageBytes, String contract, long minimumPayload,
+            java.util.function.Function<Generation, String> unrecorded) throws ContractException {
         State s = read(); boolean waiting = false;
         if (s.pending != null && s.selected != null) {
             try { waiting = !ProcessLocks.ifUnleased(lease(s.selected), () -> null); }
@@ -269,8 +371,17 @@ final class SelectionJournal {
         }
         Availability availability = s.quarantined ? Availability.RECOVERY : s.selected == null ? Availability.EMPTY
             : s.trial ? Availability.TRIAL : Availability.RUNNABLE;
+        List<RetainedGeneration> retained = new ArrayList<>();
+        for (Generation generation : retained(s)) {
+            Meta meta = s.meta.get(generation.directory);
+            String recorded = meta == null || meta.contract.isEmpty() ? unrecorded.apply(generation) : meta.contract;
+            Code refusal = recorded != null && contract != null && !recorded.equals(contract) ? Code.INCOMPATIBLE
+                : generation.identity.payloadVersion < minimumPayload ? Code.REPLAY : null;
+            retained.add(new RetainedGeneration(generation.identity, recorded, meta == null ? 0 : meta.healthy, refusal,
+                s.hold != null && same(s.hold, generation)));
+        }
         return new LifecycleSnapshot(availability, identity(s.selected), identity(s.pending), identity(s.healthy),
-            waiting, s.retained, storageBytes, s.quarantined ? s.failure : null);
+            waiting, s.retained, storageBytes, s.quarantined ? s.failure : null, retained, identity(s.hold), s.manual);
     }
     /** Plain-language reason for the current quarantine, or null. Bounded and credential-free. */
     String quarantineReport() throws ContractException {
@@ -311,29 +422,50 @@ final class SelectionJournal {
     }
     private static byte[] encode(State s) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream(); DataOutputStream out = new DataOutputStream(bytes);
-        out.writeInt(3); generation(out, s.selected); generation(out, s.pending); generation(out, s.healthy);
+        // Facts are kept only for generations the journal still references.
+        Set<String> referenced = new HashSet<>();
+        for (Generation generation : Arrays.asList(s.selected, s.pending, s.healthy, s.hold)) if (generation != null) referenced.add(generation.directory);
+        for (Generation generation : s.history) referenced.add(generation.directory);
+        s.meta.keySet().retainAll(referenced);
+        out.writeInt(4); generation(out, s.selected); generation(out, s.pending); generation(out, s.healthy);
         out.writeBoolean(s.trial); out.writeBoolean(s.quarantined); out.writeUTF(s.failure.name()); out.writeInt(s.incomplete); out.writeInt(s.retained);
         out.writeInt(s.history.size()); for (Generation generation : s.history) generation(out, generation);
         out.writeInt(s.rejected.size()); for (String rejected : s.rejected) out.writeUTF(rejected);
         out.writeInt(s.kills); out.writeInt(s.attemptPid); out.writeLong(s.attemptMillis);
         out.writeUTF(s.cause); out.writeUTF(s.exits);
+        generation(out, s.hold); out.writeBoolean(s.manual);
+        out.writeInt(s.meta.size());
+        for (Map.Entry<String, Meta> entry : s.meta.entrySet()) {
+            out.writeUTF(entry.getKey()); out.writeUTF(entry.getValue().contract); out.writeLong(entry.getValue().healthy);
+        }
         return bytes.toByteArray();
     }
     private static State decode(byte[] bytes) throws IOException {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes)); State s = new State();
-        // Version 2 (shells before startup exit evidence) decodes with no attempt or cause recorded.
+        // Version 2 (shells before startup exit evidence) decodes with no attempt or cause recorded,
+        // version 3 (before manual relaunch) with no hold and no contracts or first-frame times.
         int version = in.readInt();
-        if (version != 2 && version != 3) throw new IOException("Unknown selection version");
+        if (version < 2 || version > 4) throw new IOException("Unknown selection version");
         s.selected = generation(in); s.pending = generation(in); s.healthy = generation(in);
         s.trial = in.readBoolean(); s.quarantined = in.readBoolean(); s.failure = Code.valueOf(in.readUTF()); s.incomplete = in.readInt(); s.retained = in.readInt();
         int history = in.readInt(); if (history < 0 || history > 3) throw new IOException("Invalid history count");
         for (int n = 0; n < history; n++) s.history.add(Objects.requireNonNull(generation(in)));
         int rejected = in.readInt(); if (rejected < 0 || rejected > 64) throw new IOException("Invalid rejected count");
         for (int n = 0; n < rejected; n++) if (!s.rejected.add(in.readUTF())) throw new IOException("Duplicate rejected generation");
-        if (version == 3) {
+        if (version >= 3) {
             s.kills = in.readInt(); s.attemptPid = in.readInt(); s.attemptMillis = in.readLong();
             s.cause = in.readUTF(); s.exits = in.readUTF();
         }
+        if (version >= 4) {
+            s.hold = generation(in); s.manual = in.readBoolean();
+            int facts = in.readInt(); if (facts < 0 || facts > 8) throw new IOException("Invalid generation facts");
+            for (int n = 0; n < facts; n++) {
+                String directory = in.readUTF(); Meta meta = new Meta(); meta.contract = in.readUTF(); meta.healthy = in.readLong();
+                if (!directory.matches("[A-Za-z0-9_-]{1,128}") || meta.contract.length() > 128 || meta.healthy < 0
+                        || s.meta.put(directory, meta) != null) throw new IOException("Invalid generation facts");
+            }
+        }
+        if (s.manual && s.pending == null) throw new IOException("Invalid relaunch state");
         if (s.kills < 0 || s.kills > KILL_LIMIT || s.attemptPid < 0 || s.attemptMillis < 0
                 || !CAUSES.contains(s.cause) || s.exits.length() > 256) throw new IOException("Invalid trial state");
         if (s.incomplete < 0 || s.incomplete > INCOMPLETE_LIMIT || s.retained < 0 || s.retained > 3

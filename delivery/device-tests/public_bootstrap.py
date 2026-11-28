@@ -57,6 +57,8 @@ def main():
                         help='Probe installed worker-process storage admission during write exhaustion')
     parser.add_argument('--restart-controls', action='store_true',
                         help='Activate through confirmed shell controls, never adb force-stop')
+    parser.add_argument('--relaunch', action='store_true',
+                        help='Deliver signed p2, then relaunch the retained p1 from shell controls, check the hold and return')
     parser.add_argument('--storage-pressure', action='store_true',
                         help='Allocate a disposable app-private filler; test low-space rejection and 512 MiB admission')
     args = parser.parse_args()
@@ -68,7 +70,7 @@ def main():
         parser.error('a dedicated disposable emulator serial is required')
     if sum((args.network_transitions, args.storage_pressure, args.write_exhaustion, args.persistence_crash,
             args.persistence_delete, args.persistence_retry_replacement, args.persistence_first_cancel is not None,
-            args.large_payload, args.publication_fault is not None)) > 1:
+            args.large_payload, args.publication_fault is not None, args.relaunch)) > 1:
         parser.error('network, storage, persistence and large-payload cases are separate runs')
     if not 1 <= args.server_port <= 65535:
         parser.error('invalid host port')
@@ -291,12 +293,15 @@ def main():
                   args.serial, 'archiveBytes=' + str(archive.stat().st_size), flush=True)
             return
         persistence = args.persistence_crash or args.persistence_delete or args.persistence_retry_replacement or args.persistence_first_cancel
-        if args.write_exhaustion or persistence or args.publication_fault:
+        if args.write_exhaustion or persistence or args.publication_fault or args.relaunch:
             adb('shell', 'am', 'force-stop', APP)
             adb('shell', 'am', 'start', '-W', '-n', LAUNCHER)
             assert 'generation=A;asset=payload-asset;java=payload-java-resource' in ui()
             controls(adb, APP)
-            if args.publication_fault:
+            if args.relaunch:
+                from relaunch import run
+                run(ROOT, args.serial, APP, archive, catalog, query, head, server, adb, ui, tap)
+            elif args.publication_fault:
                 from publication_io import run
                 run(ROOT, args.serial, APP, archive, catalog, query, head, server, adb, ui, tap, args.publication_fault)
             elif persistence:

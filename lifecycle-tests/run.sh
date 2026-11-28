@@ -16,3 +16,4 @@ java -cp "$out" com.lelloman.paravoidandroid.runtime.lifecycle.TrialEvidenceTest
 java -cp "$out" com.lelloman.paravoidandroid.runtime.lifecycle.EmbeddedFloorTest
 java -cp "$out" com.lelloman.paravoidandroid.runtime.lifecycle.PublicationTest
 java -cp "$out" com.lelloman.paravoidandroid.runtime.lifecycle.SpaceAdmissionTest
+java -cp "$out" com.lelloman.paravoidandroid.runtime.lifecycle.RelaunchTest

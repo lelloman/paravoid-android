@@ -200,9 +200,12 @@ Metadata revision/freshness checks must prevent accepting previously superseded
 heads as new updates. Clients persist verified high-water marks, scoped to their
 publication stream, and do not reset them on logout or channel switching. Ordinary
 updates cannot silently downgrade payload versions. Authorized recovery is a
-separate action with persistent-data checks, not an exception inferred from a
-valid old signature. V1.md selects forward-only recovery, APK floors and explicit
-fresh-install/data-loss/hostile-clock limitations. Its threat review draws on
+separate action, not an exception inferred from a valid old signature. V1.md selects
+forward-only recovery, APK floors and explicit fresh-install/data-loss/hostile-clock
+limitations. Its single exception is a user-confirmed relaunch of a generation the
+device already verified and retains: it re-verifies the local bytes, never lowers
+high-water marks or accepts lower heads, and holds automatic installs at or below
+the version the user left until a strictly higher one arrives or the user clears it. Its threat review draws on
 [TUF's update threat model](https://theupdateframework.github.io/specification/latest/)
 without claiming TUF compliance or making it a runtime dependency.
 
@@ -342,6 +345,9 @@ Failed verification/activation must leave a usable compatible version or a clear
 shell recovery UI. Retention must not remove active, staged or recovery-required
 versions. A startup failure alone does not authorize code rollback: database/schema
 compatibility and startup health policy are separate, still-unimplemented gates.
+Only the user may choose to relaunch a retained, contract-compatible previous
+generation (V1.md, recovery); the shell warns about data written by the newer
+version and never infers that going back is safe.
 
 ## 8. Conformance gates
 

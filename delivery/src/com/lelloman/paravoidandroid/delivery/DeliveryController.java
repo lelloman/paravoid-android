@@ -192,6 +192,20 @@ public final class DeliveryController implements UpdateControl {
         worker.execute(() -> { try { lifecycle.retryQuarantined(release); }
             catch (ContractException failed) { fail(failed.code.name()); } publish(); });
     }
+    public void relaunchRetainedAfterConfirmation(ExpectedArchive release) {
+        worker.execute(() -> {
+            if (release == null) return;
+            // Observers tell a new refusal from the previous one by the cleared snapshot in between.
+            if (error != null && error.startsWith("RELAUNCH_")) { error = null; publish(); }
+            try { lifecycle.relaunchRetained(release); }
+            catch (ContractException failed) { error = "RELAUNCH_" + failed.code.name(); }
+            publish();
+        });
+    }
+    public void clearRollbackHold() {
+        worker.execute(() -> { try { lifecycle.clearRollbackHold(); }
+            catch (ContractException failed) { fail(failed.code.name()); } publish(); });
+    }
     private void applyPreferences() {
         attempts.automaticChecks = preferences.automaticChecks;
         attempts.automaticDownloads = preferences.automaticDownloads;

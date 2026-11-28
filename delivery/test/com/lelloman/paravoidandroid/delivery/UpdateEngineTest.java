@@ -41,7 +41,10 @@ public final class UpdateEngineTest {
         localHintsPreserveRetries();
         policyDefaultsReachExistingInstalls();
         savedOfferOfSelectedReleaseIsNotAvailable();
-        System.out.println("PASS update engine: push scope, duplicate suppression, consent, explicit update, check-only, disabled push, policy defaults vs durable choices, no stale offer of the selected/quarantined release");
+        rollbackHoldSuppressesAutomaticInstalls(1,false);
+        rollbackHoldSuppressesAutomaticInstalls(0,true);
+        relaunchCommands();
+        System.out.println("PASS update engine: push scope, duplicate suppression, consent, explicit update, check-only, disabled push, policy defaults vs durable choices, no stale offer of the selected/quarantined release, rollback hold, relaunch commands");
     }
     /** An offer saved before its release was selected and then quarantined must not be shown as an update. */
     static void savedOfferOfSelectedReleaseIsNotAvailable() throws Exception {
@@ -64,6 +67,63 @@ public final class UpdateEngineTest {
                 check(e.current().available==null); // Nor after a reload of the saved state.
                 s.cached(); e.checkNow(); worker.submit(()->{}).get();
                 check(e.current().available==null && s.life.stages==0 && s.f.responses.isEmpty());
+            } finally { worker.shutdownNow(); check(worker.awaitTermination(5,TimeUnit.SECONDS)); }
+        }
+    }
+    /** Automatic check-and-download while the user's relaunch holds updates up to version {@code held}. */
+    static void rollbackHoldSuppressesAutomaticInstalls(long held,boolean installs) throws Exception {
+        try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {
+            ExecutorService worker=Executors.newSingleThreadExecutor();
+            try {
+                java.util.concurrent.atomic.AtomicReference<UpdateEngine.Work> work=new java.util.concurrent.atomic.AtomicReference<>();
+                com.lelloman.paravoidandroid.contract.Protocol.ExpectedArchive left=new com.lelloman.paravoidandroid.contract.Protocol.ExpectedArchive(
+                    "left",held,"e".repeat(64),"f".repeat(64),1);
+                s.life.fixed=new com.lelloman.paravoidandroid.contract.Protocol.LifecycleSnapshot(
+                    com.lelloman.paravoidandroid.contract.Protocol.Availability.RUNNABLE,null,null,null,false,1,0,null,
+                    java.util.Collections.emptyList(),left,false);
+                UpdateEngine e=new UpdateEngine(s.client,s.life,s.scope,s.clock,s.f.dir.resolve("hold-engine").toFile(),worker,Runnable::run,
+                    UpdateSchedule.defaults().preferences(true,true,false),null,false,work::set);
+                s.head(); e.runJob(false,1,()->{}); worker.submit(()->{}).get();
+                check(s.f.requests==1 && s.life.observations==1);
+                if(!installs) {
+                    check(e.current().available==null && work.get().kind==UpdateEngine.Kind.NONE && s.life.stages==0);
+                    check(e.current().activity==DeliveryController.Activity.IDLE && e.current().errorCode==null);
+                    // An explicit download does not bypass the hold either; ending it is a separate choice.
+                    s.cached(); e.updateNow(); worker.submit(()->{}).get();
+                    check(s.life.stages==0 && s.f.responses.isEmpty());
+                } else {
+                    check(s.metadata.archive.equals(e.current().available) && work.get().kind==UpdateEngine.Kind.UPDATE);
+                    s.cached(); s.f.responses.add(new Fake(200,ARCHIVE));
+                    e.runJob(true,2,()->{}); worker.submit(()->{}).get();
+                    check(s.life.stages==1 && e.current().activity==DeliveryController.Activity.READY);
+                }
+            } finally { worker.shutdownNow(); check(worker.awaitTermination(5,TimeUnit.SECONDS)); }
+        }
+    }
+    /** Relaunch and hold commands reach the lifecycle; a refusal is a RELAUNCH_ error that leaves update intent alone. */
+    static void relaunchCommands() throws Exception {
+        try(DeliveryClientTest.Setup s=new DeliveryClientTest.Setup(false)) {
+            ExecutorService worker=Executors.newSingleThreadExecutor();
+            try {
+                java.util.concurrent.atomic.AtomicReference<UpdateEngine.Work> work=new java.util.concurrent.atomic.AtomicReference<>();
+                UpdateEngine e=new UpdateEngine(s.client,s.life,s.scope,s.clock,s.f.dir.resolve("relaunch-engine").toFile(),worker,Runnable::run,
+                    UpdateSchedule.defaults().preferences(true,false,false),null,false,work::set);
+                java.util.List<DeliveryController.Snapshot> seen=new java.util.concurrent.CopyOnWriteArrayList<>();
+                e.listen(seen::add); worker.submit(()->{}).get();
+                com.lelloman.paravoidandroid.contract.Protocol.ExpectedArchive target=new com.lelloman.paravoidandroid.contract.Protocol.ExpectedArchive(
+                    "older",1,"e".repeat(64),"f".repeat(64),1);
+                DeliveryController.Activity before=e.current().activity;
+                s.life.relaunchFailure=com.lelloman.paravoidandroid.contract.ContractException.Code.INTEGRITY;
+                e.relaunchRetainedAfterConfirmation(target); worker.submit(()->{}).get();
+                check("RELAUNCH_INTEGRITY".equals(e.current().errorCode) && e.current().activity==before && s.life.relaunched==null);
+                // The same refusal again is told apart by a cleared snapshot in between.
+                seen.clear(); e.relaunchRetainedAfterConfirmation(target); worker.submit(()->{}).get();
+                check(seen.size()==2 && seen.get(0).errorCode==null && "RELAUNCH_INTEGRITY".equals(seen.get(1).errorCode));
+                s.life.relaunchFailure=null;
+                e.relaunchRetainedAfterConfirmation(target); worker.submit(()->{}).get();
+                check(target.equals(s.life.relaunched) && e.current().errorCode==null);
+                e.clearRollbackHold(); worker.submit(()->{}).get();
+                check(s.life.holdsCleared==1 && e.current().errorCode==null);
             } finally { worker.shutdownNow(); check(worker.awaitTermination(5,TimeUnit.SECONDS)); }
         }
     }

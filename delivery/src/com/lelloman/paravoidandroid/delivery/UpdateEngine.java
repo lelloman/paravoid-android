@@ -243,6 +243,23 @@ public final class UpdateEngine implements UpdateControl {
     @Override public void retryQuarantinedAfterConfirmation(ExpectedArchive offer) {
         worker.execute(()-> { try { lifecycle.retryQuarantined(offer); } catch(ContractException failed) { fail(failed.code.name()); } publish(false); });
     }
+    /**
+     * A refusal is reported as error {@code RELAUNCH_<code>} without changing the update phase or
+     * intent: scheduled checks, push and local hints keep working, and the next attempt clears it.
+     */
+    @Override public void relaunchRetainedAfterConfirmation(ExpectedArchive release) {
+        worker.execute(()-> {
+            if(release==null) return;
+            // Observers tell a new refusal from the previous one by the cleared snapshot in between.
+            if(error!=null && error.startsWith("RELAUNCH_")) { error=null; publish(false); }
+            try { lifecycle.relaunchRetained(release); }
+            catch(ContractException failed) { error="RELAUNCH_"+failed.code.name(); }
+            persist(); publish(false);
+        });
+    }
+    @Override public void clearRollbackHold() {
+        worker.execute(()-> { try { lifecycle.clearRollbackHold(); } catch(ContractException failed) { fail(failed.code.name()); } publish(false); });
+    }
     private void execute(long job) {
         long epoch=cancellation.get();
         runningJob=job; stopped=false; staging=false;

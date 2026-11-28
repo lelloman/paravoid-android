@@ -225,6 +225,37 @@ The return value means the restart screen was opened, not that restart completed
 shell coordinator runs separately from payload processes, stops them, and relaunches the
 app. If it cannot establish safe process ownership or stop them, it reports failure.
 
+## Previous versions
+
+The shell keeps zero to three previous versions ("Number of previous versions to keep" in
+the advanced details, one by default). The update screen lists them under **Previous
+versions** with payload version, release ID and archive hash prefix, and when each last
+started successfully. The crash recovery screen links to it when versions are kept.
+
+**Relaunch this version…** is an explicit user choice, never automatic recovery:
+
+- A version is relaunchable only if it was verified for the installed shell contract
+  and is not below the installed minimum payload version. Versions built for another
+  contract (usual right after a contract-changing shell update) are listed disabled
+  with the reason. While a downloaded update waits for its restart, it applies first.
+- The confirmation warns that data saved by a newer version may not work with an older
+  one, and that the app restarts. Paravoid never migrates, deletes or restores app data.
+- The lifecycle verifies the stored archive again (signature, archive and component
+  hashes, contract, device scope), makes it pending, and the shell performs the normal
+  coordinated restart. The version then runs a normal trial: if it fails to start it is
+  quarantined and recovery offers to return to the newer version the same way.
+- Replay protection is unchanged: the authenticated payload-version high-water mark is
+  not lowered and lower offered heads are still refused.
+
+Going back to an older version sets a **rollback hold** on the newest version left.
+While it exists, updates at or below that version are not offered, downloaded or
+staged, including explicit downloads, and the left version is kept regardless of the
+retention count. A strictly higher version installs normally and ends the hold;
+returning to the left version (**Return to this version…**) also ends it. **Resume
+automatic updates…** clears it, after which the left version may be downloaded again.
+A refused relaunch is reported to observers as error `RELAUNCH_<code>` (for example
+`RELAUNCH_INTEGRITY`) without changing scheduled update work.
+
 ## Commands and custom providers
 
 - `ParavoidUpdates.get().checkNow()` discovers only.

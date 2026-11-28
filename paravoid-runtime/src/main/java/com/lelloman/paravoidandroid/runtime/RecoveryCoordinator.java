@@ -10,8 +10,13 @@ final class RecoveryCoordinator {
         final String message;
         final boolean busy, staging, ready;
         final ExpectedArchive offer;
+        /** Previous versions are kept: the user may go back to one from the update screen. */
+        final boolean versions;
         State(String message,boolean busy,boolean staging,boolean ready,ExpectedArchive offer) {
-            this.message=message; this.busy=busy; this.staging=staging; this.ready=ready; this.offer=offer;
+            this(message,busy,staging,ready,offer,false);
+        }
+        State(String message,boolean busy,boolean staging,boolean ready,ExpectedArchive offer,boolean versions) {
+            this.message=message; this.busy=busy; this.staging=staging; this.ready=ready; this.offer=offer; this.versions=versions;
         }
     }
     private final android.content.Context context;
@@ -31,7 +36,8 @@ final class RecoveryCoordinator {
                 snapshot.activity==DeliveryController.Activity.DOWNLOADING ? tr("Downloading update: %1$s / %2$s bytes",snapshot.bytes,snapshot.totalBytes) :
                 snapshot.errorCode!=null ? tr("Update unavailable (%1$s).",snapshot.errorCode) : snapshot.available!=null ? tr("Update available: %1$s",snapshot.available.payloadVersion) :
                 busy ? tr("Checking for updates…") : tr("No compatible update is available.");
-            state=new State(message,busy,staging,ready,ready ? null : snapshot.available);
+            state=new State(message,busy,staging,ready,ready ? null : snapshot.available,
+                snapshot.lifecycle!=null && !snapshot.lifecycle.retained.isEmpty());
             if(observer!=null) observer.accept(state);
         });
     }

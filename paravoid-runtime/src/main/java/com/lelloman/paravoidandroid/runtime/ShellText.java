@@ -121,8 +121,6 @@ public final class ShellText {
         it.put("Show advanced details", "Mostra dettagli avanzati");
         it.put("Hide advanced details", "Nascondi dettagli avanzati");
         it.put("Saved previous versions", "Versioni precedenti salvate");
-        it.put("Keep previous downloads for troubleshooting. This does not enable rollback or restore app data.",
-            "Conserva i download precedenti per la risoluzione dei problemi. Non consente di tornare a una versione precedente né ripristina i dati dell'app.");
         it.put("Number of previous versions to keep", "Numero di versioni precedenti da conservare");
         it.put("Keep none", "Non conservare");
         it.put("Keep 1 version", "Conserva 1 versione");
@@ -207,5 +205,76 @@ public final class ShellText {
         it.put("Retry version %1$s the next time the app starts? It previously failed to start and may fail again. This does not restore older app data.",
             "Riprovare la versione %1$s al prossimo avvio dell'app? In precedenza non è riuscita ad avviarsi e potrebbe non riuscirci di nuovo. I dati precedenti dell'app non vengono ripristinati.");
         it.put("Retry version", "Riprova versione");
+        // Previous versions: explicit relaunch and the rollback hold.
+        it.put("Previous versions",
+            "Versioni precedenti");
+        it.put("Versions kept on this device. If the current version has a problem, you can go back to one of them.",
+            "Versioni conservate su questo dispositivo. Se la versione attuale ha un problema, puoi tornare a una di esse.");
+        it.put("Resume automatic updates…",
+            "Riprendi gli aggiornamenti automatici…");
+        it.put("Restart to apply the downloaded update before going back to another version.",
+            "Riavvia per applicare l'aggiornamento scaricato prima di tornare a un'altra versione.");
+        it.put("Keep previous versions on this device, so you can go back to one. Going back does not restore older app data.",
+            "Conserva le versioni precedenti su questo dispositivo per poter tornare a una di esse. Tornare indietro non ripristina i dati precedenti dell'app.");
+        it.put("Updates held up to: %1$s",
+            "Aggiornamenti sospesi fino a: %1$s");
+        it.put("Automatic updates are paused up to version %1$s because you went back to an older version. Versions newer than %1$s still install.",
+            "Gli aggiornamenti automatici sono sospesi fino alla versione %1$s perché sei tornato a una versione precedente. Le versioni successive alla %1$s vengono comunque installate.");
+        it.put("Version %1$s",
+            "Versione %1$s");
+        it.put("Release %1$s · %2$s",
+            "Release %1$s · %2$s");
+        it.put("Last ran successfully %1$s",
+            "Ultimo avvio riuscito: %1$s");
+        it.put("Ran successfully before (time not recorded)",
+            "Avviata correttamente in passato (data non registrata)");
+        it.put("The newer version you went back from.",
+            "La versione più recente da cui sei tornato indietro.");
+        it.put("Can’t relaunch: it was built for a different installed app version (shell).",
+            "Impossibile riavviarla: è stata creata per un'altra versione dell'app installata (shell).");
+        it.put("Can’t relaunch: it was built for a different installed app version (shell %1$s).",
+            "Impossibile riavviarla: è stata creata per un'altra versione dell'app installata (shell %1$s).");
+        it.put("Can’t relaunch: the installed app no longer accepts a version this old.",
+            "Impossibile riavviarla: l'app installata non accetta più una versione così vecchia.");
+        it.put("Return to this version…",
+            "Torna a questa versione…");
+        it.put("Relaunch this version…",
+            "Riavvia questa versione…");
+        it.put("It will be used the next time the app starts.",
+            "Verrà usata al prossimo avvio dell'app.");
+        it.put("The app restarts now; ongoing work stops and unsaved changes may be lost.",
+            "L'app si riavvia ora: le attività in corso si interrompono e le modifiche non salvate potrebbero andare perse.");
+        it.put("Version %1$s is older than the one you are using. Data saved by a newer version may not work with it: the app may lose settings, behave unexpectedly or fail to start. If it fails to start, you can come back to the newer version from the recovery screen. Automatic updates will not install version %2$s or older until you resume them.",
+            "La versione %1$s è precedente a quella che stai usando. I dati salvati da una versione più recente potrebbero non funzionare con essa: l'app potrebbe perdere impostazioni, comportarsi in modo imprevisto o non avviarsi. Se non si avvia, puoi tornare alla versione più recente dalla schermata di ripristino. Gli aggiornamenti automatici non installeranno la versione %2$s o precedenti finché non li riprendi.");
+        it.put("Run version %1$s again. Data saved by the version you are using now may not work with it.",
+            "Esegui di nuovo la versione %1$s. I dati salvati dalla versione che stai usando ora potrebbero non funzionare con essa.");
+        it.put("Go back to version %1$s?",
+            "Tornare alla versione %1$s?");
+        it.put("Return to version %1$s?",
+            "Tornare di nuovo alla versione %1$s?");
+        it.put("Relaunch",
+            "Riavvia con questa versione");
+        it.put("Preparing version %1$s…",
+            "Preparazione della versione %1$s…");
+        it.put("Couldn’t switch version",
+            "Impossibile cambiare versione");
+        it.put("The stored files of this version failed verification, so it can’t be used.",
+            "I file salvati di questa versione non hanno superato la verifica, quindi non può essere usata.");
+        it.put("This version doesn’t fit the installed app, so it can’t be used.",
+            "Questa versione non è compatibile con l'app installata, quindi non può essere usata.");
+        it.put("The installed app no longer accepts a version this old.",
+            "L'app installata non accetta più una versione così vecchia.");
+        it.put("This version can’t be selected right now. Restart the app or wait for other app work to finish, then try again.",
+            "Al momento non è possibile selezionare questa versione. Riavvia l'app o attendi che finiscano le altre attività dell'app, poi riprova.");
+        it.put("The version could not be selected (%1$s).",
+            "Impossibile selezionare la versione (%1$s).");
+        it.put("Resume automatic updates?",
+            "Riprendere gli aggiornamenti automatici?");
+        it.put("Updates up to version %1$s, including the version you went back from, can be installed automatically again.",
+            "Gli aggiornamenti fino alla versione %1$s, inclusa quella da cui sei tornato indietro, potranno di nuovo essere installati automaticamente.");
+        it.put("Resume",
+            "Riprendi");
+        it.put("Previous versions…",
+            "Versioni precedenti…");
     }
 }
