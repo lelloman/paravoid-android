@@ -19,7 +19,7 @@ public final class CrashRecoveryActivity extends Activity {
     private RecoveryActionRunner actionRunner;
     private RecoveryReport report;
     private TextView status, actionStatus;
-    private Button check, update, cancel, restart;
+    private Button check, update, cancel, restart, versions;
     private final List<Button> actionButtons=new ArrayList<>();
     private boolean busy;
     private java.util.function.Consumer<RecoveryCoordinator.State> listener;
@@ -64,6 +64,10 @@ public final class CrashRecoveryActivity extends Activity {
         update=button(layout,tr("Update"),v -> coordinator.update());
         cancel=button(layout,tr("Cancel"),v -> coordinator.cancel());
         restart=button(layout,tr("Restart"),v -> confirmRestart());
+        // A relaunched older version that failed to start: the newer one can be chosen again there.
+        versions=button(layout,tr("Previous versions…"),v -> startActivity(new Intent(this,
+            com.lelloman.paravoidandroid.delivery.ShellUpdatesActivity.class)));
+        versions.setVisibility(View.GONE);
         button(layout,tr("Close"),v -> { if(coordinator!=null) coordinator.cancel(); finishAndRemoveTask(); });
         coordinator=recovery==null ? null : recovery.coordinator;
         if(coordinator==null) {
@@ -84,6 +88,7 @@ public final class CrashRecoveryActivity extends Activity {
                 update.setVisibility(s.offer!=null ? View.VISIBLE : View.GONE); update.setEnabled(!s.busy);
                 cancel.setVisibility(s.busy && !s.staging ? View.VISIBLE : View.GONE);
                 restart.setText(tr(s.ready ? "Restart" : "Retry app")); restart.setEnabled(!s.busy);
+                versions.setVisibility(s.versions ? View.VISIBLE : View.GONE); versions.setEnabled(!s.busy);
             };
             coordinator.observe(listener);
             coordinator.start();

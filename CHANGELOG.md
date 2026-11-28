@@ -15,6 +15,21 @@ these entries into a dated version section and document its exact upgrade path.
 
 ### Added
 
+- The shell update screen lists the retained previous versions and can relaunch one
+  after a confirmation that warns about data written by the newer version. Only versions
+  verified for the installed shell contract can be relaunched; the bytes are verified
+  again and the app goes through the normal coordinated restart and startup trial, so a
+  failing version is quarantined and the newer one can be chosen again from recovery.
+  Replay floors are not lowered. A rollback hold keeps automatic updates from installing
+  the version left (or anything older) until a strictly higher version arrives or the
+  user resumes updates, and keeps that version on disk meanwhile. The crash recovery
+  screen links to the list. `Lifecycle` gains `relaunchRetained`/`clearRollbackHold`,
+  `LifecycleSnapshot` gains `retained`, `rollbackHold` and `relaunchPending`, and
+  `UpdateControl` gains matching commands (default no-ops for other implementations).
+  The selection journal moves to version 4; version 2 and 3 journals still open, but a
+  shell downgraded to an older runtime cannot read a journal this runtime rewrote. Takes
+  effect with the next shell APK. See [previous versions](delivery/UPDATES.md#previous-versions).
+
 - Shell UI is available in Italian: crash recovery, update controls, update prompts and
   notifications, the controls shortcut and the restart page follow the device language,
   falling back to English. The generated restart strings gain a `values-it` translation,

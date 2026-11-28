@@ -24,6 +24,7 @@ public final class RuntimeLifecycle implements Lifecycle {
     private final java.util.function.LongSupplier usableSpace;
     private final AtomicRecord.Fault publicationFault;
     private final StartupExits exits;
+    private final Clock clock;
 
     /** Opens established state. Missing/damaged state never triggers initialization. Use Android no-backup storage. */
     public RuntimeLifecycle(File root, ShellPolicy policy, RequestScope device, VpkVerifier verifier,
@@ -56,6 +57,7 @@ public final class RuntimeLifecycle implements Lifecycle {
             java.util.function.LongSupplier usableSpace, AtomicRecord.Fault publicationFault,
             StartupExits exits) throws ContractException {
         this.exits = Objects.requireNonNull(exits);
+        this.clock = Objects.requireNonNull(clock);
         this.root = root.toPath().toAbsolutePath().normalize(); this.mainProcess = mainProcess;
         this.policy = policy; this.installed = installed;
         this.usableSpace = Objects.requireNonNull(usableSpace);
@@ -255,7 +257,7 @@ public final class RuntimeLifecycle implements Lifecycle {
             return admission.authorizePublication(id, current -> {
                 if (!expected.equals(current)) throw fail(Code.STALE_ADMISSION);
                 SelectionJournal.Generation published = generations.publish(prepared);
-                return new SelectionJournal(root, publicationFault).pending(published);
+                return new SelectionJournal(root, publicationFault).pending(published, prepared.release.shellContractId);
             });
         });
     }
@@ -322,7 +324,7 @@ public final class RuntimeLifecycle implements Lifecycle {
                 // Admission commits first. A publication interruption preserves floors and supports identical retry.
                 try {
                     return admission.authorizeEmbedded(prepared.release,
-                        identity -> new SelectionJournal(root).pending(generations.publish(prepared)));
+                        identity -> new SelectionJournal(root).pending(generations.publish(prepared), prepared.release.shellContractId));
                 } catch (ContractException failure) {
                     if (failure.code == Code.REPLAY) refused[0] = prepared.release.identity.payloadVersion;
                     throw failure;
@@ -341,7 +343,9 @@ public final class RuntimeLifecycle implements Lifecycle {
         }
     }
     @Override public LifecycleSnapshot snapshot() throws ContractException {
-        long bytes = storageBytes(); return selection(j -> j.snapshot(bytes));
+        long bytes = storageBytes();
+        return selection(j -> j.snapshot(bytes, policy.shellContractId, policy.trust.minimumPayloadVersion,
+            generation -> GenerationStore.unrecordedContract(root, generation)));
     }
     @Override public GenerationLease acquireForProcess() throws ContractException {
         InstalledStateSource.Snapshot current = currentInstalled();
@@ -404,6 +408,30 @@ public final class RuntimeLifecycle implements Lifecycle {
             if (current != null && !installed.isCurrent(current)) throw fail(Code.CREDENTIAL_CHANGED);
             j.retry(candidate); return null;
         });
+    }
+    /**
+     * Explicit, user-confirmed relaunch of a retained previous generation (never automatic recovery).
+     * The bytes are verified like a cold start loads them: signature, archive and component digests,
+     * installed contract, device scope and installed minimum version; a refusal changes nothing. The
+     * generation then becomes pending and is selected only by a coordinated cold start with no
+     * process left on the current one, with a normal trial (a failed start quarantines it). Replay
+     * floors and admission history are not touched.
+     */
+    @Override public void relaunchRetained(ExpectedArchive release) throws ContractException {
+        Objects.requireNonNull(release);
+        InstalledStateSource.Snapshot current = currentInstalled();
+        SelectionJournal.Generation candidate = selection(j ->
+            j.retainedForRelaunch(release, policy.shellContractId, policy.trust.minimumPayloadVersion));
+        generations.load(candidate);
+        selection(j -> {
+            if (current != null && !installed.isCurrent(current)) throw fail(Code.CREDENTIAL_CHANGED);
+            j.relaunch(candidate); return null;
+        });
+    }
+    /** Explicit user action. The generation it protected stays only if the retention count keeps it. */
+    @Override public void clearRollbackHold() throws ContractException {
+        selection(j -> { j.clearHold(); return null; });
+        cleanup();
     }
     @Override public void setRetainedPrevious(int count) throws ContractException {
         selection(j -> { j.retain(count); return null; });
@@ -495,7 +523,8 @@ public final class RuntimeLifecycle implements Lifecycle {
         }
         public synchronized void firstFrameRendered() throws ContractException {
             if (!mainProcess || !applicationCreated) throw fail(Code.UNAVAILABLE);
-            selection(j -> { j.healthy(generation); return null; });
+            long seconds = Math.max(0, clock.unixSeconds());
+            selection(j -> { j.healthy(generation, seconds); return null; });
         }
         public void startupFailed(Code safeReason) throws ContractException {
             selection(j -> { j.failed(generation, Objects.requireNonNull(safeReason)); return null; });

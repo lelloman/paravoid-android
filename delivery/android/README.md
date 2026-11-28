@@ -26,8 +26,9 @@ Required initialization in that process:
 
 The controller implements bounded scheduled retries, explicit access retry, cancel,
 automatic preferences, unmetered restriction, six-hour foreground checks and C-owned
-retention/confirmed quarantine retry. Snapshot availability comes from C, never from
-the latest HTTP result. UI intentionally offers no rollback, data deletion, bypass,
+retention/confirmed quarantine retry and confirmed relaunch of a retained, contract-compatible
+previous version with a rollback hold. Snapshot availability comes from C, never from
+the latest HTTP result. UI intentionally offers no automatic rollback, data deletion, bypass,
 credential display, forced process kill or arbitrary intent replay.
 
 Source compilation against Android 36 can be checked with `delivery/check-android.sh`.

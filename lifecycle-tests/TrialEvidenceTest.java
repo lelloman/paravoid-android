@@ -180,8 +180,8 @@ public final class TrialEvidenceTest {
         new AtomicRecord(legacy.resolve("selection")).write(bytes.toByteArray());
         AdmissionTest.check(SelectionTest.locked(legacy, j -> j.snapshot(0)).availability == Availability.RECOVERY);
         AdmissionTest.check(SelectionTest.locked(legacy, j -> j.quarantineReport()).contains("cause not recorded"));
-        SelectionTest.locked(legacy, j -> { j.retain(1); return null; }); // Rewritten as version 3.
-        AdmissionTest.check(new DataInputStream(new ByteArrayInputStream(new AtomicRecord(legacy.resolve("selection")).read())).readInt() == 3);
+        SelectionTest.locked(legacy, j -> { j.retain(1); return null; }); // Rewritten as the current version 4.
+        AdmissionTest.check(new DataInputStream(new ByteArrayInputStream(new AtomicRecord(legacy.resolve("selection")).read())).readInt() == 4);
         AdmissionTest.check(SelectionTest.locked(legacy, j -> j.snapshot(0)).active.equals(two.identity));
     }
     /** A journal-level cold start in a child JVM (its lease ends with it) with fixed pid 4242. */

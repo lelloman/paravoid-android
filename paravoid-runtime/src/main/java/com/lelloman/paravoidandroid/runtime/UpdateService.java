@@ -51,6 +51,8 @@ public final class UpdateService extends Service {
                         else engine.schedule(UpdateWire.schedule(data)); break;
                     case UpdateWire.RETAIN: engine.retainedPrevious(data.getInt("count")); break;
                     case UpdateWire.QUARANTINE: engine.retryQuarantinedAfterConfirmation(UpdateWire.offer(data.getBundle("offer"))); break;
+                    case UpdateWire.RELAUNCH: engine.relaunchRetainedAfterConfirmation(UpdateWire.offer(data.getBundle("offer"))); break;
+                    case UpdateWire.CLEAR_HOLD: engine.clearRollbackHold(); break;
                     default: break;
                 }
             } catch(RuntimeException invalid) { failure(reply); }

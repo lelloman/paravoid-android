@@ -234,6 +234,29 @@ public final class Protocol {
         }
     }
     public enum Availability { EMPTY, RUNNABLE, TRIAL, RECOVERY }
+    /**
+     * A previous generation the device keeps (see {@link Lifecycle#setRetainedPrevious}). Advisory:
+     * {@link Lifecycle#relaunchRetained} verifies the bytes again before selecting it.
+     */
+    public static final class RetainedGeneration {
+        public final ExpectedArchive identity;
+        /** Shell contract the archive was verified for; null when not recorded (kept by an older runtime). */
+        public final String shellContractId;
+        /** Last time it reached its first frame (Unix seconds); 0 when not recorded. */
+        public final long healthySeconds;
+        /**
+         * Null when it can be relaunched under the installed shell. INCOMPATIBLE: built for another
+         * shell contract. REPLAY: below the installed shell's minimum payload version.
+         */
+        public final ContractException.Code refusal;
+        /** The newer generation a manual relaunch left; protected while the rollback hold exists. */
+        public final boolean held;
+        public RetainedGeneration(ExpectedArchive identity, String shellContractId, long healthySeconds,
+                ContractException.Code refusal, boolean held) {
+            this.identity = Objects.requireNonNull(identity); this.shellContractId = shellContractId;
+            this.healthySeconds = healthySeconds; this.refusal = refusal; this.held = held;
+        }
+    }
     public static final class LifecycleSnapshot {
         public final Availability availability;
         public final ExpectedArchive active, pending, lastHealthy;
@@ -241,12 +264,34 @@ public final class Protocol {
         public final int retainedPrevious;
         public final long storageBytes;
         public final ContractException.Code error; // nullable; never credential-bearing text
+        /** Previous generations kept on the device, newest first; never the active or pending one. */
+        public final List<RetainedGeneration> retained;
+        /**
+         * The newest generation the user left by relaunching an older one, or null. While set, no
+         * update with a payload version at or below its version is offered, downloaded or staged.
+         */
+        public final ExpectedArchive rollbackHold;
+        /** The pending generation was chosen by {@link Lifecycle#relaunchRetained}, not delivered. */
+        public final boolean relaunchPending;
         public LifecycleSnapshot(Availability availability, ExpectedArchive active, ExpectedArchive pending,
                 ExpectedArchive lastHealthy, boolean waitingForProcesses, int retainedPrevious,
                 long storageBytes, ContractException.Code error) {
+            this(availability, active, pending, lastHealthy, waitingForProcesses, retainedPrevious, storageBytes, error,
+                Collections.emptyList(), null, false);
+        }
+        public LifecycleSnapshot(Availability availability, ExpectedArchive active, ExpectedArchive pending,
+                ExpectedArchive lastHealthy, boolean waitingForProcesses, int retainedPrevious,
+                long storageBytes, ContractException.Code error, List<RetainedGeneration> retained,
+                ExpectedArchive rollbackHold, boolean relaunchPending) {
             this.availability = Objects.requireNonNull(availability); this.active = active; this.pending = pending;
             this.lastHealthy = lastHealthy; this.waitingForProcesses = waitingForProcesses;
             this.retainedPrevious = retainedPrevious; this.storageBytes = storageBytes; this.error = error;
+            this.retained = list(retained); this.rollbackHold = rollbackHold; this.relaunchPending = relaunchPending;
+        }
+        /** The retained generation with exactly this identity, or null. */
+        public RetainedGeneration retained(ExpectedArchive identity) {
+            for (RetainedGeneration generation : retained) if (generation.identity.equals(identity)) return generation;
+            return null;
         }
     }
 

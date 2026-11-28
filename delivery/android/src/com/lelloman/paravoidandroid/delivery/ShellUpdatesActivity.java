@@ -13,6 +13,7 @@ import android.text.format.Formatter;
 import android.util.TypedValue;
 import android.view.View;
 import android.widget.*;
+import com.lelloman.paravoidandroid.contract.ContractException;
 import com.lelloman.paravoidandroid.contract.Protocol.*;
 import com.lelloman.paravoidandroid.runtime.AutoRestartPreference;
 import com.lelloman.paravoidandroid.runtime.ParavoidPush;
@@ -35,6 +36,16 @@ public final class ShellUpdatesActivity extends Activity {
     private LifecycleSnapshot lastLifecycle;
     private int foreground, secondary, accent;
     private boolean checkAction;
+    private LinearLayout previousCard, previousList;
+    private TextView holdText, previousBlocked;
+    private Button clearHold;
+    private final java.util.List<Button> relaunchButtons=new java.util.ArrayList<>();
+    private final java.util.List<RetainedGeneration> relaunchTargets=new java.util.ArrayList<>();
+    private String renderedPrevious;
+    /** A confirmed relaunch waiting for the lifecycle to make it pending, then the restart. */
+    private ExpectedArchive relaunching;
+    private boolean staleRelaunchError;
+    private String latestError;
     private final DeliveryController.Listener listener = snapshot -> runOnUiThread(() -> render(snapshot));
 
     /** Shell bootstrap installs these controls in the recovery process. */
@@ -138,12 +149,23 @@ public final class ShellUpdatesActivity extends Activity {
         text(preferences,tr("When enabled, a downloaded update restarts the app while it is open. Ongoing work may stop and unsaved changes may be lost."),13,false);
         checks.setEnabled(false); downloads.setEnabled(false); unmetered.setEnabled(false);
 
+        previousCard=card();
+        text(previousCard,tr("Previous versions"),19,true);
+        text(previousCard,tr("Versions kept on this device. If the current version has a problem, you can go back to one of them."),14,false);
+        holdText=text(previousCard,"",14,false); holdText.setVisibility(View.GONE);
+        clearHold=button(previousCard,tr("Resume automatic updates…"),view->confirmClearHold()); clearHold.setVisibility(View.GONE);
+        previousBlocked=text(previousCard,tr("Restart to apply the downloaded update before going back to another version."),13,false);
+        previousBlocked.setVisibility(View.GONE);
+        previousList=new LinearLayout(this); previousList.setOrientation(LinearLayout.VERTICAL);
+        previousCard.addView(previousList,new LinearLayout.LayoutParams(-1,-2));
+        previousCard.setVisibility(View.GONE);
+
         detailsToggle=button(content,tr("Show advanced details"),view->setExpanded(!expanded));
         details=new LinearLayout(this); details.setOrientation(LinearLayout.VERTICAL);
         details.setPadding(dp(16),dp(8),dp(16),dp(16)); content.addView(details);
         diagnostics=text(details,"",13,false); diagnostics.setTextIsSelectable(true);
         text(details,tr("Saved previous versions"),17,true);
-        text(details,tr("Keep previous downloads for troubleshooting. This does not enable rollback or restore app data."),14,false);
+        text(details,tr("Keep previous versions on this device, so you can go back to one. Going back does not restore older app data."),14,false);
         retention=new Spinner(this);
         retention.setContentDescription(tr("Number of previous versions to keep"));
         retention.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,
@@ -229,6 +251,9 @@ public final class ShellUpdatesActivity extends Activity {
         rendering=true;
         try {
             lastLifecycle=snapshot.lifecycle;
+            followRelaunch(snapshot);
+            // A relaunch refusal is reported in its own dialog, not as an update failure.
+            String updateError=snapshot.errorCode!=null && snapshot.errorCode.startsWith("RELAUNCH_") ? null : snapshot.errorCode;
             boolean checking=snapshot.activity==DeliveryController.Activity.CHECKING;
             boolean downloading=snapshot.activity==DeliveryController.Activity.DOWNLOADING;
             boolean staging=snapshot.activity==DeliveryController.Activity.STAGING;
@@ -247,8 +272,8 @@ public final class ShellUpdatesActivity extends Activity {
             } else if(snapshot.activity==DeliveryController.Activity.WAITING_TO_RETRY) {
                 title=tr("Waiting to retry"); message=tr("The last attempt could not finish. The app will try again when the scheduled retry can run.");
                 action=tr("Retry now"); checkAction=false; command=view-> { primary.setEnabled(false); controller.retry(); };
-            } else if(snapshot.errorCode!=null || snapshot.activity==DeliveryController.Activity.ERROR) {
-                title=tr("Update couldn’t finish"); message=errorMessage(snapshot.errorCode);
+            } else if(updateError!=null || snapshot.activity==DeliveryController.Activity.ERROR) {
+                title=tr("Update couldn’t finish"); message=errorMessage(updateError);
                 action=tr("Try again"); checkAction=false; command=view-> { primary.setEnabled(false); controller.retry(); };
                 if("OFFER_CHANGED".equals(snapshot.errorCode) || "NO_COMPATIBLE_RELEASE".equals(snapshot.errorCode)
                         || "SHELL_UPDATE_REQUIRED".equals(snapshot.errorCode)) {
@@ -286,7 +311,7 @@ public final class ShellUpdatesActivity extends Activity {
             primary.setVisibility(busy ? View.GONE : View.VISIBLE);
             primary.setText(action); primary.setOnClickListener(command); primary.setEnabled(!busy && !restarting);
             checkNow.setVisibility(!busy && !checkAction
-                && (snapshot.available!=null || pending!=null || snapshot.errorCode!=null) ? View.VISIBLE : View.GONE);
+                && (snapshot.available!=null || pending!=null || updateError!=null) ? View.VISIBLE : View.GONE);
             checkNow.setEnabled(!restarting);
             cancel.setVisibility(checking || downloading || snapshot.activity==DeliveryController.Activity.WAITING_TO_RETRY ? View.VISIBLE : View.GONE);
             cancel.setText(tr(checking ? "Cancel check" : downloading ? "Cancel download" : "Cancel retry")); cancel.setEnabled(!restarting);
@@ -303,11 +328,109 @@ public final class ShellUpdatesActivity extends Activity {
                 +"\n"+tr("Pending release: %1$s",identity(pending))
                 +(lastLifecycle==null ? "\n"+tr("App state unavailable") : "\n"+tr("App state: %1$s",lastLifecycle.availability.name())
                     +"\n"+tr("Update storage: %1$s",Formatter.formatShortFileSize(this,lastLifecycle.storageBytes))
-                    +(lastLifecycle.error==null ? "" : "\n"+tr("App state error: %1$s",lastLifecycle.error.name())))
+                    +(lastLifecycle.error==null ? "" : "\n"+tr("App state error: %1$s",lastLifecycle.error.name()))
+                    +(lastLifecycle.rollbackHold==null ? "" : "\n"+tr("Updates held up to: %1$s",identity(lastLifecycle.rollbackHold))))
                 +(snapshot.errorCode==null ? "" : "\n"+tr("Update error: %1$s",snapshot.errorCode)));
             retryGeneration.setVisibility(RecoveryActions.canOfferGenerationRetry(lastLifecycle) ? View.VISIBLE : View.GONE);
             retryGeneration.setEnabled(!busy && !restarting);
+            renderPrevious(busy);
         } finally { rendering=false; }
+    }
+    /** Retained previous versions and the rollback hold. Rows are rebuilt only when they change (TV focus). */
+    private void renderPrevious(boolean busy) {
+        LifecycleSnapshot life=lastLifecycle;
+        java.util.List<RetainedGeneration> retained=life==null ? java.util.Collections.emptyList() : life.retained;
+        ExpectedArchive hold=life==null ? null : life.rollbackHold;
+        previousCard.setVisibility(retained.isEmpty() && hold==null ? View.GONE : View.VISIBLE);
+        holdText.setVisibility(hold==null ? View.GONE : View.VISIBLE);
+        clearHold.setVisibility(hold==null ? View.GONE : View.VISIBLE);
+        if(hold!=null) holdText.setText(tr("Automatic updates are paused up to version %1$s because you went back to an older version. Versions newer than %1$s still install.",hold.payloadVersion));
+        clearHold.setEnabled(!restarting && relaunching==null);
+        // A delivered update waiting for its restart applies first (the lifecycle refuses otherwise).
+        boolean blocked=life!=null && life.pending!=null && !life.relaunchPending;
+        previousBlocked.setVisibility(blocked && !retained.isEmpty() ? View.VISIBLE : View.GONE);
+        ExpectedArchive active=life==null ? null : life.active;
+        StringBuilder key=new StringBuilder(active==null ? "-" : active.releaseId+active.payloadVersion);
+        for(RetainedGeneration g:retained) key.append('|').append(g.identity.archiveSha256).append(g.refusal).append(g.held).append(g.healthySeconds);
+        if(!key.toString().equals(renderedPrevious)) {
+            renderedPrevious=key.toString();
+            previousList.removeAllViews(); relaunchButtons.clear(); relaunchTargets.clear();
+            for(RetainedGeneration g:retained) {
+                LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.VERTICAL); row.setPadding(0,dp(12),0,0);
+                previousList.addView(row,new LinearLayout.LayoutParams(-1,-2));
+                text(row,tr("Version %1$s",g.identity.payloadVersion),16,true);
+                text(row,tr("Release %1$s · %2$s",g.identity.releaseId,g.identity.archiveSha256.substring(0,Math.min(12,g.identity.archiveSha256.length()))),13,false);
+                text(row,g.healthySeconds>0 ? tr("Last ran successfully %1$s",relative(g.healthySeconds)) : tr("Ran successfully before (time not recorded)"),13,false);
+                if(g.held) text(row,tr("The newer version you went back from."),13,false);
+                if(g.refusal==ContractException.Code.INCOMPATIBLE)
+                    text(row,g.shellContractId==null ? tr("Can’t relaunch: it was built for a different installed app version (shell).")
+                        : tr("Can’t relaunch: it was built for a different installed app version (shell %1$s).",g.shellContractId.substring(0,Math.min(12,g.shellContractId.length()))),13,false);
+                else if(g.refusal!=null) text(row,tr("Can’t relaunch: the installed app no longer accepts a version this old."),13,false);
+                boolean newer=active==null || g.identity.payloadVersion>active.payloadVersion;
+                Button relaunch=button(row,newer ? tr("Return to this version…") : tr("Relaunch this version…"),view->confirmRelaunch(g));
+                relaunchButtons.add(relaunch); relaunchTargets.add(g);
+            }
+        }
+        for(int n=0;n<relaunchButtons.size();n++) {
+            Button button=relaunchButtons.get(n);
+            boolean enabled=relaunchTargets.get(n).refusal==null && !blocked && !busy && !restarting && relaunching==null;
+            button.setEnabled(enabled); button.setAlpha(enabled ? 1f : 0.5f);
+        }
+    }
+    private void confirmRelaunch(RetainedGeneration target) {
+        LifecycleSnapshot life=lastLifecycle;
+        if(life==null || restarting || relaunching!=null || target.refusal!=null) return;
+        ExpectedArchive release=target.identity, active=life.active;
+        boolean older=active!=null && release.payloadVersion<active.payloadVersion;
+        long held=Math.max(active==null ? 0 : active.payloadVersion,life.rollbackHold==null ? 0 : life.rollbackHold.payloadVersion);
+        String restartNote=installedRestart==null ? tr("It will be used the next time the app starts.") : tr("The app restarts now; ongoing work stops and unsaved changes may be lost.");
+        String message=older
+            ? tr("Version %1$s is older than the one you are using. Data saved by a newer version may not work with it: the app may lose settings, behave unexpectedly or fail to start. If it fails to start, you can come back to the newer version from the recovery screen. Automatic updates will not install version %2$s or older until you resume them.",release.payloadVersion,held)
+            : tr("Run version %1$s again. Data saved by the version you are using now may not work with it.",release.payloadVersion);
+        new AlertDialog.Builder(this).setTitle(older ? tr("Go back to version %1$s?",release.payloadVersion) : tr("Return to version %1$s?",release.payloadVersion))
+            .setMessage(message+"\n\n"+restartNote)
+            .setNegativeButton(tr("Cancel"),null)
+            .setPositiveButton(tr("Relaunch"),(dialog,which)-> {
+                if(restarting || relaunching!=null) return;
+                relaunching=release;
+                String error=latestError;
+                staleRelaunchError=error!=null && error.startsWith("RELAUNCH_");
+                showRestarting(tr("Preparing version %1$s…",release.payloadVersion));
+                controller.relaunchRetainedAfterConfirmation(release);
+            }).show();
+    }
+    /** After a confirmed relaunch: restart once the lifecycle made it pending, or explain a refusal. */
+    private void followRelaunch(DeliveryController.Snapshot snapshot) {
+        latestError=snapshot.errorCode;
+        if(relaunching==null) return;
+        boolean refused=snapshot.errorCode!=null && snapshot.errorCode.startsWith("RELAUNCH_");
+        if(staleRelaunchError) { if(!refused) staleRelaunchError=false; return; }
+        if(refused) {
+            relaunching=null; restarting=false;
+            new AlertDialog.Builder(this).setTitle(tr("Couldn’t switch version"))
+                .setMessage(relaunchMessage(snapshot.errorCode.substring("RELAUNCH_".length())))
+                .setPositiveButton(tr("OK"),null).show();
+            return;
+        }
+        LifecycleSnapshot life=snapshot.lifecycle;
+        if(life==null || !life.relaunchPending || !relaunching.equals(life.pending)) return;
+        relaunching=null;
+        if(installedRestart==null) { restarting=false; return; }
+        restartNow();
+    }
+    private String relaunchMessage(String code) {
+        if("INTEGRITY".equals(code)) return tr("The stored files of this version failed verification, so it can’t be used.");
+        if("INCOMPATIBLE".equals(code)) return tr("This version doesn’t fit the installed app, so it can’t be used.");
+        if("REPLAY".equals(code)) return tr("The installed app no longer accepts a version this old.");
+        if("UNAVAILABLE".equals(code)) return tr("This version can’t be selected right now. Restart the app or wait for other app work to finish, then try again.");
+        return tr("The version could not be selected (%1$s).",code);
+    }
+    private void confirmClearHold() {
+        LifecycleSnapshot life=lastLifecycle;
+        if(life==null || life.rollbackHold==null || restarting) return;
+        new AlertDialog.Builder(this).setTitle(tr("Resume automatic updates?"))
+            .setMessage(tr("Updates up to version %1$s, including the version you went back from, can be installed automatically again.",life.rollbackHold.payloadVersion))
+            .setNegativeButton(tr("Cancel"),null).setPositiveButton(tr("Resume"),(dialog,which)->controller.clearRollbackHold()).show();
     }
     private CharSequence relative(long seconds) {
         return DateUtils.getRelativeTimeSpanString(seconds*1000,System.currentTimeMillis(),DateUtils.MINUTE_IN_MILLIS);
@@ -325,23 +448,29 @@ public final class ShellUpdatesActivity extends Activity {
         if(installedRestart==null || restarting) return;
         new AlertDialog.Builder(this).setTitle(tr("Restart app now?"))
             .setMessage(tr("This stops ongoing app work, including playback and jobs. Unsaved changes may be lost. A downloaded update will be applied when the app opens again."))
-            .setNegativeButton(tr("Not now"),null).setPositiveButton(tr("Restart"),(dialog,which)-> {
-                restarting=true; primary.setEnabled(false); restart.setEnabled(false); checkNow.setEnabled(false);
-                checks.setEnabled(false); downloads.setEnabled(false); unmetered.setEnabled(false); autoRestart.setEnabled(false);
-                if(backgroundPush!=null) backgroundPush.setEnabled(false);
-                cancel.setEnabled(false); retention.setEnabled(false); retryGeneration.setEnabled(false);
-                status.setText(tr("Restarting app…")); description.setText(tr("Stopping app work and opening the app again."));
-                installedRestart.restart(success->runOnUiThread(()-> {
-                    if(isFinishing() || isDestroyed()) return;
-                    if(success) finish();
-                    else {
-                        restarting=false; controller.refreshSnapshot();
-                        new AlertDialog.Builder(this).setTitle(tr("Couldn’t restart the app"))
-                            .setMessage(tr("Stop any ongoing app work and try again. You can also close the app from Android settings and reopen it."))
-                            .setPositiveButton(tr("OK"),null).show();
-                    }
-                }));
-            }).show();
+            .setNegativeButton(tr("Not now"),null).setPositiveButton(tr("Restart"),(dialog,which)->restartNow()).show();
+    }
+    private void showRestarting(String title) {
+        restarting=true; primary.setEnabled(false); restart.setEnabled(false); checkNow.setEnabled(false);
+        checks.setEnabled(false); downloads.setEnabled(false); unmetered.setEnabled(false); autoRestart.setEnabled(false);
+        if(backgroundPush!=null) backgroundPush.setEnabled(false);
+        cancel.setEnabled(false); retention.setEnabled(false); retryGeneration.setEnabled(false); clearHold.setEnabled(false);
+        for(Button button:relaunchButtons) button.setEnabled(false);
+        status.setText(title); description.setText(tr("Stopping app work and opening the app again."));
+    }
+    private void restartNow() {
+        if(installedRestart==null) return;
+        showRestarting(tr("Restarting app…"));
+        installedRestart.restart(success->runOnUiThread(()-> {
+            if(isFinishing() || isDestroyed()) return;
+            if(success) finish();
+            else {
+                restarting=false; controller.refreshSnapshot();
+                new AlertDialog.Builder(this).setTitle(tr("Couldn’t restart the app"))
+                    .setMessage(tr("Stop any ongoing app work and try again. You can also close the app from Android settings and reopen it."))
+                    .setPositiveButton(tr("OK"),null).show();
+            }
+        }));
     }
     private void confirmGenerationRetry() {
         if(!RecoveryActions.canOfferGenerationRetry(lastLifecycle)) return;

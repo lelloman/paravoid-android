@@ -79,4 +79,6 @@ final class RemoteUpdates implements UpdateControl {
     public void schedule(UpdateSchedule value) { send(UpdateWire.SCHEDULE,UpdateWire.schedule(value)); }
     public void retainedPrevious(int count) { Bundle b=new Bundle(); b.putInt("count",count); send(UpdateWire.RETAIN,b); }
     public void retryQuarantinedAfterConfirmation(ExpectedArchive offer) { Bundle b=new Bundle(); b.putBundle("offer",UpdateWire.offer(offer)); send(UpdateWire.QUARANTINE,b); }
+    public void relaunchRetainedAfterConfirmation(ExpectedArchive release) { Bundle b=new Bundle(); b.putBundle("offer",UpdateWire.offer(release)); send(UpdateWire.RELAUNCH,b); }
+    public void clearRollbackHold() { send(UpdateWire.CLEAR_HOLD,new Bundle()); }
 }

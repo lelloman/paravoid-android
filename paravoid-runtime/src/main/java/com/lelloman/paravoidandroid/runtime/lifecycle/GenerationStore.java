@@ -116,6 +116,49 @@ final class GenerationStore {
                 components.resolve("java-resources.jar").toFile(), nativeDirectory));
         } catch (IOException e) { throw fail(Code.INTEGRITY); }
     }
+    private static final Map<String, String> UNRECORDED = new HashMap<>();
+    /**
+     * Display-only: the shell contract named in a retained archive's release envelope, for generations
+     * stored before the journal recorded contracts. The signature is not checked here; a relaunch
+     * verifies the archive completely. Null when unreadable. Cached per process.
+     */
+    static String unrecordedContract(Path root, SelectionJournal.Generation generation) {
+        String key = generation.directory + ":" + generation.identity.archiveSha256;
+        synchronized (UNRECORDED) {
+            if (UNRECORDED.containsKey(key)) return UNRECORDED.get(key);
+        }
+        String contract = null;
+        Path archive = root.resolve("generations").resolve(generation.directory).resolve("archive.vpk");
+        if (Files.isRegularFile(archive, LinkOption.NOFOLLOW_LINKS)) {
+            try (ZipFile zip = new ZipFile(archive.toFile())) {
+                ZipEntry entry = zip.getEntry("release.json");
+                if (entry != null && entry.getSize() > 0 && entry.getSize() <= Protocol.MAX_RELEASE_BYTES) {
+                    byte[] envelope;
+                    try (InputStream input = zip.getInputStream(entry)) { envelope = readBounded(input, Protocol.MAX_RELEASE_BYTES); }
+                    Object outer = StrictJson.parse(envelope, Protocol.MAX_RELEASE_BYTES);
+                    Object body = outer instanceof Map ? ((Map<?, ?>) outer).get("body") : null;
+                    if (body instanceof String) {
+                        Object fields = StrictJson.parse(Base64.getDecoder().decode((String) body), Protocol.MAX_RELEASE_BYTES);
+                        Object value = fields instanceof Map ? ((Map<?, ?>) fields).get("shellContractId") : null;
+                        if (value instanceof String && ((String) value).matches("[0-9a-f]{64}")) contract = (String) value;
+                    }
+                }
+            } catch (IOException | ContractException | RuntimeException unreadable) { contract = null; }
+        }
+        synchronized (UNRECORDED) {
+            if (UNRECORDED.size() > 64) UNRECORDED.clear();
+            UNRECORDED.put(key, contract);
+        }
+        return contract;
+    }
+    private static byte[] readBounded(InputStream input, int limit) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream(); byte[] buffer = new byte[8192]; int count;
+        while ((count = input.read(buffer)) != -1) {
+            if (bytes.size() + count > limit) throw new IOException("Release envelope too large");
+            bytes.write(buffer, 0, count);
+        }
+        return bytes.toByteArray();
+    }
     private static Path component(Path root, String name) throws ContractException {
         Path path = root.resolve(name).normalize();
         if (!path.startsWith(root) || path.equals(root)) throw fail(Code.INTEGRITY);

@@ -15,7 +15,9 @@ reports and older experiments below provide historical context.
 ## Current complete-profile status
 
 The complete profile implements signed VPK packaging, embedded/empty bootstrap,
-public or APK-grant authenticated delivery, cold activation and recovery controls.
+public or APK-grant authenticated delivery, cold activation and recovery controls,
+including an explicit, user-confirmed relaunch of a retained previous version (no
+automatic rollback; see [Previous versions](delivery/UPDATES.md#previous-versions)).
 The built-in HTTP updater also supports optional [delta VPK delivery](DVPK.md):
 distributors extract signed VPKs from uploaded embedded-payload shell APKs and
 generate smaller transfers; shells reconstruct and verify the complete target.
@@ -305,8 +307,10 @@ This remains an entry-point and code-packaging experiment:
   rejected. Multi-DEX payloads are supported within the bundle limits below.
   Runtime/API package names are reserved for
   shell infrastructure.
-- Downloading, independent payload signatures, activation, and rollback are not
-  implemented. Changing the embedded payload still requires reinstalling the shell.
+- Downloading, independent payload signatures, activation, and relaunching retained
+  versions are not implemented in this example; they belong to the complete profile
+  above, which has no automatic rollback either. Changing the embedded payload still
+  requires reinstalling the shell.
 
 ## Build and run
 

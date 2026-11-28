@@ -102,10 +102,12 @@ public final class DeliveryClient {
      * Whether a verified offer is an update for this install. The release already selected is not,
      * including a quarantined one: downloading it again cannot change anything, and offering it
      * would present the paused release as a fix. The one exception is a byte repair of a selected
-     * release whose stored files failed verification.
+     * release whose stored files failed verification. During a rollback hold (the user relaunched an
+     * older retained version) nothing at or below the version they left is an update either.
      */
     public static boolean offerable(ExpectedArchive offer, LifecycleSnapshot life) {
         if (offer == null) return false;
+        if (life != null && life.rollbackHold != null && offer.payloadVersion <= life.rollbackHold.payloadVersion) return false;
         if (life == null || !offer.equals(life.active)) return true;
         return life.availability == Availability.RECOVERY && life.error == ContractException.Code.INTEGRITY;
     }

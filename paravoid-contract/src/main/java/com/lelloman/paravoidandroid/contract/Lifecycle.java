@@ -28,4 +28,17 @@ public interface Lifecycle {
     /** Requires an explicit user confirmation; no version downgrade authorization. */
     void retryQuarantined(ExpectedArchive release) throws ContractException;
     void setRetainedPrevious(int count) throws ContractException; // 0..3
+    /**
+     * Requires an explicit user confirmation. Selects a retained previous generation of exactly this
+     * identity for the next coordinated cold start, after verifying its bytes again. It never lowers
+     * replay floors; it sets a rollback hold (see {@link Protocol.LifecycleSnapshot#rollbackHold})
+     * when it leaves a newer generation. Never used for automatic recovery.
+     */
+    default void relaunchRetained(ExpectedArchive release) throws ContractException {
+        throw new ContractException(ContractException.Code.UNAVAILABLE, "Relaunching a retained generation not supported");
+    }
+    /** Explicit user action: updates at or below the held version may be offered and installed again. */
+    default void clearRollbackHold() throws ContractException {
+        throw new ContractException(ContractException.Code.UNAVAILABLE, "Rollback hold not supported");
+    }
 }

@@ -9,7 +9,8 @@ import java.util.*;
 
 /** IPC contains framework primitives only; no payload class loader or credentials. */
 final class UpdateWire {
-    static final int WATCH=1, SNAPSHOT=2, CHECK=3, UPDATE=4, RETRY=5, CANCEL=6, SCHEDULE=7, RETAIN=8, QUARANTINE=9, REFRESH=10, VISIBLE=11, DISMISS=12;
+    static final int WATCH=1, SNAPSHOT=2, CHECK=3, UPDATE=4, RETRY=5, CANCEL=6, SCHEDULE=7, RETAIN=8, QUARANTINE=9, REFRESH=10, VISIBLE=11, DISMISS=12,
+        RELAUNCH=13, CLEAR_HOLD=14;
     static Bundle offer(ExpectedArchive a) {
         if(a==null) return null;
         Bundle b=new Bundle(); b.putString("id",a.releaseId); b.putLong("version",a.payloadVersion); b.putLong("size",a.archiveSize);
@@ -33,15 +34,30 @@ final class UpdateWire {
             b.putString("availability",l.availability.name()); b.putBundle("active",offer(l.active)); b.putBundle("pending",offer(l.pending)); b.putBundle("healthy",offer(l.lastHealthy));
             b.putBoolean("waiting",l.waitingForProcesses); b.putInt("retained",l.retainedPrevious); b.putLong("storage",l.storageBytes);
             b.putString("lifecycleError",l.error==null ? null : l.error.name());
+            b.putBundle("rollbackHold",offer(l.rollbackHold)); b.putBoolean("relaunchPending",l.relaunchPending);
+            b.putInt("retainedCount",l.retained.size());
+            for(int n=0;n<l.retained.size();n++) b.putBundle("retained"+n,retained(l.retained.get(n)));
         }
         return b;
+    }
+    static Bundle retained(RetainedGeneration g) {
+        Bundle b=new Bundle(); b.putBundle("identity",offer(g.identity)); b.putString("contract",g.shellContractId);
+        b.putLong("healthy",g.healthySeconds); b.putString("refusal",g.refusal==null ? null : g.refusal.name()); b.putBoolean("held",g.held);
+        return b;
+    }
+    static RetainedGeneration retained(Bundle b) {
+        String refusal=b.getString("refusal");
+        return new RetainedGeneration(offer(b.getBundle("identity")),b.getString("contract"),b.getLong("healthy"),
+            refusal==null ? null : ContractException.Code.valueOf(refusal),b.getBoolean("held"));
     }
     static DeliveryController.Snapshot snapshot(Bundle b) {
         UpdateSchedule s=schedule(b.getBundle("schedule"));
         String error=b.getString("lifecycleError");
+        List<RetainedGeneration> retained=new ArrayList<>();
+        for(int n=0;n<b.getInt("retainedCount");n++) retained.add(retained(b.getBundle("retained"+n)));
         LifecycleSnapshot life=b.containsKey("availability") ? new LifecycleSnapshot(Availability.valueOf(b.getString("availability")),
             offer(b.getBundle("active")),offer(b.getBundle("pending")),offer(b.getBundle("healthy")),b.getBoolean("waiting"),b.getInt("retained"),b.getLong("storage"),
-            error==null ? null : ContractException.Code.valueOf(error)) : null;
+            error==null ? null : ContractException.Code.valueOf(error),retained,offer(b.getBundle("rollbackHold")),b.getBoolean("relaunchPending")) : null;
         return new DeliveryController.Snapshot(life,new DeliveryPreferences(s.checks,s.downloads,s.downloadUnmetered),
             DeliveryController.Activity.valueOf(b.getString("phase")),offer(b.getBundle("available")),b.getString("error"),s,
             b.getLong("bytes"),b.getLong("total"),b.getLong("lastCheck"),b.getLong("nextDue"),b.getBoolean("promptRequired"));

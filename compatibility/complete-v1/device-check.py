@@ -110,7 +110,8 @@ class Record:
                     manifest=self.string(), archive=self.string(), size=self.number('q'))
 
     def selection(self):
-        assert self.number('i') == 2
+        # Versions 3 and 4 append fields after these; the decoded prefix is unchanged.
+        assert self.number('i') in (2, 3, 4)
         state = dict(active=self.generation(), pending=self.generation(), healthy=self.generation(),
                      trial=self.number('?'), quarantined=self.number('?'), failure=self.string(),
                      incomplete=self.number('i'), retained=self.number('i'))

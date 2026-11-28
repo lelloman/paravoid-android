@@ -30,7 +30,8 @@ wire freeze or completed security review.
 
 Recovery is **forward-only**, not automatic rollback. A payload that entered user
 code may have migrated application data. Previous archives are retained for
-diagnostics or deliberate repair, not arbitrary execution of older code.
+diagnostics, deliberate repair and an explicit, warned user relaunch of a
+contract-compatible one (V1.md), never automatic execution of older code.
 
 Track B owns the UI; Track C owns the lifecycle state/actions that UI presents.
 No login/OIDC flow, store-specific API, hot swap, automatic app-data deletion or

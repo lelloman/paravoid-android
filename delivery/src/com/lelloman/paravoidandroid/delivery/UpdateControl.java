@@ -17,4 +17,12 @@ public interface UpdateControl {
     void schedule(UpdateSchedule value);
     void retainedPrevious(int count);
     void retryQuarantinedAfterConfirmation(ExpectedArchive release);
+    /**
+     * UI must obtain explicit confirmation immediately before invoking this action. Selects a retained
+     * previous generation for the next coordinated cold start; the caller then restarts the app.
+     * A refusal is reported as error code {@code RELAUNCH_<lifecycle code>}.
+     */
+    default void relaunchRetainedAfterConfirmation(ExpectedArchive release) {}
+    /** Ends the rollback hold, so updates up to the version the user left are offered again. */
+    default void clearRollbackHold() {}
 }
